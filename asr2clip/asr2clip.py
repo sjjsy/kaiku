@@ -295,6 +295,15 @@ Local ASR server:
         help="Silence duration to trigger transcription (default: 1.5)",
     )
 
+    parser.add_argument(
+        "--toggle",
+        action="store_true",
+        help=(
+            "Toggle recording: first call starts, second call stops and transcribes. "
+            "Designed for keyboard shortcuts (e.g. awesome WM keybinding)."
+        ),
+    )
+
     # Local ASR server
     server_group = parser.add_argument_group("Local ASR server")
     server_group.add_argument(
@@ -410,6 +419,11 @@ def main():
         sys.exit(0 if success else 1)
 
     device = get_audio_device(config, args.device)
+
+    if args.toggle:
+        from .toggle import toggle_recording
+        toggle_recording(config, device, args.output)
+        return
 
     # File transcription takes priority over continuous modes
     if args.input:
