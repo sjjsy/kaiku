@@ -1,5 +1,7 @@
 """whisper.cpp subprocess backend for asr2clip."""
 
+from __future__ import annotations
+
 import os
 import re
 import shutil
@@ -138,11 +140,15 @@ def test(cfg: WhisperCppConfig) -> bool:
     if ok:
         try:
             result = subprocess.run(
-                [cfg.binary, "--version"], capture_output=True, text=True, timeout=10
+                [cfg.binary, "--help"], capture_output=True, text=True, timeout=10
             )
-            version_line = (result.stdout + result.stderr).splitlines()[0] if (result.stdout + result.stderr) else "unknown"
-            print_key_value("Version", version_line.strip())
+            # whisper-cli prints version info in its help header
+            output = result.stdout + result.stderr
+            for line in output.splitlines():
+                if "whisper" in line.lower() or "version" in line.lower():
+                    print_key_value("Info", line.strip())
+                    break
         except Exception as e:
-            warning(f"Could not retrieve version: {e}")
+            warning(f"Could not retrieve version info: {e}")
 
     return ok

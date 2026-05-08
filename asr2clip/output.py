@@ -1,5 +1,7 @@
 """Output handling for asr2clip (clipboard, file, stdout)."""
 
+from __future__ import annotations
+
 import os
 import shutil
 import subprocess

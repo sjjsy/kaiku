@@ -1,5 +1,7 @@
 """Audio recording and processing for asr2clip."""
 
+from __future__ import annotations
+
 import io
 import tempfile
 import wave

@@ -4,6 +4,8 @@ Provides a beautiful, structured logging system using Python's standard logging 
 with ANSI color codes for terminal output.
 """
 
+from __future__ import annotations
+
 import logging
 import os
 import sys

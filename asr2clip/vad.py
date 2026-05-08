@@ -4,6 +4,8 @@ Requires the ``sherpa-onnx`` package (install with ``pip install asr2clip[vad]``
 The Silero VAD model (~629 KB) is downloaded automatically on first use.
 """
 
+from __future__ import annotations
+
 import os
 import sys
 import threading

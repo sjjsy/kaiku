@@ -4,6 +4,8 @@ First invocation: start arecord in background, write lock file, exit.
 Second invocation: stop arecord, transcribe, copy to clipboard.
 """
 
+from __future__ import annotations
+
 import json
 import os
 import shutil

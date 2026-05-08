@@ -4,6 +4,8 @@
 This is the main CLI entry point for asr2clip.
 """
 
+from __future__ import annotations
+
 import argparse
 import os
 import sys

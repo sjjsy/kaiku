@@ -1,5 +1,7 @@
 """Utility functions for asr2clip."""
 
+from __future__ import annotations
+
 import signal
 import sys
 

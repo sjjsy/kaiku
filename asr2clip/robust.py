@@ -1,5 +1,7 @@
 """Robust chunked transcription for long audio files."""
 
+from __future__ import annotations
+
 import os
 import re
 import tempfile
