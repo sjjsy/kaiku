@@ -44,39 +44,80 @@ def _pid_alive(pid: int) -> bool:
         return False
 
 
-def _start_arecord(audio_path: str, device: str | int | None) -> int:
-    cmd = ["arecord", "-f", "S16_LE", "-r", "16000", "-c", "1"]
-    if device is not None:
-        if isinstance(device, int):
+_ALSA_PREFIXES = ("hw:", "plughw:", "pulse", "pipewire", "default", "sysdefault")
+
+
+def _is_alsa_device(device: str | int | None) -> bool:
+    """Return True if device looks like a valid ALSA device string for arecord."""
+    if device is None or isinstance(device, int):
+        return False
+    return any(device.startswith(p) for p in _ALSA_PREFIXES)
+
+
+def _native_rate(device: str | int | None) -> int:
+    """Query the sounddevice native sample rate for a device (default 44100)."""
+    try:
+        import sounddevice as sd
+        info = sd.query_devices(device, "input")
+        return int(info["default_samplerate"])
+    except Exception:
+        return 44100
+
+
+def _start_arecord(audio_path: str, device: str | int | None) -> int | None:
+    """Start arecord in background. Returns PID, or None if arecord is unusable."""
+    if not shutil.which("arecord"):
+        return None
+
+    rate = _native_rate(device if _is_alsa_device(device) else None)
+    cmd = ["arecord", "-f", "S16_LE", "-r", str(rate), "-c", "1"]
+
+    if isinstance(device, int):
+        warning("Toggle mode uses arecord; integer device indices not supported. Using default device.")
+    elif device is not None and _is_alsa_device(device):
+        cmd += ["-D", device]
+    elif device is not None:
+        # Friendly name (e.g. "Blue Snowball") — not valid for arecord; use pulse
+        if shutil.which("arecord"):
             warning(
-                "Toggle mode uses arecord; integer device indices are not "
-                "supported. Using the default device."
+                f"Device '{device}' is not an ALSA name; arecord will use the "
+                "default device. Set audio_device to an ALSA name (e.g. 'pulse') "
+                "in your config to route to a specific device."
             )
-        else:
-            cmd += ["-D", device]
+
     cmd.append(audio_path)
     proc = subprocess.Popen(
         cmd,
         stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
         start_new_session=True,
     )
+    # Give arecord ~0.3 s to fail on a bad device before declaring success
+    time.sleep(0.3)
+    if proc.poll() is not None:
+        stderr = proc.stderr.read().decode(errors="replace").strip()
+        warning(f"arecord exited immediately: {stderr}")
+        return None
     return proc.pid
 
 
 def _start_sounddevice(audio_path: str, device: str | int | None) -> int:
     """Fallback recorder using a detached Python subprocess."""
+    rate = _native_rate(device)
     script = (
-        "import sounddevice as sd, scipy.io.wavfile as wio, numpy as np, signal, sys\n"
+        "import sounddevice as sd, wave, numpy as np, signal, sys\n"
         "chunks=[]\n"
         "def cb(d,f,t,s): chunks.append(d.copy())\n"
         "signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))\n"
         f"dev={repr(device)}\n"
-        "with sd.InputStream(samplerate=16000,channels=1,dtype='float32',device=dev,callback=cb):\n"
+        f"rate={rate}\n"
+        "with sd.InputStream(samplerate=rate,channels=1,dtype='float32',device=dev,callback=cb):\n"
         "    signal.pause()\n"
         "audio=np.concatenate(chunks) if chunks else np.zeros((0,1),dtype='float32')\n"
-        "audio_i16=(audio*32767).clip(-32768,32767).astype('int16')\n"
-        f"wio.write({repr(audio_path)}, 16000, audio_i16)\n"
+        "audio_i16=(audio.flatten()*32767).clip(-32768,32767).astype('int16')\n"
+        f"wf=wave.open({repr(audio_path)},'wb')\n"
+        "wf.setnchannels(1); wf.setsampwidth(2); wf.setframerate(rate)\n"
+        "wf.writeframes(audio_i16.tobytes()); wf.close()\n"
     )
     proc = subprocess.Popen(
         [sys.executable, "-c", script],
@@ -127,13 +168,19 @@ def _start_recording(lock_path: str, device: str | int | None):
         suffix=".wav", prefix="asr2clip_", delete=False
     ).name
 
+    pid = None
+    recorder = "sounddevice"
     if shutil.which("arecord"):
         pid = _start_arecord(audio_path, device)
-        recorder = "arecord"
+        if pid is not None:
+            recorder = "arecord"
+        else:
+            warning("arecord failed; falling back to sounddevice recorder.")
     else:
         warning("arecord not found; falling back to sounddevice recorder.")
+
+    if pid is None:
         pid = _start_sounddevice(audio_path, device)
-        recorder = "sounddevice"
 
     lock_data = {"pid": pid, "audio": audio_path, "recorder": recorder}
     with open(lock_path, "w") as f:
