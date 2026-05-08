@@ -29,7 +29,7 @@ from .output import (
     output_transcript,
     print_clipboard_help,
 )
-from .transcribe import test_transcription, transcribe_audio
+from .transcribe import test_transcription, transcribe_audio, transcribe_with_config
 from .utils import (
     info,
     log,
@@ -43,17 +43,24 @@ from .utils import (
 
 
 def test_config(config: dict) -> bool:
-    """Test the configuration by checking API connectivity.
+    """Test the configuration by checking backend connectivity.
 
     Args:
         config: Configuration dictionary.
 
     Returns:
-        True if configuration is valid and API is accessible.
+        True if configuration is valid and backend is accessible.
     """
-    api_key, api_base_url, model_name, org_id = get_api_config(config)
+    backend = config.get("backend", "api")
+    info(f"Testing configuration (backend: {backend})...")
+    print_separator()
 
-    info("Testing configuration...")
+    if backend == "whisper_cpp":
+        from .backends.whisper_cpp import WhisperCppConfig, test as wc_test
+        cfg = WhisperCppConfig.from_config(config)
+        return wc_test(cfg)
+
+    api_key, api_base_url, model_name, org_id = get_api_config(config)
     print_key_value("API Base URL", api_base_url)
     print_key_value("Model", model_name)
     masked_key = f"{'*' * 8}...{api_key[-4:] if len(api_key) > 4 else '****'}"
@@ -75,8 +82,6 @@ def process_recording(
         device: Audio device name or index.
         output_file: Optional file to append transcript to.
     """
-    api_key, api_base_url, model_name, org_id = get_api_config(config)
-
     # Check clipboard support
     if not check_clipboard_support():
         warning("Clipboard support may not be available.")
@@ -86,7 +91,8 @@ def process_recording(
 
     log("Recording... Press Ctrl+C to stop (press twice to cancel)")
 
-    # Record audio
+    import time
+    t0 = time.time()
     audio_data = record_audio(device=device)
 
     duration = get_audio_duration(audio_data)
@@ -94,21 +100,15 @@ def process_recording(
         log("Recording too short or empty. Exiting.")
         sys.exit(0)
 
-    log(f"Recorded {duration:.1f} seconds of audio")
+    info(f"Recorded {duration:.1f}s of audio ({time.time() - t0:.1f}s elapsed)")
     log("Processing...")
 
-    # Save to temp file
     temp_path = save_audio(audio_data)
 
     try:
-        # Transcribe
-        text = transcribe_audio(
-            temp_path,
-            api_key,
-            api_base_url,
-            model_name,
-            org_id,
-        )
+        t1 = time.time()
+        text = transcribe_with_config(temp_path, config)
+        info(f"Transcription completed in {time.time() - t1:.1f}s")
 
         if text.strip():
             output_transcript(
@@ -121,7 +121,6 @@ def process_recording(
             log("No speech detected in the recording.")
 
     finally:
-        # Clean up temp file
         try:
             os.unlink(temp_path)
         except Exception:
@@ -140,7 +139,7 @@ def process_file(
         input_file: Path to the audio file.
         output_file: Optional file to append transcript to.
     """
-    api_key, api_base_url, model_name, org_id = get_api_config(config)
+    import time
 
     if not os.path.exists(input_file):
         print(f"File not found: {input_file}")
@@ -148,24 +147,20 @@ def process_file(
 
     log(f"Processing file: {input_file}")
 
-    # Convert to WAV if needed
     if not input_file.lower().endswith(".wav"):
+        t0 = time.time()
         log("Converting to WAV format...")
         temp_path = convert_audio_to_wav(input_file)
+        info(f"Conversion completed in {time.time() - t0:.1f}s")
         cleanup_temp = True
     else:
         temp_path = input_file
         cleanup_temp = False
 
     try:
-        # Transcribe
-        text = transcribe_audio(
-            temp_path,
-            api_key,
-            api_base_url,
-            model_name,
-            org_id,
-        )
+        t1 = time.time()
+        text = transcribe_with_config(temp_path, config)
+        info(f"Transcription completed in {time.time() - t1:.1f}s")
 
         if text.strip():
             output_transcript(
@@ -178,7 +173,6 @@ def process_file(
             log("No speech detected in the audio file.")
 
     finally:
-        # Clean up temp file if we created one
         if cleanup_temp:
             try:
                 os.unlink(temp_path)

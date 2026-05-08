@@ -154,6 +154,48 @@ def transcribe_audio(
     )
 
 
+def transcribe_with_config(
+    audio_file_path: str,
+    config: dict,
+    raise_on_error: bool = False,
+    timeout: float | None = None,
+) -> str:
+    """Transcribe audio using whichever backend is configured.
+
+    Args:
+        audio_file_path: Path to the WAV file.
+        config: Full configuration dictionary.
+        raise_on_error: If True, raise TranscriptionError on failure.
+        timeout: Optional timeout override in seconds.
+
+    Returns:
+        Transcribed text.
+    """
+    if config.get("backend") == "whisper_cpp":
+        from .backends.whisper_cpp import WhisperCppConfig, transcribe as wc_transcribe
+        cfg = WhisperCppConfig.from_config(config)
+        try:
+            return wc_transcribe(audio_file_path, cfg, timeout=timeout)
+        except TranscriptionError:
+            if raise_on_error:
+                raise
+            error(f"whisper.cpp transcription failed")
+            import sys
+            sys.exit(1)
+
+    from .config import get_api_config
+    api_key, api_base_url, model_name, org_id = get_api_config(config)
+    return transcribe_audio(
+        audio_file_path,
+        api_key,
+        api_base_url,
+        model_name,
+        org_id,
+        raise_on_error=raise_on_error,
+        timeout=timeout or DEFAULT_TIMEOUT,
+    )
+
+
 def test_transcription(
     api_key: str,
     api_base_url: str,
