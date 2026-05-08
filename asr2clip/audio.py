@@ -71,6 +71,34 @@ def write_wav(audio_data: np.ndarray, sample_rate: int, channels: int = 1) -> by
     return buffer.getvalue()
 
 
+def _device_native_rate(device: str | int | None) -> int | None:
+    """Return the device's default sample rate, or None on failure."""
+    try:
+        info = sd.query_devices(device, "input")
+        return int(info["default_samplerate"])
+    except Exception:
+        return None
+
+
+def _resample_audio(audio: np.ndarray, from_rate: int, to_rate: int) -> np.ndarray:
+    """Resample a (N, channels) float32 array from from_rate to to_rate via pydub."""
+    from pydub import AudioSegment
+
+    channels = audio.shape[1] if audio.ndim > 1 else 1
+    flat = audio.flatten()
+    pcm = (flat * 32767).clip(-32768, 32767).astype(np.int16)
+    seg = AudioSegment(
+        pcm.tobytes(), frame_rate=from_rate, sample_width=2, channels=channels
+    )
+    seg = seg.set_frame_rate(to_rate)
+    resampled = np.frombuffer(seg.raw_data, dtype=np.int16).astype(np.float32) / 32767
+    if channels > 1:
+        resampled = resampled.reshape(-1, channels)
+    else:
+        resampled = resampled.reshape(-1, 1)
+    return resampled
+
+
 def record_audio(
     sample_rate: int = 16000,
     channels: int = 1,
@@ -79,44 +107,76 @@ def record_audio(
 ) -> np.ndarray:
     """Record audio from the microphone until stop is requested.
 
+    If the device does not support sample_rate, falls back to the device's
+    native rate and resamples the result to sample_rate before returning.
+
     Args:
-        sample_rate: Sample rate in Hz.
+        sample_rate: Desired sample rate in Hz (default 16000).
         channels: Number of audio channels.
         device: Audio device name or index, or None for default.
-        callback: Optional callback function called with each audio chunk.
+        callback: Optional callback called with each raw audio chunk.
 
     Returns:
-        Recorded audio as numpy array.
+        Recorded audio as numpy array at sample_rate Hz.
     """
-    audio_chunks = []
+    audio_chunks: list = []
+    actual_rate = sample_rate
 
     def audio_callback(indata, frames, time, status):
         if status:
             warning(f"Audio status: {status}")
-        chunk = indata.copy()
-        audio_chunks.append(chunk)
+        audio_chunks.append(indata.copy())
         if callback:
-            callback(chunk)
+            callback(indata)
 
-    try:
-        with sd.InputStream(
-            samplerate=sample_rate,
-            channels=channels,
-            dtype="float32",
-            device=device,
-            callback=audio_callback,
-        ):
-            while not is_stop_requested():
-                sd.sleep(100)
-    except KeyboardInterrupt:
-        pass
-    except Exception as e:
-        log(f"Recording error: {e}")
-        raise
+    rates_to_try = [sample_rate]
+    native = _device_native_rate(device)
+    if native and native != sample_rate:
+        rates_to_try.append(native)
 
-    if audio_chunks:
-        return np.concatenate(audio_chunks, axis=0)
-    return np.array([], dtype=np.float32)
+    last_exc = None
+    for rate in rates_to_try:
+        audio_chunks.clear()
+        try:
+            with sd.InputStream(
+                samplerate=rate,
+                channels=channels,
+                dtype="float32",
+                device=device,
+                callback=audio_callback,
+            ):
+                actual_rate = rate
+                if rate != sample_rate:
+                    warning(
+                        f"Device does not support {sample_rate} Hz; "
+                        f"recording at {rate} Hz and resampling."
+                    )
+                while not is_stop_requested():
+                    sd.sleep(100)
+            last_exc = None
+            break
+        except KeyboardInterrupt:
+            break
+        except Exception as e:
+            last_exc = e
+            if rate == sample_rate:
+                log(f"Recording error at {rate} Hz: {e}. Trying device native rate...")
+                continue
+            log(f"Recording error: {e}")
+            raise
+
+    if last_exc:
+        raise last_exc
+
+    if not audio_chunks:
+        return np.array([], dtype=np.float32)
+
+    audio = np.concatenate(audio_chunks, axis=0)
+
+    if actual_rate != sample_rate:
+        audio = _resample_audio(audio, actual_rate, sample_rate)
+
+    return audio
 
 
 def save_audio(audio_data: np.ndarray, sample_rate: int = 16000) -> str:
