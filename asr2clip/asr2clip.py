@@ -296,6 +296,23 @@ Local ASR server:
     )
 
     parser.add_argument(
+        "-R",
+        "--robust",
+        action="store_true",
+        help=(
+            "Robust mode for -i file input: split at silence boundaries, "
+            "check quality, retry bad chunks, stream output (tail-f friendly)."
+        ),
+    )
+    parser.add_argument(
+        "-C",
+        "--chunk-duration",
+        type=int,
+        metavar="SEC",
+        default=180,
+        help="Maximum chunk duration in seconds for --robust mode (default: 180)",
+    )
+    parser.add_argument(
         "--toggle",
         action="store_true",
         help=(
@@ -427,7 +444,14 @@ def main():
 
     # File transcription takes priority over continuous modes
     if args.input:
-        process_file(config, args.input, args.output)
+        if args.robust:
+            from .robust import process_file_robust
+            process_file_robust(
+                config, args.input, args.output,
+                chunk_duration=args.chunk_duration,
+            )
+        else:
+            process_file(config, args.input, args.output)
         return
 
     if args.vad or args.interval is not None:
