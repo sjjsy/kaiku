@@ -48,16 +48,30 @@ model_name: "whisper-1"                     # or other compatible model
 # api_key: "YOUR_API_KEY"                          # api key for the platform
 # model_name: "FunAudioLLM/SenseVoiceSmall"
 
-# --- whisper.cpp local backend (no network required) ---
+# --- Multiple named backends (recommended) ---
+# default_backend: groq
+# backends:
+#   groq:
+#     type: api
+#     api_base_url: "https://api.groq.com/openai/v1/"
+#     api_key: "YOUR_GROQ_KEY"
+#     model_name: "whisper-large-v3-turbo"
+#   local:
+#     type: whisper_cpp
+#     binary: ~/path/to/whisper.cpp/build/bin/whisper-cli
+#     model:  ~/path/to/whisper.cpp/models/ggml-large-v3-turbo-q8_0.bin
+#     # language: auto
+#     # threads: 4
+#     # timestamps: false
+#     # timeout_multiplier: 4.0
+#
+# Select at runtime:  asr2clip -b local -i meeting.mp3
+#
+# --- Legacy single-backend format (still supported) ---
 # backend: whisper_cpp
 # whisper_cpp:
-#   binary: ~/path/to/whisper.cpp/build/bin/whisper-cli
-#   model:  ~/path/to/whisper.cpp/models/ggml-large-v3-turbo-q8_0.bin
-#   # language: auto          # omit or "auto" for auto-detection
-#   # threads: 4
-#   # timestamps: false
-#   # timeout_multiplier: 4.0
-#   # extra_args: []
+#   binary: ~/path/to/whisper-cli
+#   model:  ~/path/to/ggml-model.bin
 """
 
 
@@ -205,6 +219,79 @@ def generate_config(
     print(f"    $EDITOR {output_path}")
 
     return output_path
+
+
+def resolve_backend_config(config: dict, backend_name: str | None = None) -> dict:
+    """Return the effective backend config dict for transcription.
+
+    Supports two formats:
+
+    New (named backends):
+        backends:
+          groq:
+            type: api
+            api_key: ...
+          local:
+            type: whisper_cpp
+            binary: ...
+            model: ...
+        default_backend: groq
+
+    Legacy (flat, backward-compatible):
+        backend: whisper_cpp   # or omit for api
+        api_key: ...
+        whisper_cpp:
+          binary: ...
+
+    Args:
+        config: Full configuration dictionary.
+        backend_name: Override which named backend to use (from --backend flag).
+
+    Returns:
+        A flat config dict recognised by transcribe_with_config().
+
+    Raises:
+        SystemExit: If the requested backend name is not defined.
+    """
+    backends = config.get("backends")
+    if not backends:
+        # Legacy flat format — return as-is, backend_name ignored
+        if backend_name:
+            print(f"Warning: --backend '{backend_name}' ignored; config uses legacy flat format.")
+        return config
+
+    name = backend_name or config.get("default_backend") or next(iter(backends))
+    if name not in backends:
+        available = ", ".join(backends)
+        print(f"Error: backend '{name}' not found in config. Available: {available}")
+        import sys
+        sys.exit(1)
+
+    defn = backends[name]
+    btype = defn.get("type", "api")
+
+    if btype == "api":
+        return {
+            "backend": "api",
+            "api_key": defn.get("api_key", os.environ.get("OPENAI_API_KEY")),
+            "api_base_url": defn.get("api_base_url", "https://api.openai.com/v1/"),
+            "model_name": defn.get("model_name", "whisper-1"),
+            "org_id": defn.get("org_id", os.environ.get("OPENAI_ORG_ID")),
+        }
+    elif btype == "whisper_cpp":
+        return {
+            "backend": "whisper_cpp",
+            "whisper_cpp": {k: v for k, v in defn.items() if k != "type"},
+        }
+    else:
+        print(f"Error: unknown backend type '{btype}' for backend '{name}'.")
+        import sys
+        sys.exit(1)
+
+
+def list_backends(config: dict) -> list[str]:
+    """Return the names of all configured backends, or [] for legacy configs."""
+    return list(config.get("backends", {}).keys())
 
 
 def get_api_config(config: dict) -> tuple[str, str, str, str | None]:

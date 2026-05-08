@@ -22,8 +22,10 @@ from .config import (
     generate_config,
     get_api_config,
     get_audio_device,
+    list_backends,
     open_in_editor,
     read_config,
+    resolve_backend_config,
 )
 from .daemon import continuous_recording
 from .output import (
@@ -232,6 +234,13 @@ Local ASR server:
         help="Quiet mode - only output transcription and errors",
     )
     parser.add_argument(
+        "-b",
+        "--backend",
+        metavar="NAME",
+        default=None,
+        help="Named backend to use (defined under 'backends:' in config)",
+    )
+    parser.add_argument(
         "-i",
         "--input",
         metavar="FILE",
@@ -433,15 +442,24 @@ def main():
     setup_logging(verbose=not quiet)
     set_verbose(not quiet)
 
+    # Resolve the effective backend config (supports named backends)
+    backend_config = resolve_backend_config(config, args.backend)
+
+    if args.backend:
+        info(f"Using backend: {args.backend}")
+    elif list_backends(config):
+        default = config.get("default_backend") or next(iter(config["backends"]))
+        info(f"Using backend: {default}")
+
     if args.test:
-        success = test_config(config)
+        success = test_config(backend_config)
         sys.exit(0 if success else 1)
 
     device = get_audio_device(config, args.device)
 
     if args.toggle:
         from .toggle import toggle_recording
-        toggle_recording(config, device, args.output)
+        toggle_recording(backend_config, device, args.output)
         return
 
     # File transcription takes priority over continuous modes
@@ -449,15 +467,15 @@ def main():
         if args.robust:
             from .robust import process_file_robust
             process_file_robust(
-                config, args.input, args.output,
+                backend_config, args.input, args.output,
                 chunk_duration=args.chunk_duration,
             )
         else:
-            process_file(config, args.input, args.output)
+            process_file(backend_config, args.input, args.output)
         return
 
     if args.vad or args.interval is not None:
-        api_key, api_base_url, model_name, org_id = get_api_config(config)
+        api_key, api_base_url, model_name, org_id = get_api_config(backend_config)
         if args.vad:
             try:
                 __import__("sherpa_onnx")
@@ -482,7 +500,7 @@ def main():
         )
         return
 
-    process_recording(config, device, args.output)
+    process_recording(backend_config, device, args.output)
 
 
 if __name__ == "__main__":
