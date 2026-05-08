@@ -255,9 +255,23 @@ def resolve_backend_config(config: dict, backend_name: str | None = None) -> dic
     """
     backends = config.get("backends")
     if not backends:
-        # Legacy flat format — return as-is, backend_name ignored
         if backend_name:
-            print(f"Warning: --backend '{backend_name}' ignored; config uses legacy flat format.")
+            print(
+                f"Error: --backend '{backend_name}' specified but config has no named backends.\n"
+                "Add a 'backends:' section to your config file, for example:\n\n"
+                "  default_backend: groq\n"
+                "  backends:\n"
+                "    groq:\n"
+                "      type: api\n"
+                "      api_key: YOUR_KEY\n"
+                "      ...\n"
+                "    local:\n"
+                "      type: whisper_cpp\n"
+                "      binary: ~/path/to/whisper-cli\n"
+                "      model:  ~/path/to/model.bin\n"
+            )
+            import sys
+            sys.exit(1)
         return config
 
     name = backend_name or config.get("default_backend") or next(iter(backends))
