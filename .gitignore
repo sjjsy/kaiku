@@ -180,3 +180,6 @@ WISHLIST.md
 SPEC_0.4.md
 # all audio/video files
 data/
+
+# Claude Code related files
+.claude/

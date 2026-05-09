@@ -200,23 +200,6 @@ Modes:
   asr2clip --interval 60           # Continuous with fixed interval
   asr2clip -i audio.mp3            # Transcribe existing file
 
-Toggle mode (keyboard shortcut / WM keybinding):
-  asr2clip --toggle                # First call: start recording in background
-  asr2clip --toggle                # Second call: stop, transcribe, copy to clipboard
-  asr2clip --toggle -b local       # Same, using a specific named backend
-
-Local / offline backend (whisper.cpp):
-  asr2clip -b local                # Single recording via whisper.cpp
-  asr2clip -b local -i audio.wav   # Transcribe file with whisper.cpp
-  asr2clip --test -b local         # Test whisper.cpp configuration
-  # (requires 'backends.local' with type: whisper_cpp in config)
-
-Robust long-file transcription:
-  asr2clip -i meeting.mp3 -R       # Chunked, quality-checked transcription
-  asr2clip -i meeting.mp3 -R -C 60 # Use 60 s chunks instead of default 180
-  asr2clip -i meeting.mp3 -R -o transcript.txt  # Stream chunks to file (tail -f)
-  asr2clip -i meeting.mp3 -R -b local           # Robust mode with whisper.cpp
-
 With output file:
   asr2clip --vad -o meeting.txt    # Save transcripts to file
   asr2clip -i audio.mp3 -o out.txt # Transcribe file and save
@@ -228,10 +211,26 @@ Setup:
   asr2clip --list_devices          # List audio devices
   asr2clip --print_config          # Print config template (shows all options)
 
-Local ASR server:
+Local ASR server (sherpa-onnx):
   asr2clip --serve                 # Start local ASR server on :8000
   asr2clip --serve --port 9000     # Start on custom port
   asr2clip --download-model        # Download SenseVoice model
+
+Toggle mode (useful as a keyboard shortcut with WM keybinding):
+  asr2clip --toggle                # First call: start recording in background
+  asr2clip --toggle                # Second call: stop, transcribe, copy to clipboard
+
+When whisper.cpp is installed and configured as 'wcpp' for local offline transcription:
+  asr2clip --test -b wcpp          # Test the whisper.cpp backend configuration
+  asr2clip -b wcpp                 # Single recording via whisper.cpp
+  asr2clip -b wcpp -i audio.wav    # Transcribe file with whisper.cpp
+  # (requires 'backends.wcpp' with type: whisper_cpp in config)
+
+Robust long-file transcription:
+  asr2clip -i meeting.mp3 -R       # Chunked transcription with some automated quality checking
+  asr2clip -i meeting.mp3 -R -C 60 # Use 60 s chunks instead of default 180
+  asr2clip -i meeting.mp3 -R -o transcript.txt  # Stream chunks to file (tail -f)
+  asr2clip -i meeting.mp3 -R -b local           # Robust mode with whisper.cpp
 """,
     )
 

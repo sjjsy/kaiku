@@ -20,9 +20,9 @@ asr2clip           # record and transcribe
 **Local offline path (no API key needed):**
 ```bash
 pip install asr2clip
-# configure whisper.cpp binary and model path — see Multiple Backends below
-asr2clip --test -b local
-asr2clip -b local
+# configure whisper.cpp binary and model path as e.g. 'wcpp' — see Multiple Backends below
+asr2clip --test -b wcpp
+asr2clip -b wcpp
 ```
 
 ## Prerequisites
@@ -87,7 +87,7 @@ Compatible services: OpenAI, [Groq](https://console.groq.com/), [SiliconFlow](ht
 
 ```yaml
 backends:
-  local:
+  wcpp:
     type: whisper_cpp
     binary: ~/path/to/whisper.cpp/build/bin/whisper-cli
     model:  ~/path/to/whisper.cpp/models/ggml-large-v3-turbo-q8_0.bin
@@ -96,8 +96,8 @@ backends:
 ```
 
 ```bash
-asr2clip --test -b local   # verify
-asr2clip -b local          # record and transcribe offline
+asr2clip --test -b wcpp   # verify
+asr2clip -b wcpp          # record and transcribe offline
 ```
 
 See the [whisper.cpp](https://github.com/ggerganov/whisper.cpp) project for build instructions and model downloads.
@@ -114,7 +114,7 @@ backends:
     api_base_url: "https://api.groq.com/openai/v1/"
     api_key: "YOUR_GROQ_KEY"
     model_name: "whisper-large-v3-turbo"
-  local:
+  wcpp:
     type: whisper_cpp
     binary: ~/path/to/whisper.cpp/build/bin/whisper-cli
     model:  ~/path/to/whisper.cpp/models/ggml-large-v3-turbo-q8_0.bin
@@ -122,9 +122,9 @@ backends:
 
 ```bash
 asr2clip                       # use default backend (groq)
-asr2clip -b local              # use whisper.cpp
-asr2clip -b local -i audio.wav # transcribe file offline
-asr2clip --test -b local       # test a specific backend
+asr2clip -b wcpp               # use whisper.cpp
+asr2clip -b wcpp -i audio.wav  # transcribe file offline
+asr2clip --test -b wcpp        # test a specific backend
 ```
 
 ### Audio device
@@ -145,7 +145,7 @@ audio_device: "pulse"          # or a device index like 12
 
 ```bash
 asr2clip                       # record until Ctrl+C, transcribe, copy to clipboard
-asr2clip -b local              # same, using local whisper.cpp
+asr2clip -b wcpp               # same, using local whisper.cpp
 asr2clip -i audio.mp3          # transcribe an existing file
 asr2clip -i audio.mp3 -b local # transcribe a file offline
 asr2clip -o transcript.txt     # also append transcript to a file
@@ -158,7 +158,7 @@ Toggle mode lets you bind a single keyboard shortcut to start and stop recording
 ```bash
 asr2clip --toggle              # first press: start recording in background
 asr2clip --toggle              # second press: stop, transcribe, copy to clipboard
-asr2clip -b local --toggle     # same, using local whisper.cpp
+asr2clip -b wcpp --toggle      # same, using local whisper.cpp
 ```
 
 Toggle mode requires a POSIX system (Linux, macOS). Example awesome WM keybinding:
@@ -187,10 +187,10 @@ VAD options:
 For long recordings, `--robust` splits at silence boundaries, quality-checks each chunk, retries bad chunks, and writes output incrementally:
 
 ```bash
-asr2clip -i meeting.mp3 -R                     # chunked, quality-checked
+asr2clip -i meeting.mp3 -R                    # chunked, quality-checked
 asr2clip -i meeting.mp3 -R -C 60              # 60 s chunks instead of default 180
 asr2clip -i meeting.mp3 -R -o transcript.txt  # write chunks to file as they complete
-asr2clip -i meeting.mp3 -R -b local           # fully offline
+asr2clip -i meeting.mp3 -R -b wcpp            # fully offline
 ```
 
 ### CLI reference
