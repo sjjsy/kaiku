@@ -5,23 +5,32 @@
 
 [中文](README_zh.md)
 
-This tool is designed to recognize speech in real-time, convert it to text, and automatically copy the text to the system clipboard. The tool leverages API services for speech recognition and uses Python libraries for audio capture and clipboard management.
+This tool records speech, transcribes it, and copies the result to your clipboard. It supports cloud ASR APIs (OpenAI-compatible) as well as fully local, offline transcription via [whisper.cpp](https://github.com/ggerganov/whisper.cpp) — no API key required for local use.
 
 ## TL;DR
 
+**Cloud (API) path:**
 ```bash
-pip install asr2clip       # Install the package
-asr2clip --edit            # Create/edit config file
-asr2clip --test            # Test your configuration
-asr2clip                   # Start recording and transcribing
+pip install asr2clip
+asr2clip --edit    # add your API key
+asr2clip --test    # verify
+asr2clip           # record and transcribe
+```
+
+**Local offline path (no API key needed):**
+```bash
+pip install asr2clip
+# configure whisper.cpp binary and model path — see Multiple Backends below
+asr2clip --test -b local
+asr2clip -b local
 ```
 
 ## Prerequisites
 
-Before you begin, ensure you have the following ready:
-
-- **Python 3.8 or higher**: The tool is written in Python, so you'll need Python installed on your system.
-- **API Key**: You will need an API key from a speech recognition service (e.g., **OpenAI/Whisper** API or a compatible ASR API, such as **FunAudioLLM/SenseVoiceSmall** at [siliconflow](https://siliconflow.cn/) or [xinference](https://inference.readthedocs.io/en/latest/)).
+- **Python 3.8 or higher**
+- **ASR backend** — one of:
+  - A cloud API key (OpenAI/Whisper, Groq, SiliconFlow, xinference, or any OpenAI-compatible endpoint)
+  - A local [whisper.cpp](https://github.com/ggerganov/whisper.cpp) installation (fully offline, no key needed)
 
 ### System Dependencies
 
@@ -33,21 +42,17 @@ Before you begin, ensure you have the following ready:
 
 ## Installation
 
-### Option 1: Install via pip or pipx (Recommended)
-
 ```bash
-# Install using pip
 pip install asr2clip
 
-# Or install using pipx (recommended for isolated environments)
+# or in an isolated environment
 pipx install asr2clip
 
-# Upgrade to latest version
+# upgrade
 pip install --upgrade asr2clip
 ```
 
-### Option 2: Install from source
-
+**From source:**
 ```bash
 git clone https://github.com/Oaklight/asr2clip.git
 cd asr2clip
@@ -56,37 +61,50 @@ pip install -e .
 
 ## Configuration
 
-### Quick Setup
-
-The easiest way to configure asr2clip is using the built-in editor:
-
 ```bash
-asr2clip --edit  # Opens config file in your default editor
+asr2clip --edit          # create/open config in your default editor
+asr2clip --print_config  # print all available options
 ```
 
-This will create a config file at `~/.config/asr2clip/config.yaml` if it doesn't exist.
+Config file is created at `~/.config/asr2clip/config.yaml`. Locations searched in order:
+1. `./asr2clip.conf`
+2. `~/.config/asr2clip/config.yaml`
+3. `~/.config/asr2clip.conf`
+4. `~/.asr2clip.conf`
 
-### Configuration File
-
-The configuration file uses YAML format. The simplest form:
+### Cloud API backend (single backend, simplest form)
 
 ```yaml
-api_base_url: "https://api.openai.com/v1/"  # or other compatible API base URL
-api_key: "YOUR_API_KEY"                     # api key for the platform
-model_name: "whisper-1"                     # or other compatible model
-# quiet: false                              # optional, disable logging
-# audio_device: "pulse"                     # optional, audio input device
+api_base_url: "https://api.openai.com/v1/"
+api_key: "YOUR_API_KEY"
+model_name: "whisper-1"
+# audio_device: "pulse"   # optional, see --list_devices
 ```
 
-Config file locations (searched in order):
-1. `./asr2clip.conf` (current directory)
-2. `~/.config/asr2clip/config.yaml`
-3. `~/.config/asr2clip.conf` (legacy)
-4. `~/.asr2clip.conf` (legacy)
+Compatible services: OpenAI, [Groq](https://console.groq.com/), [SiliconFlow](https://siliconflow.cn/), [xinference](https://inference.readthedocs.io/en/latest/), and others.
 
-### Multiple Backends
+### Local offline backend (whisper.cpp, no API key)
 
-You can define several named backends and switch between them with `-b`:
+```yaml
+backends:
+  local:
+    type: whisper_cpp
+    binary: ~/path/to/whisper.cpp/build/bin/whisper-cli
+    model:  ~/path/to/whisper.cpp/models/ggml-large-v3-turbo-q8_0.bin
+    # language: auto   # auto-detect language
+    # threads: 4
+```
+
+```bash
+asr2clip --test -b local   # verify
+asr2clip -b local          # record and transcribe offline
+```
+
+See the [whisper.cpp](https://github.com/ggerganov/whisper.cpp) project for build instructions and model downloads.
+
+### Multiple named backends
+
+Define several backends and switch between them at runtime with `-b`:
 
 ```yaml
 default_backend: groq
@@ -100,49 +118,82 @@ backends:
     type: whisper_cpp
     binary: ~/path/to/whisper.cpp/build/bin/whisper-cli
     model:  ~/path/to/whisper.cpp/models/ggml-large-v3-turbo-q8_0.bin
-    # language: auto
-    # threads: 4
 ```
-
-Select at runtime:
 
 ```bash
-asr2clip -b local -i meeting.mp3   # use whisper.cpp backend
-asr2clip -b groq                   # use Groq cloud backend
-asr2clip --test -b local           # test whisper.cpp configuration
+asr2clip                       # use default backend (groq)
+asr2clip -b local              # use whisper.cpp
+asr2clip -b local -i audio.wav # transcribe file offline
+asr2clip --test -b local       # test a specific backend
 ```
 
-### Test Your Configuration
-
-Before using the tool, verify your setup:
+### Audio device
 
 ```bash
-asr2clip --test
+asr2clip --list_devices        # list available input devices
+asr2clip --device pulse        # use a specific device for this run
 ```
 
-### Audio Device Selection
-
-```bash
-asr2clip --list_devices    # List all audio input devices
-asr2clip --device pulse    # Use specific device
-```
-
-Or add to your config file:
+Or set permanently in config:
 ```yaml
-audio_device: "pulse"  # or device index like 12
+audio_device: "pulse"          # or a device index like 12
 ```
 
 ## Usage
 
-### Basic Usage
+### Basic
 
 ```bash
-asr2clip                   # Record until Ctrl+C, transcribe, copy to clipboard
-asr2clip --vad             # Continuous recording with voice detection
-asr2clip -i audio.mp3      # Transcribe an audio file
+asr2clip                       # record until Ctrl+C, transcribe, copy to clipboard
+asr2clip -b local              # same, using local whisper.cpp
+asr2clip -i audio.mp3          # transcribe an existing file
+asr2clip -i audio.mp3 -b local # transcribe a file offline
+asr2clip -o transcript.txt     # also append transcript to a file
 ```
 
-### CLI Options
+### Toggle mode
+
+Toggle mode lets you bind a single keyboard shortcut to start and stop recording. The recording runs as a background process; the second invocation stops it, transcribes, and copies to clipboard. A desktop notification is shown on start and finish (requires `notify-send` on Linux).
+
+```bash
+asr2clip --toggle              # first press: start recording in background
+asr2clip --toggle              # second press: stop, transcribe, copy to clipboard
+asr2clip -b local --toggle     # same, using local whisper.cpp
+```
+
+Toggle mode requires a POSIX system (Linux, macOS). Example awesome WM keybinding:
+
+```lua
+awful.key({ modkey }, "r", function()
+    awful.spawn("asr2clip --toggle")
+end)
+```
+
+### Continuous recording
+
+```bash
+asr2clip --vad -o ~/meeting.txt          # auto-transcribe on silence (VAD)
+asr2clip --interval 60 -o ~/meeting.txt  # transcribe every 60 seconds
+```
+
+VAD requires the `vad` extra (`pip install asr2clip[vad]`) and uses the [Silero VAD](https://github.com/snakers4/silero-vad) model via sherpa-onnx. The model (~629 KB) is downloaded automatically on first use.
+
+VAD options:
+- `--silence_threshold PROB`: speech probability threshold, 0.0–1.0 (default: 0.5)
+- `--silence_duration SEC`: silence duration to trigger transcription (default: 1.5 s)
+
+### Robust long-file transcription
+
+For long recordings, `--robust` splits at silence boundaries, quality-checks each chunk, retries bad chunks, and writes output incrementally:
+
+```bash
+asr2clip -i meeting.mp3 -R                     # chunked, quality-checked
+asr2clip -i meeting.mp3 -R -C 60              # 60 s chunks instead of default 180
+asr2clip -i meeting.mp3 -R -o transcript.txt  # write chunks to file as they complete
+asr2clip -i meeting.mp3 -R -b local           # fully offline
+```
+
+### CLI reference
 
 ```
 usage: asr2clip [-h] [-v] [-c FILE] [-q] [-b NAME] [-i FILE] [-o FILE]
@@ -195,74 +246,6 @@ Local ASR server:
   --download-model      Download the SenseVoice model and exit
 ```
 
-### Toggle Mode
-
-Toggle mode lets you bind a single keyboard shortcut to start and stop recording:
-
-```bash
-asr2clip --toggle   # First press: start recording in background
-asr2clip --toggle   # Second press: stop, transcribe, copy to clipboard
-```
-
-The recording runs as a background process; invoking the command a second time stops it and sends the audio through transcription. A desktop notification is shown on start and finish (requires `notify-send`).
-
-Example awesome WM keybinding:
-
-```lua
-awful.key({ modkey }, "r", function()
-    awful.spawn("asr2clip --toggle")
-end)
-```
-
-### Continuous Recording Mode
-
-For long recordings like meetings or lectures, use `--vad` or `--interval`:
-
-```bash
-# Continuous with voice activity detection (auto-transcribe on silence)
-asr2clip --vad -o ~/meeting.txt
-
-# Continuous with fixed interval (transcribe every 60 seconds)
-asr2clip --interval 60 -o ~/meeting.txt
-```
-
-In continuous mode:
-- Audio is recorded continuously
-- Transcription happens automatically (on silence or at interval)
-- Press Ctrl+C once to stop (transcribes remaining audio before exit)
-- Transcripts are appended to the output file with timestamps
-
-### Voice Activity Detection (VAD)
-
-VAD uses the [Silero VAD](https://github.com/snakers4/silero-vad) neural network model via sherpa-onnx for reliable speech detection. Requires the `vad` extra:
-
-```bash
-pip install asr2clip[vad]
-```
-
-```bash
-asr2clip --vad                                  # Auto-transcribe on silence
-asr2clip --vad --silence_threshold 0.3 --silence_duration 2.0
-asr2clip --vad -o ~/meeting.txt
-```
-
-VAD options:
-- `--silence_threshold`: Speech probability threshold, 0.0-1.0 (default: 0.5). Lower values are more sensitive.
-- `--silence_duration`: Seconds of silence to trigger transcription (default: 1.5)
-
-The Silero VAD model (~629 KB) is downloaded automatically on first use.
-
-### Robust Long-File Transcription
-
-For long audio files, `--robust` splits at silence boundaries, quality-checks each chunk, retries bad chunks, and writes output incrementally (suitable for `tail -f`):
-
-```bash
-asr2clip -i meeting.mp3 -R                    # Chunked, quality-checked transcription
-asr2clip -i meeting.mp3 -R -C 60             # Use 60 s chunks instead of default 180
-asr2clip -i meeting.mp3 -R -o transcript.txt  # Stream chunks to file
-asr2clip -i meeting.mp3 -R -b local          # Robust mode with whisper.cpp
-```
-
 ## Troubleshooting
 
 | Problem | Solution |
@@ -270,9 +253,10 @@ asr2clip -i meeting.mp3 -R -b local          # Robust mode with whisper.cpp
 | Audio not captured | Run `asr2clip --list_devices` and select a working device |
 | Clipboard not working | Install `xclip` (X11) or `wl-clipboard` (Wayland) |
 | API errors | Check your API key and endpoint in config |
+| whisper.cpp errors | Run `asr2clip --test -b local`; check binary and model paths |
 | Silent audio | Try a different audio device with `--device` |
 
-Run `asr2clip --test` to diagnose issues.
+Run `asr2clip --test` (or `asr2clip --test -b <name>`) to diagnose issues.
 
 ## Contributing
 
