@@ -56,11 +56,12 @@ model_name: "whisper-1"                     # or other compatible model
 #     api_base_url: "https://api.groq.com/openai/v1/"
 #     api_key: "YOUR_GROQ_KEY"
 #     model_name: "whisper-large-v3-turbo"
+#     # language: fi                          # optional, ISO-639-1 code (e.g. fi, en); omit to auto-detect
 #   local:
 #     type: whisper_cpp
 #     binary: ~/path/to/whisper.cpp/build/bin/whisper-cli
 #     model:  ~/path/to/whisper.cpp/models/ggml-large-v3-turbo-q8_0.bin
-#     # language: auto
+#     # language: auto                        # optional; 'auto' or ISO-639-1 code (e.g. fi)
 #     # threads: 4
 #     # timestamps: false
 #     # timeout_multiplier: 4.0
@@ -291,6 +292,7 @@ def resolve_backend_config(config: dict, backend_name: str | None = None) -> dic
             "api_base_url": defn.get("api_base_url", "https://api.openai.com/v1/"),
             "model_name": defn.get("model_name", "whisper-1"),
             "org_id": defn.get("org_id", os.environ.get("OPENAI_ORG_ID")),
+            "language": defn.get("language"),
         }
     elif btype == "whisper_cpp":
         return {

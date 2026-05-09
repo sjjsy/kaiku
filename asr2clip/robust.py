@@ -10,12 +10,10 @@ import time
 from pydub import AudioSegment
 from pydub.silence import detect_silence
 
-from .output import copy_to_clipboard, append_transcript_to_file
+from .output import copy_transcript_to_clipboard, append_transcript_to_file
 from .transcribe import TranscriptionError, transcribe_with_config
 from .utils import info, log, warning
 
-
-_MAX_CLIPBOARD_CHARS = 4000
 
 
 def _find_chunk_boundaries(
@@ -70,6 +68,7 @@ def process_file_robust(
     input_file: str,
     output_file: str | None = None,
     chunk_duration: int = 180,
+    language: str | None = None,
 ):
     """Transcribe a long audio file in silence-bounded chunks with quality checks.
 
@@ -121,7 +120,7 @@ def process_file_robust(
         for attempt in range(retries):
             try:
                 candidate = transcribe_with_config(
-                    tmp_path, config, raise_on_error=True, timeout=timeout
+                    tmp_path, config, raise_on_error=True, timeout=timeout, language=language
                 )
                 if _check_quality(candidate):
                     text = candidate
@@ -183,19 +182,8 @@ def process_file_robust(
 
     full_text = "\n\n".join(all_text_parts)
 
-    if len(full_text) <= _MAX_CLIPBOARD_CHARS:
-        if copy_to_clipboard(full_text):
-            log("Full transcript copied to clipboard.")
-        else:
-            warning("Clipboard copy failed.")
-    else:
-        last_chunk = all_text_parts[-1]
-        if copy_to_clipboard(last_chunk):
-            log(
-                f"Transcript too long for clipboard ({len(full_text)} chars); "
-                "last chunk copied instead."
-            )
-        if output_file:
-            log(f"Full transcript written to {output_file}")
+    copy_transcript_to_clipboard(full_text, output_file)
+    if output_file:
+        log(f"Full transcript written to {output_file}")
 
     log(f"Done. {n_chunks} chunk(s), {total_s:.0f}s audio transcribed.")

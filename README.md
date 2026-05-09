@@ -145,11 +145,13 @@ audio_device: "pulse"          # or a device index like 12
 
 ```bash
 asr2clip                       # record until Ctrl+C, transcribe, copy to clipboard
-asr2clip -b wcpp               # same, using local whisper.cpp
+asr2clip -l fi -b wcpp         # same but for Finnish, using local Whisper.cpp backend
 asr2clip -i audio.mp3          # transcribe an existing file
-asr2clip -i audio.mp3 -b local # transcribe a file offline
+asr2clip -i audio.mp3 -b wcpp  # transcribe a file offline with Whisper.cpp
 asr2clip -o transcript.txt     # also append transcript to a file
 ```
+
+> **Clipboard size limit:** When a transcript exceeds ~4000 characters, the full text is too large to paste conveniently. If you also specified `-o FILE`, the absolute path to that file is copied to the clipboard instead — paste it wherever you need to open or attach the transcript. Without `-o`, the full text is copied regardless and clipboard behaviour depends on your system.
 
 ### Toggle mode
 
@@ -190,8 +192,10 @@ For long recordings, `--robust` splits at silence boundaries, quality-checks eac
 asr2clip -i meeting.mp3 -R                    # chunked, quality-checked
 asr2clip -i meeting.mp3 -R -C 60              # 60 s chunks instead of default 180
 asr2clip -i meeting.mp3 -R -o transcript.txt  # write chunks to file as they complete
-asr2clip -i meeting.mp3 -R -b wcpp            # fully offline
+asr2clip -i m.mp3 -Rb wcpp -l fi -o o.txt     # fully offline, Finnish language
 ```
+
+Long transcripts will exceed the clipboard size limit; using `-o FILE` is recommended. When the limit is exceeded, the file path is copied to clipboard automatically (see note above).
 
 ### CLI reference
 

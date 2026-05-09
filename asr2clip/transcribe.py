@@ -52,6 +52,7 @@ def _attempt_transcription(
     headers: dict,
     model_name: str,
     timeout: float,
+    language: str | None = None,
 ) -> str:
     """Make a single transcription API request.
 
@@ -73,6 +74,8 @@ def _attempt_transcription(
     with open(audio_file_path, "rb") as audio_file:
         files = {"file": (os.path.basename(audio_file_path), audio_file, "audio/wav")}
         data = {"model": model_name}
+        if language:
+            data["language"] = language
 
         with httpclient.Client(timeout=timeout) as client:
             response = client.post(url, headers=headers, files=files, data=data)
@@ -95,6 +98,7 @@ def transcribe_audio(
     max_retries: int = DEFAULT_MAX_RETRIES,
     retry_delay: float = DEFAULT_RETRY_DELAY,
     timeout: float = DEFAULT_TIMEOUT,
+    language: str | None = None,
 ) -> str:
     """Transcribe audio using the ASR API with automatic retry on timeout.
 
@@ -131,7 +135,7 @@ def transcribe_audio(
     for attempt in range(max_retries + 1):
         try:
             return _attempt_transcription(
-                audio_file_path, url, headers, model_name, timeout
+                audio_file_path, url, headers, model_name, timeout, language=language
             )
         except (httpclient.HttpTimeoutError, httpclient.HttpClientError) as e:
             last_error = e
@@ -161,6 +165,7 @@ def transcribe_with_config(
     config: dict,
     raise_on_error: bool = False,
     timeout: float | None = None,
+    language: str | None = None,
 ) -> str:
     """Transcribe audio using whichever backend is configured.
 
@@ -176,6 +181,8 @@ def transcribe_with_config(
     if config.get("backend") == "whisper_cpp":
         from .backends.whisper_cpp import WhisperCppConfig, transcribe as wc_transcribe
         cfg = WhisperCppConfig.from_config(config)
+        if language:
+            cfg.language = language
         try:
             return wc_transcribe(audio_file_path, cfg, timeout=timeout)
         except TranscriptionError:
@@ -187,6 +194,7 @@ def transcribe_with_config(
 
     from .config import get_api_config
     api_key, api_base_url, model_name, org_id = get_api_config(config)
+    effective_language = language or config.get("language")
     return transcribe_audio(
         audio_file_path,
         api_key,
@@ -195,6 +203,7 @@ def transcribe_with_config(
         org_id,
         raise_on_error=raise_on_error,
         timeout=timeout or DEFAULT_TIMEOUT,
+        language=effective_language,
     )
 
 

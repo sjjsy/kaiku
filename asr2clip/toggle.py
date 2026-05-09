@@ -147,6 +147,7 @@ def toggle_recording(
     config: dict,
     device: str | int | None = None,
     output_file: str | None = None,
+    language: str | None = None,
 ):
     """Start or stop toggle-mode recording.
 
@@ -158,7 +159,7 @@ def toggle_recording(
     lock_path = _lock_path()
 
     if os.path.exists(lock_path):
-        _stop_and_transcribe(lock_path, config, output_file)
+        _stop_and_transcribe(lock_path, config, output_file, language)
     else:
         _start_recording(lock_path, device)
 
@@ -194,6 +195,7 @@ def _stop_and_transcribe(
     lock_path: str,
     config: dict,
     output_file: str | None,
+    language: str | None = None,
 ):
     with open(lock_path) as f:
         lock_data = json.load(f)
@@ -205,7 +207,7 @@ def _stop_and_transcribe(
         warning(f"Recorder PID {pid} is no longer running (stale lock). Cleaning up.")
         os.unlink(lock_path)
         if audio_path and os.path.exists(audio_path):
-            _transcribe_and_output(audio_path, config, output_file)
+            _transcribe_and_output(audio_path, config, output_file, language)
         return
 
     log(f"Stopping recorder (pid {pid})…")
@@ -215,10 +217,10 @@ def _stop_and_transcribe(
     # Give arecord a moment to flush its WAV header
     time.sleep(0.3)
 
-    _transcribe_and_output(audio_path, config, output_file)
+    _transcribe_and_output(audio_path, config, output_file, language)
 
 
-def _transcribe_and_output(audio_path: str, config: dict, output_file: str | None):
+def _transcribe_and_output(audio_path: str, config: dict, output_file: str | None, language: str | None = None):
     if not os.path.exists(audio_path) or os.path.getsize(audio_path) < 100:
         log("Audio file is empty or missing — nothing to transcribe.")
         return
@@ -234,7 +236,7 @@ def _transcribe_and_output(audio_path: str, config: dict, output_file: str | Non
     t0 = time.time()
     try:
         from .transcribe import transcribe_with_config
-        text = transcribe_with_config(audio_path, config, raise_on_error=True)
+        text = transcribe_with_config(audio_path, config, raise_on_error=True, language=language)
     except Exception as e:
         warning(f"Transcription failed: {e}")
         _notify("asr2clip", f"Transcription failed: {e}")

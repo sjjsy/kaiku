@@ -9,6 +9,8 @@ from datetime import datetime
 
 from .utils import log, print_success, warning
 
+_MAX_CLIPBOARD_CHARS = 4000
+
 
 def _is_wayland() -> bool:
     """Check if the current session is running on Wayland."""
@@ -123,6 +125,42 @@ def append_transcript_to_file(text: str, filepath: str):
     log(f"Appended transcript to {filepath}")
 
 
+def copy_transcript_to_clipboard(text: str, output_file: str | None = None) -> bool:
+    """Copy transcript to clipboard, using the file path as fallback when text is too long.
+
+    Args:
+        text: Transcript text.
+        output_file: Path to the output file, if one was written.
+
+    Returns:
+        True if something was copied to clipboard, False otherwise.
+    """
+    if len(text) <= _MAX_CLIPBOARD_CHARS:
+        if copy_to_clipboard(text):
+            print_success("Copied to clipboard")
+            return True
+        warning("Failed to copy to clipboard")
+        return False
+
+    if output_file:
+        abs_path = os.path.abspath(output_file)
+        if copy_to_clipboard(abs_path):
+            log(
+                f"Transcript too long for clipboard ({len(text):,} chars); "
+                f"file path copied instead: {abs_path}"
+            )
+            return True
+        warning("Failed to copy file path to clipboard")
+        return False
+
+    # No output file — copy the full text anyway and let the clipboard handle it
+    if copy_to_clipboard(text):
+        print_success("Copied to clipboard")
+        return True
+    warning("Failed to copy to clipboard")
+    return False
+
+
 def output_transcript(
     text: str,
     to_clipboard: bool = True,
@@ -138,10 +176,7 @@ def output_transcript(
         to_file: Optional file path to append transcript to.
     """
     if to_clipboard:
-        if copy_to_clipboard(text):
-            print_success("Copied to clipboard")
-        else:
-            warning("Failed to copy to clipboard")
+        copy_transcript_to_clipboard(text, output_file if to_file else None)
 
     if to_stdout:
         print(text)

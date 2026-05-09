@@ -78,6 +78,7 @@ def process_recording(
     config: dict,
     device: str | int | None = None,
     output_file: str | None = None,
+    language: str | None = None,
 ):
     """Record audio, transcribe, and output the result.
 
@@ -111,7 +112,7 @@ def process_recording(
 
     try:
         t1 = time.time()
-        text = transcribe_with_config(temp_path, config)
+        text = transcribe_with_config(temp_path, config, language=language)
         info(f"Transcription completed in {time.time() - t1:.1f}s")
 
         if text.strip():
@@ -135,6 +136,7 @@ def process_file(
     config: dict,
     input_file: str,
     output_file: str | None = None,
+    language: str | None = None,
 ):
     """Transcribe an existing audio file.
 
@@ -163,7 +165,7 @@ def process_file(
 
     try:
         t1 = time.time()
-        text = transcribe_with_config(temp_path, config)
+        text = transcribe_with_config(temp_path, config, language=language)
         info(f"Transcription completed in {time.time() - t1:.1f}s")
 
         if text.strip():
@@ -230,7 +232,8 @@ Robust long-file transcription:
   asr2clip -i meeting.mp3 -R       # Chunked transcription with some automated quality checking
   asr2clip -i meeting.mp3 -R -C 60 # Use 60 s chunks instead of default 180
   asr2clip -i meeting.mp3 -R -o transcript.txt  # Stream chunks to file (tail -f)
-  asr2clip -i meeting.mp3 -R -b local           # Robust mode with whisper.cpp
+  asr2clip -i meeting.mp3 -R -b wcpp            # Robust mode with whisper.cpp
+  asr2clip -i meeting.mp3 -R -b wcpp -l fi      # Robust mode with whisper.cpp, expecting Finnish
 """,
     )
 
@@ -282,6 +285,15 @@ Robust long-file transcription:
         metavar="DEV",
         help="Audio input device (name or index)",
         default=None,
+    )
+    parser.add_argument(
+        "-l", "--language",
+        metavar="LANG",
+        default=None,
+        help=(
+            "Language hint for transcription (ISO-639-1, e.g. 'fi', 'en'). "
+            "Overrides config. Omit to auto-detect."
+        ),
     )
     parser.add_argument(
         "-e", "--edit", action="store_true", help="Open configuration file in editor"
@@ -476,7 +488,7 @@ def main():
 
     if args.toggle:
         from .toggle import toggle_recording
-        toggle_recording(backend_config, device, args.output)
+        toggle_recording(backend_config, device, args.output, language=args.language)
         return
 
     # File transcription takes priority over continuous modes
@@ -486,9 +498,10 @@ def main():
             process_file_robust(
                 backend_config, args.input, args.output,
                 chunk_duration=args.chunk_duration,
+                language=args.language,
             )
         else:
-            process_file(backend_config, args.input, args.output)
+            process_file(backend_config, args.input, args.output, language=args.language)
         return
 
     if args.vad or args.interval is not None:
@@ -517,7 +530,7 @@ def main():
         )
         return
 
-    process_recording(backend_config, device, args.output)
+    process_recording(backend_config, device, args.output, language=args.language)
 
 
 if __name__ == "__main__":
