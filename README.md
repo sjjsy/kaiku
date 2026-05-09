@@ -68,7 +68,7 @@ This will create a config file at `~/.config/asr2clip/config.yaml` if it doesn't
 
 ### Configuration File
 
-The configuration file uses YAML format:
+The configuration file uses YAML format. The simplest form:
 
 ```yaml
 api_base_url: "https://api.openai.com/v1/"  # or other compatible API base URL
@@ -84,6 +84,34 @@ Config file locations (searched in order):
 3. `~/.config/asr2clip.conf` (legacy)
 4. `~/.asr2clip.conf` (legacy)
 
+### Multiple Backends
+
+You can define several named backends and switch between them with `-b`:
+
+```yaml
+default_backend: groq
+backends:
+  groq:
+    type: api
+    api_base_url: "https://api.groq.com/openai/v1/"
+    api_key: "YOUR_GROQ_KEY"
+    model_name: "whisper-large-v3-turbo"
+  local:
+    type: whisper_cpp
+    binary: ~/path/to/whisper.cpp/build/bin/whisper-cli
+    model:  ~/path/to/whisper.cpp/models/ggml-large-v3-turbo-q8_0.bin
+    # language: auto
+    # threads: 4
+```
+
+Select at runtime:
+
+```bash
+asr2clip -b local -i meeting.mp3   # use whisper.cpp backend
+asr2clip -b groq                   # use Groq cloud backend
+asr2clip --test -b local           # test whisper.cpp configuration
+```
+
 ### Test Your Configuration
 
 Before using the tool, verify your setup:
@@ -92,14 +120,7 @@ Before using the tool, verify your setup:
 asr2clip --test
 ```
 
-This will check:
-- ✓ Clipboard support
-- ✓ Audio device functionality
-- ✓ API connection
-
 ### Audio Device Selection
-
-If the default audio device doesn't work, list available devices and select one:
 
 ```bash
 asr2clip --list_devices    # List all audio input devices
@@ -124,19 +145,22 @@ asr2clip -i audio.mp3      # Transcribe an audio file
 ### CLI Options
 
 ```
-usage: asr2clip [-h] [-v] [-c FILE] [-q] [-i FILE] [-o FILE] [--test]
-                [--list_devices] [--device DEV] [-e] [--generate_config]
-                [--print_config] [--vad] [--interval SEC]
-                [--silence_threshold PROB] [--silence_duration SEC]
+usage: asr2clip [-h] [-v] [-c FILE] [-q] [-b NAME] [-i FILE] [-o FILE]
+                [--test] [--list_devices] [--device DEV] [-e]
+                [--generate_config] [--print_config] [--vad] [--interval SEC]
+                [--silence_threshold PROB] [--silence_duration SEC] [-R]
+                [-C SEC] [--toggle] [--serve] [--host HOST] [--port PORT]
+                [--model-dir MODEL_DIR] [--num-threads NUM_THREADS]
+                [--download-model]
 
-Record audio and transcribe to clipboard using ASR API
-
-options:
+optional arguments:
   -h, --help            show this help message and exit
   -v, --version         show program's version number and exit
   -c FILE, --config FILE
                         Path to configuration file
   -q, --quiet           Quiet mode - only output transcription and errors
+  -b NAME, --backend NAME
+                        Named backend to use (defined under 'backends:' in config)
   -i FILE, --input FILE
                         Transcribe audio file instead of recording
   -o FILE, --output FILE
@@ -153,22 +177,41 @@ options:
                         VAD speech probability threshold, 0.0-1.0 (default: 0.5)
   --silence_duration SEC
                         Silence duration to trigger transcription (default: 1.5)
+  -R, --robust          Robust mode for -i file input: split at silence
+                        boundaries, check quality, retry bad chunks,
+                        stream output (tail-f friendly)
+  -C SEC, --chunk-duration SEC
+                        Maximum chunk duration in seconds for --robust mode (default: 180)
+  --toggle              Toggle recording: first call starts, second call stops
+                        and transcribes. Designed for keyboard shortcuts.
+
+Local ASR server:
+  --serve               Start the local ASR API server
+  --host HOST           Server bind address (default: 127.0.0.1)
+  --port PORT           Server bind port (default: 8000)
+  --model-dir MODEL_DIR Path to ASR model directory
+  --num-threads NUM_THREADS
+                        Inference threads (default: 4)
+  --download-model      Download the SenseVoice model and exit
 ```
 
-### Examples
+### Toggle Mode
+
+Toggle mode lets you bind a single keyboard shortcut to start and stop recording:
 
 ```bash
-# Single recording (press Ctrl+C to stop)
-asr2clip
+asr2clip --toggle   # First press: start recording in background
+asr2clip --toggle   # Second press: stop, transcribe, copy to clipboard
+```
 
-# Transcribe an audio file
-asr2clip -i recording.mp3
+The recording runs as a background process; invoking the command a second time stops it and sends the audio through transcription. A desktop notification is shown on start and finish (requires `notify-send`).
 
-# Save transcript to file
-asr2clip -o transcript.txt
+Example awesome WM keybinding:
 
-# Use specific audio device
-asr2clip --device pulse
+```lua
+awful.key({ modkey }, "r", function()
+    awful.spawn("asr2clip --toggle")
+end)
 ```
 
 ### Continuous Recording Mode
@@ -181,9 +224,6 @@ asr2clip --vad -o ~/meeting.txt
 
 # Continuous with fixed interval (transcribe every 60 seconds)
 asr2clip --interval 60 -o ~/meeting.txt
-
-# Combine VAD with max interval
-asr2clip --vad --interval 120 -o ~/meeting.txt
 ```
 
 In continuous mode:
@@ -200,29 +240,28 @@ VAD uses the [Silero VAD](https://github.com/snakers4/silero-vad) neural network
 pip install asr2clip[vad]
 ```
 
-Enable automatic transcription when you stop speaking:
-
 ```bash
-# Auto-transcribe when silence is detected
-asr2clip --vad
-
-# Use custom settings
+asr2clip --vad                                  # Auto-transcribe on silence
 asr2clip --vad --silence_threshold 0.3 --silence_duration 2.0
-
-# Save transcripts to file
 asr2clip --vad -o ~/meeting.txt
 ```
 
 VAD options:
-- `--vad`: Enable voice activity detection
 - `--silence_threshold`: Speech probability threshold, 0.0-1.0 (default: 0.5). Lower values are more sensitive.
 - `--silence_duration`: Seconds of silence to trigger transcription (default: 1.5)
 
-With VAD enabled, transcription is triggered when:
-1. Speech is detected (audio probability above threshold)
-2. Followed by silence (below threshold for the specified duration)
-
 The Silero VAD model (~629 KB) is downloaded automatically on first use.
+
+### Robust Long-File Transcription
+
+For long audio files, `--robust` splits at silence boundaries, quality-checks each chunk, retries bad chunks, and writes output incrementally (suitable for `tail -f`):
+
+```bash
+asr2clip -i meeting.mp3 -R                    # Chunked, quality-checked transcription
+asr2clip -i meeting.mp3 -R -C 60             # Use 60 s chunks instead of default 180
+asr2clip -i meeting.mp3 -R -o transcript.txt  # Stream chunks to file
+asr2clip -i meeting.mp3 -R -b local          # Robust mode with whisper.cpp
+```
 
 ## Troubleshooting
 
