@@ -151,7 +151,13 @@ asr2clip -i audio.mp3 -b wcpp  # transcribe a file offline with Whisper.cpp
 asr2clip -o transcript.txt     # also append transcript to a file
 ```
 
-> **Clipboard size limit:** When a transcript exceeds ~4000 characters, the full text is too large to paste conveniently. If you also specified `-o FILE`, the absolute path to that file is copied to the clipboard instead — paste it wherever you need to open or attach the transcript. Without `-o`, the full text is copied regardless and clipboard behaviour depends on your system.
+Note:
+- **Language support:** Many backends support multiple languages but some tend to favor a specific langauge, most frequently English.
+  Sometimes they understand foreign languages but translate the output transcript into English.
+  With the `-l LL` flag you can "force" the backend to try to interpret the audio and produce the transcript in a specific language (Use ISO-639-1 two letter codes such as `fi`, `fr` and `de`).
+- **Clipboard size limit:** When a transcript exceeds ~4000 characters, the full text is too large to paste conveniently.
+  If you also specified `-o FILE`, the absolute path to that file is copied to the clipboard instead — paste it wherever you need to open or attach the transcript.
+  Without `-o`, the full text is copied regardless and clipboard behaviour depends on your system.
 
 ### Toggle mode
 
