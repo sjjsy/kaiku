@@ -5,7 +5,11 @@
 
 [中文](README_zh.md)
 
-This tool records speech, transcribes it, and copies the result to your clipboard. It supports cloud ASR APIs (OpenAI-compatible) as well as fully local, offline transcription via [whisper.cpp](https://github.com/ggerganov/whisper.cpp) — no API key required for local use.
+This tool records speech, transcribes it, and copies the result to your clipboard, or a local file.
+
+It provides Automatic Speech Recognition (ASR) with cloud APIs (OpenAI-compatible) as well as fully local, offline transcription via [whisper.cpp](https://github.com/ggerganov/whisper.cpp) — no API key required for local use.
+
+It provides audio preprocessing, chunked transcription, language specification, and other options to enhance trancription quality and provide a nice user experience for various use cases.
 
 ## TL;DR
 
@@ -139,20 +143,89 @@ Or set permanently in config:
 audio_device: "pulse"          # or a device index like 12
 ```
 
+### Audio pre-processing (noise reduction)
+
+asr2clip can denoise audio before sending it to the transcription backend. This
+is especially useful in noisy environments (café, open-plan office, outdoor) or
+when recording with variable speaker distances. Whisper and similar models
+are sensitive to background noise and tend to hallucinate when the signal is poor.
+
+**Available pre-processors:**
+
+| Name | Technology | Extra dependencies | Con | Best for |
+|------|-----------|-------------------|-----|----------|
+| `none` | — | none (default) | — | clean recordings |
+| `noisereduce` | Spectral subtraction | scipy | Works best on stationary noise | steady hum, fan noise |
+| `pyrnnoise` | Mozilla RNNoise GRU | scipy | Requires 16 kHz→48 kHz resampling; may sound slightly robotic | babble, non-stationary noise |
+| `deepfilter` | DeepFilterNet3 neural | torch + Rust wheel | Medium CPU; ~70 MB model download on first use | noisy files, variable speaker distance, best quality |
+
+**A note on `pyrnnoise` and sample rates:** RNNoise internally operates at 48 kHz. Because
+asr2clip records and converts all audio to 16 kHz before transcription, pyrnnoise always
+performs a 16 kHz→48 kHz→16 kHz resampling round-trip. The inference itself is very fast,
+but the resampling adds overhead. For live recordings with tight latency requirements,
+`noisereduce` avoids this round-trip and is often the more predictable choice.
+
+**`noisereduce` vs `pyrnnoise`:** They differ in kind, not just speed. `noisereduce` (spectral
+subtraction) is better at removing *stationary* noise — constant hum from ventilation, a fan,
+or electrical interference. `pyrnnoise` (neural GRU) handles *non-stationary* noise better —
+babble, footsteps, intermittent sounds. Both require scipy; neither needs a GPU.
+
+**Installation:**
+```bash
+pip install asr2clip[noisereduce]   # spectral subtraction (scipy-based)
+pip install asr2clip[pyrnnoise]     # RNNoise GRU (scipy for resampling)
+pip install asr2clip[deepfilter]    # DeepFilterNet3 (torch-based, no scipy)
+pip install asr2clip[enhance]       # all three
+```
+
+**Usage:**
+```bash
+asr2clip -P deepfilter              # denoise live recording with DeepFilterNet
+asr2clip -P noisereduce             # spectral denoising, no resampling overhead
+asr2clip -P pyrnnoise               # RNNoise GRU denoising
+asr2clip -P deepfilter -i talk.mp4  # denoise video file before transcription
+asr2clip --test                     # also checks that configured preprocessors are available
+```
+
+**Config** (set different preprocessors for live vs. file transcription):
+```yaml
+preprocessor_live: noisereduce  # spectral, no resampling overhead for live 16 kHz audio
+preprocessor_file: deepfilter   # best quality for longer file transcription
+```
+
+`asr2clip --generate_config` probes your system and writes these keys automatically
+with the best available option for each context. Override for a single run with `-P`.
+
+**Loudness normalisation:** After any noise reduction step the speech signal may be quieter
+than before (the noise floor was raising the apparent level). All three preprocessors
+apply a loudnorm pass after cleaning: RMS → −20 dBFS, peak ceiling −0.1 dBFS. This
+ensures Whisper's attention mechanism receives a consistently strong, unclipped signal.
+
 ## Usage
 
 ### Basic
 
 ```bash
-asr2clip                       # record until Ctrl+C, transcribe, copy to clipboard
-asr2clip -l fi -b wcpp         # same but for Finnish, using local Whisper.cpp backend
-asr2clip -i audio.mp3          # transcribe an existing file
-asr2clip -i audio.mp3 -b wcpp  # transcribe a file offline with Whisper.cpp
-asr2clip -o transcript.txt     # also append transcript to a file
+asr2clip                           # record until Ctrl+C, transcribe, copy to clipboard
+asr2clip -l fi -b wcpp             # same but for Finnish, using local Whisper.cpp backend
+asr2clip -i audio.mp3              # transcribe an existing audio file
+asr2clip -i meeting.mp4            # transcribe from a video file (audio extracted automatically)
+asr2clip -i audio.mp3 -b wcpp      # transcribe a file offline with Whisper.cpp
+asr2clip -o transcript.txt         # also append transcript to a file
+asr2clip -P deepfilter             # record with DeepFilterNet noise reduction
+asr2clip -P deepfilter -i talk.mkv # denoise + transcribe a video file
 ```
 
+**Supported input formats:**
+- Audio: `wav`, `mp3`, `m4a`, `ogg`, `flac`, `aac`, `opus`, `wma`
+- Video: `mp4`, `mov`, `mkv`, `webm`, `avi`, `flv`, `mvi`
+
+Requires `ffmpeg` on PATH for non-WAV input. Video streams are discarded automatically;
+basic spectral cleaning (highpass 200 Hz + lowpass 3 kHz + loudnorm) is applied during
+conversion. Install ffmpeg: `apt install ffmpeg` / `brew install ffmpeg`.
+
 Note:
-- **Language support:** Many backends support multiple languages but some tend to favor a specific langauge, most frequently English.
+- **Language support:** Many backends support multiple languages but some tend to favor a specific language, most frequently English.
   Sometimes they understand foreign languages but translate the output transcript into English.
   With the `-l LL` flag you can "force" the backend to try to interpret the audio and produce the transcript in a specific language (Use ISO-639-1 two letter codes such as `fi`, `fr` and `de`).
 - **Clipboard size limit:** When a transcript exceeds ~4000 characters, the full text is too large to paste conveniently.
@@ -179,16 +252,31 @@ end)
 
 ### Continuous recording
 
+Two modes are available:
+
+| Mode | Flag | Trigger | Use case |
+|------|------|---------|----------|
+| Voice Activity Detection | `--vad` | Silence after speech | Meetings, dictation, any unscripted speech |
+| Fixed interval | `--interval SEC` | Every N seconds | Lectures, podcasts with predictable pauses |
+
 ```bash
-asr2clip --vad -o ~/meeting.txt          # auto-transcribe on silence (VAD)
+asr2clip --vad -o ~/meeting.txt          # auto-transcribe when silence is detected
 asr2clip --interval 60 -o ~/meeting.txt  # transcribe every 60 seconds
 ```
 
-VAD requires the `vad` extra (`pip install asr2clip[vad]`) and uses the [Silero VAD](https://github.com/snakers4/silero-vad) model via sherpa-onnx. The model (~629 KB) is downloaded automatically on first use.
+**VAD requires [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx):**
+
+```bash
+pip install asr2clip[vad]
+```
+
+VAD uses the [Silero VAD](https://github.com/snakers4/silero-vad) model run locally via sherpa-onnx — a fast, lightweight speech/silence classifier. The model (~629 KB) is downloaded automatically on first use. No internet connection is required after the first run.
 
 VAD options:
-- `--silence_threshold PROB`: speech probability threshold, 0.0–1.0 (default: 0.5)
-- `--silence_duration SEC`: silence duration to trigger transcription (default: 1.5 s)
+- `--silence_threshold PROB`: speech probability threshold, 0.0–1.0 (default: 0.5); lower = more sensitive
+- `--silence_duration SEC`: how long silence must last to trigger a transcription (default: 1.5 s)
+
+> **Note:** Audio pre-processing (`-P`) is not yet applied in VAD/interval continuous mode — only in single recording, toggle, and file transcription modes.
 
 ### Robust long-file transcription
 
@@ -206,11 +294,12 @@ Long transcripts will exceed the clipboard size limit; using `-o FILE` is recomm
 ### CLI reference
 
 ```
-usage: asr2clip [-h] [-v] [-c FILE] [-q] [-b NAME] [-i FILE] [-o FILE]
-                [--test] [--list_devices] [--device DEV] [-e]
-                [--generate_config] [--print_config] [--vad] [--interval SEC]
-                [--silence_threshold PROB] [--silence_duration SEC] [-R]
-                [-C SEC] [--toggle] [--serve] [--host HOST] [--port PORT]
+usage: asr2clip [-h] [-v] [-c FILE] [-q] [-b NAME] [-i FILE] [-P NAME]
+                [-o FILE] [--test] [--list_devices] [--device DEV]
+                [-l LANG] [-e] [--generate_config] [--print_config]
+                [--vad] [--interval SEC] [--silence_threshold PROB]
+                [--silence_duration SEC] [-R] [-C SEC] [--toggle]
+                [--serve] [--host HOST] [--port PORT]
                 [--model-dir MODEL_DIR] [--num-threads NUM_THREADS]
                 [--download-model]
 
@@ -223,26 +312,41 @@ optional arguments:
   -b NAME, --backend NAME
                         Named backend to use (defined under 'backends:' in config)
   -i FILE, --input FILE
-                        Transcribe audio file instead of recording
+                        Transcribe an existing audio or video file instead of
+                        recording. Supported: wav, mp3, m4a, ogg, flac, aac,
+                        opus, wma, mp4, mov, mkv, webm, avi, flv, mvi
+  -P NAME, --preprocessor NAME
+                        Audio pre-processor to apply before transcription.
+                        Choices: none, noisereduce, pyrnnoise, deepfilter.
+                        Overrides preprocessor_live / preprocessor_file in config.
   -o FILE, --output FILE
                         Append transcripts to file
-  --test                Test API configuration and exit
+  --test                Test backend connectivity and configured preprocessors,
+                        then exit
   --list_devices        List available audio input devices
-  --device DEV          Audio input device (name or index)
+  -d DEV, --device DEV  Audio input device (name, ALSA name, or index).
+                        Overrides config.
+  -l LANG, --language LANG
+                        Language hint for transcription (ISO-639-1, e.g. fi, en).
+                        Overrides config. Omit to auto-detect.
   -e, --edit            Open configuration file in editor
   --generate_config     Create config file at ~/.config/asr2clip/config.yaml
+                        (probes installed enhancement libraries automatically)
   --print_config        Print template configuration to stdout
-  --vad                 Continuous recording with voice activity detection
+  --vad                 Continuous recording with voice activity detection (VAD).
+                        Transcribes automatically when silence is detected after
+                        speech. Requires sherpa-onnx: pip install asr2clip[vad].
+                        The Silero VAD model (~629 KB) is downloaded on first use.
   --interval SEC        Continuous recording with fixed interval (seconds)
   --silence_threshold PROB
                         VAD speech probability threshold, 0.0-1.0 (default: 0.5)
   --silence_duration SEC
-                        Silence duration to trigger transcription (default: 1.5)
-  -R, --robust          Robust mode for -i file input: split at silence
-                        boundaries, check quality, retry bad chunks,
-                        stream output (tail-f friendly)
+                        Silence duration to trigger transcription (default: 1.5 s)
+  -R, --robust          Robust mode for -i file input: split at silence boundaries,
+                        quality-check chunks, retry failures, stream output
   -C SEC, --chunk-duration SEC
-                        Maximum chunk duration in seconds for --robust mode (default: 180)
+                        Maximum chunk duration for --robust mode in seconds
+                        (default: 180)
   --toggle              Toggle recording: first call starts, second call stops
                         and transcribes. Designed for keyboard shortcuts.
 
@@ -250,7 +354,8 @@ Local ASR server:
   --serve               Start the local ASR API server
   --host HOST           Server bind address (default: 127.0.0.1)
   --port PORT           Server bind port (default: 8000)
-  --model-dir MODEL_DIR Path to ASR model directory
+  --model-dir MODEL_DIR
+                        Path to ASR model directory
   --num-threads NUM_THREADS
                         Inference threads (default: 4)
   --download-model      Download the SenseVoice model and exit
@@ -265,8 +370,12 @@ Local ASR server:
 | API errors | Check your API key and endpoint in config |
 | whisper.cpp errors | Run `asr2clip --test -b local`; check binary and model paths |
 | Silent audio | Try a different audio device with `--device` |
+| Video/audio format rejected | Ensure `ffmpeg` is installed (`apt install ffmpeg` / `brew install ffmpeg`) |
+| Preprocessor not found | Run `asr2clip --test` to see which are available and their install commands |
+| Pre-processing too slow | Switch `preprocessor_live` to `noisereduce` or `none` in config |
 
-Run `asr2clip --test` (or `asr2clip --test -b <name>`) to diagnose issues.
+Run `asr2clip --test` (or `asr2clip --test -b <name>`) to diagnose issues. The test
+command also verifies that your configured preprocessors are installed and importable.
 
 ## Contributing
 

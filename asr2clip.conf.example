@@ -5,7 +5,8 @@ model_name: "whisper-1"                     # or other compatible model
 # org_id: none                              # optional, only required if you are using OpenAI organization id
 # audio_device: null                        # optional, audio input device (name or index)
                                             # use `asr2clip --list_devices` to see available devices
-                                            # common values: "pulse", "pipewire", or device index like 12
+                                            # common values: "pulse", "pipewire", or device index like 12, or name like "plughw:Snowball"
+                                            # PulseAudio or PipeWire uses the system default input which you can configure using system sound settings or pavucontrol.
 
 # xinference or other selfhosted platform
 # api_base_url: "https://localhost:9997/v1" # or other compatible API base URL
@@ -16,3 +17,22 @@ model_name: "whisper-1"                     # or other compatible model
 # api_base_url: "https://api.siliconflow.com/v1/"  # or other compatible API base URL
 # api_key: "YOUR_API_KEY"                          # api key for the platform
 # model_name: "FunAudioLLM/SenseVoiceSmall"
+
+# --- Audio pre-processing ---
+# Reduce background noise before transcription. Split into two keys because
+# live recordings prioritise low latency while file transcription tolerates
+# more CPU time in exchange for better quality.
+#
+# Options and trade-offs:
+#   none        — no pre-processing, zero latency, no extra dependencies
+#   noisereduce — spectral subtraction, low CPU, no model download, works natively at 16 kHz
+#                 good for stationary noise (fan, AC hum); install: pip install asr2clip[noisereduce]
+#   pyrnnoise   — Mozilla RNNoise GRU, fast inference; requires scipy for 16→48→16 kHz resampling
+#                 good for non-stationary noise (babble, footsteps); install: pip install asr2clip[pyrnnoise]
+#   deepfilter  — DeepFilterNet3, best quality, medium CPU, ~70 MB model download on first use
+#                 handles variable speaker distance; install: pip install asr2clip[deepfilter]
+#
+# Override at runtime:  asr2clip -P deepfilter -i meeting.mp4
+#
+preprocessor_live: none   # applied to live recordings (toggle, single-shot, VAD; recommendation: none or noisereduce, if typically solo in quiet room)
+preprocessor_file: none   # applied to file transcription (-i; recommendation: deepfilter)
