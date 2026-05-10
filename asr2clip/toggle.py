@@ -15,9 +15,11 @@ import sys
 import tempfile
 import time
 
+from .audio import _device_native_rate, load_wav, save_audio
 from .output import copy_to_clipboard, output_transcript
+from .preprocessors import AudioPreprocessor, NonePreprocessor
 from .transcribe import transcribe_with_config
-from .utils import info, log, warning
+from .utils import info, log, safe_unlink, warning
 
 
 def _lock_path() -> str:
@@ -54,22 +56,13 @@ def _is_alsa_device(device: str | int | None) -> bool:
     return any(device.startswith(p) for p in _ALSA_PREFIXES)
 
 
-def _native_rate(device: str | int | None) -> int:
-    """Query the sounddevice native sample rate for a device (default 44100)."""
-    try:
-        import sounddevice as sd
-        info = sd.query_devices(device, "input")
-        return int(info["default_samplerate"])
-    except Exception:
-        return 44100
-
 
 def _start_arecord(audio_path: str, device: str | int | None) -> int | None:
     """Start arecord in background. Returns PID, or None if arecord is unusable."""
     if not shutil.which("arecord"):
         return None
 
-    rate = _native_rate(device if _is_alsa_device(device) else None)
+    rate = _device_native_rate(device if _is_alsa_device(device) else None) or 44100
     cmd = ["arecord", "-f", "S16_LE", "-r", str(rate), "-c", "1"]
 
     if isinstance(device, int):
@@ -103,7 +96,7 @@ def _start_arecord(audio_path: str, device: str | int | None) -> int | None:
 
 def _start_sounddevice(audio_path: str, device: str | int | None) -> int:
     """Fallback recorder using a detached Python subprocess."""
-    rate = _native_rate(device)
+    rate = _device_native_rate(device) or 44100
     script = (
         "import sounddevice as sd, wave, numpy as np, signal, sys\n"
         "chunks=[]\n"
@@ -148,6 +141,7 @@ def toggle_recording(
     device: str | int | None = None,
     output_file: str | None = None,
     language: str | None = None,
+    preprocessor: AudioPreprocessor | None = None,
 ):
     """Start or stop toggle-mode recording.
 
@@ -155,11 +149,12 @@ def toggle_recording(
         config: Full configuration dictionary.
         device: Audio input device (name string or index).
         output_file: Optional file to append transcript to.
+        preprocessor: Audio pre-processor to apply before transcription.
     """
     lock_path = _lock_path()
 
     if os.path.exists(lock_path):
-        _stop_and_transcribe(lock_path, config, output_file, language)
+        _stop_and_transcribe(lock_path, config, output_file, language, preprocessor)
     else:
         _start_recording(lock_path, device)
 
@@ -196,6 +191,7 @@ def _stop_and_transcribe(
     config: dict,
     output_file: str | None,
     language: str | None = None,
+    preprocessor: AudioPreprocessor | None = None,
 ):
     with open(lock_path) as f:
         lock_data = json.load(f)
@@ -207,7 +203,7 @@ def _stop_and_transcribe(
         warning(f"Recorder PID {pid} is no longer running (stale lock). Cleaning up.")
         os.unlink(lock_path)
         if audio_path and os.path.exists(audio_path):
-            _transcribe_and_output(audio_path, config, output_file, language)
+            _transcribe_and_output(audio_path, config, output_file, language, preprocessor)
         return
 
     log(f"Stopping recorder (pid {pid})…")
@@ -217,35 +213,57 @@ def _stop_and_transcribe(
     # Give arecord a moment to flush its WAV header
     time.sleep(0.3)
 
-    _transcribe_and_output(audio_path, config, output_file, language)
+    _transcribe_and_output(audio_path, config, output_file, language, preprocessor)
 
 
-def _transcribe_and_output(audio_path: str, config: dict, output_file: str | None, language: str | None = None):
+def _transcribe_and_output(
+    audio_path: str,
+    config: dict,
+    output_file: str | None,
+    language: str | None = None,
+    preprocessor: AudioPreprocessor | None = None,
+):
     if not os.path.exists(audio_path) or os.path.getsize(audio_path) < 100:
         log("Audio file is empty or missing — nothing to transcribe.")
         return
 
     try:
-        import wave
-        with wave.open(audio_path) as wf:
+        import wave as _wave
+        with _wave.open(audio_path) as wf:
             duration = wf.getnframes() / wf.getframerate()
         info(f"Recorded {duration:.1f}s of audio, transcribing…")
     except Exception:
         info("Transcribing recorded audio…")
 
+    # Apply pre-processing if requested
+    preprocessed_path: str | None = None
+    if preprocessor is not None and not isinstance(preprocessor, NonePreprocessor):
+        try:
+            audio_data, sr = load_wav(audio_path)
+            log(f"Pre-processing audio with {preprocessor.name}…")
+            t_pre = time.time()
+            audio_data = preprocessor.process(audio_data, sr)
+            info(f"Pre-processing completed in {time.time() - t_pre:.2f}s")
+            preprocessed_path = save_audio(audio_data, sr)
+            transcribe_path = preprocessed_path
+        except Exception as e:
+            warning(f"Pre-processing failed ({e}), using original audio.")
+            transcribe_path = audio_path
+    else:
+        transcribe_path = audio_path
+
     t0 = time.time()
     try:
         from .transcribe import transcribe_with_config
-        text = transcribe_with_config(audio_path, config, raise_on_error=True, language=language)
+        text = transcribe_with_config(transcribe_path, config, raise_on_error=True, language=language)
     except Exception as e:
         warning(f"Transcription failed: {e}")
         _notify("asr2clip", f"Transcription failed: {e}")
         return
     finally:
-        try:
-            os.unlink(audio_path)
-        except Exception:
-            pass
+        safe_unlink(audio_path)
+        if preprocessed_path and preprocessed_path != audio_path:
+            safe_unlink(preprocessed_path)
 
     elapsed = time.time() - t0
     info(f"Transcription completed in {elapsed:.1f}s")

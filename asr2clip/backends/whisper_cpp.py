@@ -10,7 +10,7 @@ import time
 from dataclasses import dataclass, field
 
 from ..transcribe import TranscriptionError
-from ..utils import info, warning
+from ..utils import info, run_subprocess, warning
 
 
 _ARTIFACT_RE = re.compile(
@@ -93,9 +93,7 @@ def transcribe(
 
     t0 = time.time()
     try:
-        result = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=timeout
-        )
+        result = run_subprocess(cmd, capture_output=True, text=True, timeout=timeout)
     except subprocess.TimeoutExpired:
         raise TranscriptionError(
             f"whisper-cli timed out after {timeout:.0f}s"

@@ -30,7 +30,7 @@ model_name: "whisper-1"                     # or other compatible model
                                             # common values: "pulse", "pipewire", or device index like 12
 """
 
-CONFIG_TEMPLATE_FULL = """
+_CONFIG_TEMPLATE_STATIC = """
 api_base_url: "https://api.openai.com/v1/"  # or other compatible API base URL
 api_key: "YOUR_API_KEY"                     # api key for the platform
 model_name: "whisper-1"                     # or other compatible model
@@ -74,6 +74,65 @@ model_name: "whisper-1"                     # or other compatible model
 #   binary: ~/path/to/whisper-cli
 #   model:  ~/path/to/ggml-model.bin
 """
+
+
+def _build_preprocessor_section() -> str:
+    """Generate the preprocessor config block, probing installed libraries."""
+    from .preprocessors import LATENCY_ORDER, QUALITY_ORDER, probe_available
+
+    available = probe_available()
+    not_installed = [p for p in QUALITY_ORDER if p not in available]
+
+    detected_str = ", ".join(available) if available else "none"
+    not_installed_str = ", ".join(not_installed) if not_installed else "all installed"
+
+    best_file = next((p for p in QUALITY_ORDER if p in available), "none")
+    best_live = next((p for p in LATENCY_ORDER if p in available), "none")
+
+    lines = [
+        "",
+        "# --- Audio pre-processing ---",
+        f"# Detected on this system: {detected_str}",
+        f"# Not installed: {not_installed_str}",
+        "#",
+        "# Options and trade-offs:",
+        "#   none        — no pre-processing, zero latency, no extra dependencies",
+        "#   noisereduce — spectral subtraction (scipy), low CPU, no resampling needed at 16 kHz",
+        "#                 best for stationary noise (fan, AC); install: pip install asr2clip[noisereduce]",
+        "#   pyrnnoise   — Mozilla RNNoise GRU; requires 16→48→16 kHz resampling (scipy)",
+        "#                 best for non-stationary noise (babble); install: pip install asr2clip[pyrnnoise]",
+        "#   deepfilter  — DeepFilterNet3, best quality, medium CPU, torch-based (no scipy)",
+        "#                 install: pip install asr2clip[deepfilter]",
+        "#",
+    ]
+
+    if not available:
+        lines.append(
+            "# No enhancement libraries detected. Install one above to enable pre-processing."
+        )
+        lines.append("# Switch to 'none' if you notice added latency during recording.")
+    elif best_live != best_file:
+        lines.append(
+            "# Using lower-latency option for live recordings, higher-quality for files."
+        )
+        lines.append("# Switch preprocessor_live to 'none' if recording latency increases.")
+    else:
+        lines.append("# Switch to 'none' if you notice added latency during recording.")
+
+    lines += [
+        "#",
+        f"preprocessor_live: {best_live}   # applied to live recordings (toggle, single-shot, VAD)",
+        f"preprocessor_file: {best_file}   # applied to file transcription (-i)",
+        "#",
+        "# Override at runtime:  asr2clip -P deepfilter -i meeting.mp4",
+    ]
+
+    return "\n".join(lines)
+
+
+def _build_full_template() -> str:
+    """Return the full config template with a dynamic preprocessor section."""
+    return _CONFIG_TEMPLATE_STATIC.rstrip() + "\n" + _build_preprocessor_section() + "\n"
 
 
 def find_config_path(config_file: str | None = None) -> str | None:
@@ -183,6 +242,9 @@ def generate_config(
 ) -> str | None:
     """Generate a template configuration file.
 
+    The preprocessor section is built dynamically by probing installed libraries,
+    so the generated file reflects what is actually available on this system.
+
     Args:
         output_path: Path to write the config file. If None, uses DEFAULT_CONFIG_PATH.
         force: If True, overwrite existing file.
@@ -191,8 +253,10 @@ def generate_config(
     Returns:
         Path to the generated config file, or None if print_only.
     """
+    content = _build_full_template().strip() + "\n"
+
     if print_only:
-        print(CONFIG_TEMPLATE_FULL.strip())
+        print(content)
         return None
 
     if output_path is None:
@@ -211,7 +275,7 @@ def generate_config(
 
     # Write config file
     with open(output_path, "w") as f:
-        f.write(CONFIG_TEMPLATE_FULL.strip() + "\n")
+        f.write(content)
 
     print(f"Created config file: {output_path}")
     print("\nEdit it with your API credentials:")
@@ -220,6 +284,28 @@ def generate_config(
     print(f"    $EDITOR {output_path}")
 
     return output_path
+
+
+def resolve_preprocessor_config(
+    config: dict,
+    cli_override: str | None = None,
+    mode: str = "live",
+) -> str:
+    """Return the effective preprocessor name for the given mode.
+
+    Args:
+        config: Full configuration dictionary.
+        cli_override: Name supplied via -P/--preprocessor flag (takes priority).
+        mode: 'live' for microphone recording, 'file' for -i file input.
+
+    Returns:
+        Preprocessor name string ('none', 'noisereduce', 'pyrnnoise', 'deepfilter').
+    """
+    if cli_override:
+        return cli_override
+    key = "preprocessor_live" if mode == "live" else "preprocessor_file"
+    # Fall back to single 'preprocessor' key, then to 'none'
+    return config.get(key, config.get("preprocessor", "none"))
 
 
 def resolve_backend_config(config: dict, backend_name: str | None = None) -> dict:

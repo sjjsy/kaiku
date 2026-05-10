@@ -10,10 +10,10 @@ import time
 from pydub import AudioSegment
 from pydub.silence import detect_silence
 
+from .audio import audiosegment_to_float32, float32_to_audiosegment
 from .output import copy_transcript_to_clipboard, append_transcript_to_file
 from .transcribe import TranscriptionError, transcribe_with_config
-from .utils import info, log, warning
-
+from .utils import info, log, safe_unlink, warning
 
 
 def _find_chunk_boundaries(
@@ -69,6 +69,7 @@ def process_file_robust(
     output_file: str | None = None,
     chunk_duration: int = 180,
     language: str | None = None,
+    preprocessor=None,
 ):
     """Transcribe a long audio file in silence-bounded chunks with quality checks.
 
@@ -80,10 +81,13 @@ def process_file_robust(
         input_file: Path to the audio file.
         output_file: Optional file to append chunks to (tail-f friendly).
         chunk_duration: Maximum chunk length in seconds (default 180).
+        preprocessor: AudioPreprocessor instance to apply before chunking.
     """
+    import sys
+    from .preprocessors import NonePreprocessor
+
     if not os.path.exists(input_file):
         print(f"File not found: {input_file}")
-        import sys
         sys.exit(1)
 
     log(f"Loading audio: {input_file}")
@@ -93,6 +97,17 @@ def process_file_robust(
     audio = audio.set_frame_rate(16000).set_channels(1)
     total_s = len(audio) / 1000.0
     info(f"Audio loaded: {total_s:.1f}s total ({time.time() - t0:.1f}s to load)")
+
+    if preprocessor is not None and not isinstance(preprocessor, NonePreprocessor):
+        log(f"Pre-processing audio with {preprocessor.name}...")
+        t_pre = time.time()
+        try:
+            audio_np = audiosegment_to_float32(audio)
+            audio_np = preprocessor.process(audio_np, 16000)
+            audio = float32_to_audiosegment(audio_np, 16000)
+            info(f"Pre-processing completed in {time.time() - t_pre:.2f}s")
+        except Exception as e:
+            warning(f"Pre-processing failed ({e}), using audio as-is.")
 
     max_chunk_ms = chunk_duration * 1000
     boundaries = _find_chunk_boundaries(audio, max_chunk_ms)
@@ -141,10 +156,7 @@ def process_file_robust(
                 warning(f"Chunk {idx}/{n_chunks}: unexpected error: {e}")
                 break
 
-        try:
-            os.unlink(tmp_path)
-        except Exception:
-            pass
+        safe_unlink(tmp_path)
 
         elapsed = time.time() - t_chunk
         preview = (text or "")[:60].replace("\n", " ")

@@ -3,15 +3,15 @@
 from __future__ import annotations
 
 import io
+import shutil
 import tempfile
 import wave
 from collections.abc import Callable
 
 import numpy as np
 import sounddevice as sd
-from pydub import AudioSegment
 
-from .utils import is_stop_requested, log, warning
+from .utils import is_stop_requested, log, run_subprocess, warning
 
 
 def list_audio_devices():
@@ -82,7 +82,7 @@ def _device_native_rate(device: str | int | None) -> int | None:
 
 def _resample_audio(audio: np.ndarray, from_rate: int, to_rate: int) -> np.ndarray:
     """Resample a (N, channels) float32 array from from_rate to to_rate via pydub."""
-    from pydub import AudioSegment
+    from pydub import AudioSegment  # noqa: PLC0415 — intentional lazy import
 
     channels = audio.shape[1] if audio.ndim > 1 else 1
     flat = audio.flatten()
@@ -199,11 +199,18 @@ def save_audio(audio_data: np.ndarray, sample_rate: int = 16000) -> str:
 
 
 def convert_audio_to_wav(input_path: str, output_path: str | None = None) -> str:
-    """Convert an audio file to WAV format.
+    """Convert an audio or video file to a 16 kHz mono WAV file.
+
+    Supports all formats accepted by ffmpeg (mp3, m4a, ogg, flac, aac, opus,
+    wma, mp4, mov, mkv, webm, avi, flv, mvi, ...). Video streams are discarded.
+    Basic spectral cleaning (highpass 200 Hz, lowpass 3 kHz, loudnorm) is applied
+    during conversion to improve transcription quality.
+
+    Falls back to pydub (no cleaning, no video support) when ffmpeg is not on PATH.
 
     Args:
-        input_path: Path to the input audio file.
-        output_path: Optional path for the output WAV file.
+        input_path: Path to the source audio or video file.
+        output_path: Destination WAV path; a temp file is created when omitted.
 
     Returns:
         Path to the converted WAV file.
@@ -211,10 +218,47 @@ def convert_audio_to_wav(input_path: str, output_path: str | None = None) -> str
     if output_path is None:
         output_path = tempfile.NamedTemporaryFile(suffix=".wav", delete=False).name
 
-    audio = AudioSegment.from_file(input_path)
-    audio.export(output_path, format="wav")
+    if shutil.which("ffmpeg"):
+        cmd = [
+            "ffmpeg", "-y",
+            "-i", input_path,
+            "-vn",                              # drop video stream
+            "-ar", "16000",                     # 16 kHz
+            "-ac", "1",                         # mono
+            "-af", "highpass=f=200,lowpass=f=3000,loudnorm",
+            output_path,
+        ]
+        run_subprocess(cmd, check=True, capture_output=True)
+    else:
+        warning(
+            "ffmpeg not found on PATH — falling back to pydub (no video support, "
+            "no spectral cleaning). Install ffmpeg for full format support."
+        )
+        from pydub import AudioSegment  # noqa: PLC0415
+        audio = AudioSegment.from_file(input_path)
+        audio.export(output_path, format="wav")
 
     return output_path
+
+
+def load_wav(path: str) -> tuple[np.ndarray, int]:
+    """Load a WAV file into a float32 numpy array.
+
+    Args:
+        path: Path to a 16-bit PCM WAV file.
+
+    Returns:
+        Tuple of (audio_float32, sample_rate). Audio is mono float32 in [-1, 1].
+    """
+    with wave.open(path) as wf:
+        sample_rate = wf.getframerate()
+        n_channels = wf.getnchannels()
+        raw = wf.readframes(wf.getnframes())
+
+    audio = np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32767.0
+    if n_channels > 1:
+        audio = audio.reshape(-1, n_channels).mean(axis=1)
+    return audio, sample_rate
 
 
 def get_audio_duration(audio_data: np.ndarray, sample_rate: int = 16000) -> float:
@@ -244,3 +288,16 @@ def calculate_rms(audio_data: np.ndarray) -> float:
     if len(audio_data) == 0:
         return 0.0
     return float(np.sqrt(np.mean(audio_data**2)))
+
+
+def audiosegment_to_float32(audio: "AudioSegment") -> np.ndarray:  # type: ignore[name-defined]
+    """Convert a mono AudioSegment to a float32 numpy array in [-1, 1]."""
+    samples = np.array(audio.get_array_of_samples(), dtype=np.int16)
+    return samples.astype(np.float32) / 32768.0
+
+
+def float32_to_audiosegment(audio: np.ndarray, sample_rate: int = 16000) -> "AudioSegment":  # type: ignore[name-defined]
+    """Convert a float32 numpy array in [-1, 1] to a mono AudioSegment."""
+    from pydub import AudioSegment
+    samples_int16 = (np.clip(audio, -1.0, 1.0) * 32767.0).astype(np.int16)
+    return AudioSegment(samples_int16.tobytes(), sample_width=2, frame_rate=sample_rate, channels=1)
