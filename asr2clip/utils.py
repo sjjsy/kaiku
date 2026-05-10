@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import os
+import shlex
 import signal
+import subprocess
 import sys
 
 # Import logging functions from the new logging module
@@ -49,6 +52,8 @@ __all__ = [
     "print_error",
     "print_separator",
     "print_key_value",
+    "run_subprocess",
+    "safe_unlink",
     "setup_signal_handlers",
     "is_stop_requested",
     "request_stop",
@@ -108,3 +113,22 @@ def request_stop():
     """Request to stop recording."""
     global stop_recording
     stop_recording = True
+
+
+def safe_unlink(path: str) -> None:
+    """Delete a file, silently ignoring errors (e.g. already gone)."""
+    try:
+        os.unlink(path)
+    except Exception:
+        pass
+
+
+def run_subprocess(
+    cmd: list[str], **kwargs
+) -> "subprocess.CompletedProcess[bytes] | subprocess.CompletedProcess[str]":
+    """Run a subprocess, logging the full command first (unless quiet mode).
+
+    All keyword arguments are forwarded to subprocess.run().
+    """
+    log("$ " + " ".join(shlex.quote(str(a)) for a in cmd))
+    return subprocess.run(cmd, **kwargs)

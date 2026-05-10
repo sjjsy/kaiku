@@ -46,6 +46,14 @@ def _handle_transcription_failure(
     sys.exit(1)
 
 
+def _build_api_headers(api_key: str, org_id: str | None) -> tuple[str, dict]:
+    """Normalize the API base URL (ensure trailing slash) and build auth headers."""
+    headers = {"Authorization": f"Bearer {api_key}"}
+    if org_id:
+        headers["OpenAI-Organization"] = org_id
+    return headers
+
+
 def _attempt_transcription(
     audio_file_path: str,
     url: str,
@@ -120,15 +128,10 @@ def transcribe_audio(
         TranscriptionError: If transcription fails and raise_on_error is True.
         SystemExit: If transcription fails and raise_on_error is False.
     """
-    # Normalize API base URL
     if not api_base_url.endswith("/"):
         api_base_url += "/"
-
     url = f"{api_base_url}audio/transcriptions"
-
-    headers = {"Authorization": f"Bearer {api_key}"}
-    if org_id:
-        headers["OpenAI-Organization"] = org_id
+    headers = _build_api_headers(api_key, org_id)
 
     last_error: Exception | None = None
 
@@ -224,16 +227,10 @@ def test_transcription(
     Returns:
         True if the API is accessible, False otherwise.
     """
-    # Normalize API base URL
     if not api_base_url.endswith("/"):
         api_base_url += "/"
-
-    # Try to access the models endpoint to verify connectivity
     url = f"{api_base_url}models"
-
-    headers = {"Authorization": f"Bearer {api_key}"}
-    if org_id:
-        headers["OpenAI-Organization"] = org_id
+    headers = _build_api_headers(api_key, org_id)
 
     try:
         with httpclient.Client(timeout=10.0) as client:
