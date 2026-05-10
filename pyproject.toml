@@ -3,7 +3,7 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["asr2clip", "asr2clip.backends", "asr2clip.local_asr", "asr2clip._vendor", "asr2clip._vendor.yaml", "asr2clip._vendor.httpclient"]
+packages = ["asr2clip", "asr2clip.backends", "asr2clip.preprocessors", "asr2clip.local_asr", "asr2clip._vendor", "asr2clip._vendor.yaml", "asr2clip._vendor.httpclient"]
 
 [tool.setuptools.dynamic]
 version = { attr = "asr2clip.__version__" }
@@ -58,6 +58,21 @@ local_asr = [
     "fastapi>=0.100.0",
     "uvicorn[standard]>=0.20.0",
     "python-multipart>=0.0.6",
+]
+noisereduce = [
+    "noisereduce>=3.0.0",
+    "scipy>=1.10.0",
+]
+pyrnnoise = [
+    "pyrnnoise>=0.1.0",
+    "scipy>=1.10.0",   # used for 16 kHz ↔ 48 kHz resampling
+]
+deepfilter = [
+    "deepfilternet>=0.5.6",
+    # resampling done via torchaudio (already a deepfilternet dependency)
+]
+enhance = [
+    "asr2clip[noisereduce,pyrnnoise,deepfilter]",
 ]
 
 [tool.ruff]
