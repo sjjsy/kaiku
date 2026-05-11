@@ -22,8 +22,31 @@ DEFAULT_CONFIG_PATH = os.path.expanduser("~/.config/asr2clip/config.yaml")
 _CONFIG_TEMPLATE = """
 # asr2clip configuration — uncomment and fill in one backend to start.
 # Test with: asr2clip --test -b <name>   Switch at runtime: asr2clip -b <name>
-## Backend configurations:
-backends:
+
+## ── Audio input ───────────────────────────────────────────────────────────────
+# "pulse"/"pipewire" uses whichever mic is set as default in system settings.
+# Configure active mic in pavucontrol or your desktop sound panel.
+# To force a specific device, run `asr2clip --list_devices` for names and indices.
+# audio_device: "pulse"                       # PulseAudio (recommended on Linux)
+# audio_device: "pipewire"                    # PipeWire (recommended on modern Linux)
+# audio_device: "plughw:Snowball"             # ALSA device name — bypasses system mixer
+# audio_device: 3                             # device index from --list_devices
+
+## ── Audio preprocessing (noise reduction) ────────────────────────────────────
+# Options: none, noisereduce, pyrnnoise, deepfilter
+#   none        — no preprocessing, zero latency, no extra dependencies
+#   noisereduce — spectral subtraction; best for stationary noise (fan, AC)
+#                 install: pip install asr2clip[noisereduce]
+#   pyrnnoise   — Mozilla RNNoise GRU; best for non-stationary noise (babble)
+#                 install: pip install asr2clip[pyrnnoise]
+#   deepfilter  — DeepFilterNet3, best quality overall, medium CPU
+#                 install: pip install asr2clip[deepfilter]
+# Override at runtime: asr2clip -p deepfilter -i meeting.mp4
+preprocessor_live: none                       # applied to live/toggle; consider noisereduce
+preprocessor_file: none                       # applied to -i FILE; consider deepfilter
+
+## ── ASR backends ──────────────────────────────────────────────────────────────
+asr_backends:
   # openai:                                   # OpenAI Whisper API
   #   type: api
   #   api_base_url: "https://api.openai.com/v1/"
@@ -55,35 +78,161 @@ backends:
   #   model:  ~/path/to/whisper.cpp/models/ggml-large-v3-turbo-q8_0.bin
   #   # language: auto                        # 'auto' or ISO-639-1 (e.g. fi, en)
   #   # threads: 4
-## Default backend choices (can be overridden via CLI with -b BACKEND):
-backend_live: openai                          # backend for live/toggle/VAD recording
-backend_file: openai                          # backend for file transcription (-i FILE)
 
-## Default audio input choice (can be overridden via CLI with -d DEVICE):
-# Note: "pulse"/"pipewire" uses whichever mic is set as default in system settings.
-# Configure active mic in pavucontrol or your desktop sound panel.
-# To force a specific device, run `asr2clip --list_devices` for names and indices.
-# audio_device: "pulse"                      # PulseAudio (recommended on Linux)
-# audio_device: "pipewire"                   # PipeWire (recommended on modern Linux)
-# audio_device: "plughw:Snowball"            # ALSA device name — bypasses system mixer
-# audio_device: 3                            # device index from --list_devices
+## Default ASR backend selection (override with -b NAME):
+asr_backend_live: sonnx                       # backend for live/toggle/VAD recording
+asr_backend_file: wcpp                        # backend for file transcription (-i FILE)
 
-## Audio preprocessing before transcription (only for non-VAD usage):
-# Options: none, noisereduce, pyrnnoise, deepfilter
-#   none        — no preprocessing, zero latency, no extra dependencies
-#   noisereduce — spectral subtraction; best for stationary noise (fan, AC)
-#                 install: pip install asr2clip[noisereduce]
-#   pyrnnoise   — Mozilla RNNoise GRU; best for non-stationary noise (babble)
-#                 install: pip install asr2clip[pyrnnoise]
-#   deepfilter  — DeepFilterNet3, best quality overall, medium CPU
-#                 install: pip install asr2clip[deepfilter]
-# Override at runtime: asr2clip -P deepfilter -i meeting.mp4
-preprocessor_live: none                      # applied to live single-shot recordings; consider noisereduce
-preprocessor_file: none                      # applied to file transcription (-i FILE); consider deepfilter
+## ── Diarization ───────────────────────────────────────────────────────────────
+## Speaker diarization via WhisperX. Requires: pip install asr2clip[diarize]
+## Enable per run with -D / --diarize. Replaces the configured ASR backend.
+## Output: "[HH:MM:SS] SPEAKER_NN: text" — name substitution is left to the caller.
+# diarize_hf_token: "hf_..."                  # HuggingFace token for pyannote model download
+#                                             # or set HF_TOKEN env var
+# diarize_min_speakers: 2                     # optional hint to pyannote; omit for auto
+# diarize_max_speakers: 6
 
-## Other parameters:
-# quiet: false                               # true = only output transcription and errors
-# org_id:                                    # OpenAI organization ID (rarely needed)
+## ── LLM post-processing ───────────────────────────────────────────────────────
+# Post-processors send the transcript to an LLM and return structured output.
+# Enable a post-processor for a mode, or pass -P NAME per run.
+# Requires postprocessor_backends and postprocessors sections below.
+
+## LLM backends for post-processing:
+# postprocessor_backends:
+#   ollama:                                   # Ollama — free, private, fully offline
+#     type: openai_compat
+#     api_base_url: "http://localhost:11434/v1/"
+#     api_key: "ollama"                       # Ollama ignores the key value
+#     model: "qwen3:14b"
+#   groq:                                     # Groq — fast, generous free tier
+#     type: openai_compat
+#     api_base_url: "https://api.groq.com/openai/v1/"
+#     api_key: "YOUR_GROQ_KEY"
+#     model: "llama-3.3-70b-versatile"
+#   anthropic:                                # Anthropic API (OpenAI-compatible endpoint)
+#     type: openai_compat
+#     api_base_url: "https://api.anthropic.com/v1/"
+#     api_key_env: ANTHROPIC_API_KEY          # reads key from environment variable
+#     model: "claude-haiku-4-5-20251001"
+#   cc:                                       # Claude Code CLI — uses your CC subscription
+#     type: claude_code                       # no api_key needed; uses active CC session
+#     model: "claude-haiku-4-5-20251001"
+
+## Prompt library — add as many prompts as you like.
+# Each prompt is available via -P NAME or as the postprocessor_live/file default.
+# Fields per prompt:
+#   prompt:        system prompt text (required unless 'extends' is used)
+#   extends:       inherit system prompt from another named prompt in this config
+#   extra:         text appended after the inherited prompt (used with extends)
+#   backend:       which postprocessor_backends entry to use (default: first defined)
+#   model:         override the backend's default model for this prompt
+#   template:      output template name from output_templates below (default: "default")
+#   context_path:  list of file glob patterns; contents are injected into the LLM request
+postprocessors:
+  solo-base:
+    prompt: |
+      You are a professional personal transcript scribe.
+      Your client used a transcriber tool that may have produced sub-standard quality.
+      The recording should only contain your client's (= author/user) voice.
+#   backend: groq
+    template: bare
+
+  solo-enhanced:
+    extends: solo-base
+    extra: |
+      The content may be intended to constitute a message, an email, a command, a personal diary or note entry, or an unstructured thinking-aloud segment, or something else.
+      Produce an improved transcript that honors the author's original choice of words, structures and flow but fix misspellings, misinterpretations and grammatical mistakes, reduce unnecessary words and repetition and otherwise improve the quality and legibility of the transcript.
+
+  solo-restructured:
+    extends: solo-base
+    extra: |
+      The content may be from a long unstructured dictation or thinking-aloud session for some purpose (which may be deducible from the transcript itself).
+      Produce a concise, structured memo that maximizes legibility and usefulness.
+      The following provides a template. Omit sections that would have no clear content.
+
+      # YYYY-MM-DD HH:SS Solo Notes on <Topic>
+      Tags: <tags>
+
+      ## Summary
+      <2-3 sentences>
+
+      ## Key points
+      <Bulleted list>
+
+      ## Open questions
+      <Bulleted list>
+
+      ## Progress and action items
+      <[x] Action that is already done
+      [/] Action that is in progress (by person A, due by date B, if specified)
+      [ ] Action that is to be done but not yet started>
+#   context_path:
+#     - "~/.asr2clip/context/personal.md"     # include personal context info to improve reasoning
+
+  solo-private:                               # extends solo-restructured with privacy instructions
+    extends: solo-restructured
+#   backend: ollama                           # use local ollama model for sensitive content
+#   context_path:
+#     - "~/.asr2clip/context/personal.md"
+#     - "~/.asr2clip/context/private.md"      # include private info to improve reasoning
+
+  group:
+    prompt: |
+      You are a professional meeting notetaker.
+      Your team used a transcriber tool that may have produced sub-standard quality.
+      Produce a concise, structured, legible memo that promotes flow for the whole team.
+      The following provides a template. Omit sections that would have no clear content.
+
+      # YYYY-MM-DD HH:SS Meeting on <Topic>
+      Tags: <tags>
+
+      ## Summary
+      <2-6 sentences, depending on length and breadth of discussion>
+
+      ## Key points
+      <Bulleted list; Important to get all essential discussion contributions covered>
+
+      ## Decision made
+      <Bulleted list>
+
+      ## Open questions
+      <Bulleted list; flag minority positions explicitly; unresolved disagreements are more important than resolved ones>
+
+      ## Progress and action items
+      <[x] Action that is already done
+      [/] Action that is in progress (by person A, due by date B, if specified)
+      [ ] Action that is to be done but not yet started>
+#   context_path:
+#     - "~/project_x/README.md"
+#     - "~/project_x/todo.md"
+#   backend: anthropic
+#   model: claude-sonnet-4-6
+    template: full
+
+## Which post-processor to apply automatically (none = disabled):
+postprocessor_live: none                      # toggle / VAD / single live recording
+postprocessor_file: none                      # -i file transcription
+
+## ── Output templates ──────────────────────────────────────────────────────────
+## Named templates controlling what gets copied to clipboard / written to -o FILE.
+## Placeholders: {result} {transcript} {date} {datetime}
+##               {prompt_name} {model} {backend} {duration_s}
+output_templates:
+  bare: "{result}"
+  full: |
+    {result}
+
+    ---
+
+    *Transcript from {duration_s:.0f}s recording post-processed at {datetime} with asr2clip ({backend}, {prompt_name}, {model})*
+
+    ## Original transcript
+
+    {transcript}
+
+## ── Other parameters ──────────────────────────────────────────────────────────
+# quiet: false                                # true = only output transcription and errors
+# org_id:                                     # OpenAI organization ID (rarely needed)
 """
 
 
@@ -273,14 +422,14 @@ def resolve_backend_name(
         mode: 'live' for microphone recording, 'file' for -i file input.
 
     Returns:
-        Backend name string, or None if config has no backends section.
+        Backend name string, or None if config has no asr_backends section.
     """
-    backends = config.get("backends")
+    backends = config.get("asr_backends")
     if not backends:
         return None
     if backend_name:
         return backend_name
-    mode_key = "backend_live" if mode == "live" else "backend_file"
+    mode_key = "asr_backend_live" if mode == "live" else "asr_backend_file"
     return config.get(mode_key) or next(iter(backends))
 
 
@@ -294,7 +443,7 @@ def resolve_backend_config(
     Supports two formats:
 
     Named backends format:
-        backends:
+        asr_backends:
           groq:
             type: api
             api_key: ...
@@ -302,8 +451,8 @@ def resolve_backend_config(
             type: whisper_cpp
             binary: ...
             model: ...
-        backend_live: groq    # live/toggle/VAD recording
-        backend_file: local   # -i file transcription
+        asr_backend_live: groq    # live/toggle/VAD recording
+        asr_backend_file: local   # -i file transcription
 
     Args:
         config: Full configuration dictionary.
@@ -316,18 +465,18 @@ def resolve_backend_config(
     Raises:
         SystemExit: If the requested backend name is not defined.
     """
-    backends = config.get("backends")
+    backends = config.get("asr_backends")
     if not backends:
         print(
-            "Error: config has no 'backends:' section.\n"
+            "Error: config has no 'asr_backends:' section.\n"
             "Run 'asr2clip --generate_config' to create a fresh config, for example:\n\n"
-            "  backends:\n"
+            "  asr_backends:\n"
             "    groq:\n"
             "      type: api\n"
             "      api_key: YOUR_KEY\n"
             "      ...\n"
-            "  backend_live: groq\n"
-            "  backend_file: groq\n"
+            "  asr_backend_live: groq\n"
+            "  asr_backend_file: groq\n"
         )
         import sys
         sys.exit(1)
@@ -363,8 +512,8 @@ def resolve_backend_config(
 
 
 def list_backends(config: dict) -> list[str]:
-    """Return the names of all configured backends, or [] for legacy configs."""
-    return list(config.get("backends", {}).keys())
+    """Return the names of all configured ASR backends."""
+    return list(config.get("asr_backends", {}).keys())
 
 
 def get_api_config(config: dict) -> tuple[str, str, str, str | None]:

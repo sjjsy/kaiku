@@ -17,6 +17,7 @@ import time
 
 from .audio import _device_native_rate, load_wav, save_audio
 from .output import copy_to_clipboard, output_transcript
+from .postprocessors import NonePostProcessor, PostMetadata, PostProcessor, format_output
 from .preprocessors import AudioPreprocessor, NonePreprocessor
 from .transcribe import transcribe_with_config
 from .utils import info, log, safe_unlink, warning
@@ -142,19 +143,19 @@ def toggle_recording(
     output_file: str | None = None,
     language: str | None = None,
     preprocessor: AudioPreprocessor | None = None,
+    postprocessor: PostProcessor | None = None,
+    template_str: str = "{result}",
+    diarize: bool = False,
+    num_speakers: int | None = None,
 ):
-    """Start or stop toggle-mode recording.
-
-    Args:
-        config: Full configuration dictionary.
-        device: Audio input device (name string or index).
-        output_file: Optional file to append transcript to.
-        preprocessor: Audio preprocessor to apply before transcription.
-    """
+    """Start or stop toggle-mode recording."""
     lock_path = _lock_path()
 
     if os.path.exists(lock_path):
-        _stop_and_transcribe(lock_path, config, output_file, language, preprocessor)
+        _stop_and_transcribe(
+            lock_path, config, output_file, language, preprocessor,
+            postprocessor, template_str, diarize, num_speakers,
+        )
     else:
         _start_recording(lock_path, device)
 
@@ -192,6 +193,10 @@ def _stop_and_transcribe(
     output_file: str | None,
     language: str | None = None,
     preprocessor: AudioPreprocessor | None = None,
+    postprocessor: PostProcessor | None = None,
+    template_str: str = "{result}",
+    diarize: bool = False,
+    num_speakers: int | None = None,
 ):
     with open(lock_path) as f:
         lock_data = json.load(f)
@@ -203,17 +208,22 @@ def _stop_and_transcribe(
         warning(f"Recorder PID {pid} is no longer running (stale lock). Cleaning up.")
         os.unlink(lock_path)
         if audio_path and os.path.exists(audio_path):
-            _transcribe_and_output(audio_path, config, output_file, language, preprocessor)
+            _transcribe_and_output(
+                audio_path, config, output_file, language, preprocessor,
+                postprocessor, template_str, diarize, num_speakers,
+            )
         return
 
     log(f"Stopping recorder (pid {pid})…")
     _kill_process(pid)
     os.unlink(lock_path)
 
-    # Give arecord a moment to flush its WAV header
     time.sleep(0.3)
 
-    _transcribe_and_output(audio_path, config, output_file, language, preprocessor)
+    _transcribe_and_output(
+        audio_path, config, output_file, language, preprocessor,
+        postprocessor, template_str, diarize, num_speakers,
+    )
 
 
 def _transcribe_and_output(
@@ -222,11 +232,16 @@ def _transcribe_and_output(
     output_file: str | None,
     language: str | None = None,
     preprocessor: AudioPreprocessor | None = None,
+    postprocessor: PostProcessor | None = None,
+    template_str: str = "{result}",
+    diarize: bool = False,
+    num_speakers: int | None = None,
 ):
     if not os.path.exists(audio_path) or os.path.getsize(audio_path) < 100:
         log("Audio file is empty or missing — nothing to transcribe.")
         return
 
+    duration = 0.0
     try:
         import wave as _wave
         with _wave.open(audio_path) as wf:
@@ -235,7 +250,6 @@ def _transcribe_and_output(
     except Exception:
         info("Transcribing recorded audio…")
 
-    # Apply preprocessing if requested
     preprocessed_path: str | None = None
     if preprocessor is not None and not isinstance(preprocessor, NonePreprocessor):
         try:
@@ -253,9 +267,26 @@ def _transcribe_and_output(
         transcribe_path = audio_path
 
     t0 = time.time()
+    transcript: str = ""
+    is_diarized = False
     try:
-        from .transcribe import transcribe_with_config
-        text = transcribe_with_config(transcribe_path, config, raise_on_error=True, language=language)
+        if diarize:
+            from .diarize import DiarizationError, run_diarization
+            try:
+                log("Running diarization (WhisperX)…")
+                transcript = run_diarization(
+                    transcribe_path, config,
+                    language=language, num_speakers=num_speakers,
+                )
+                is_diarized = True
+            except DiarizationError as e:
+                warning(f"Diarization failed: {e}")
+                _notify("asr2clip", f"Diarization failed: {e}")
+                return
+        else:
+            transcript = transcribe_with_config(
+                transcribe_path, config, raise_on_error=True, language=language
+            )
     except Exception as e:
         warning(f"Transcription failed: {e}")
         _notify("asr2clip", f"Transcription failed: {e}")
@@ -265,13 +296,33 @@ def _transcribe_and_output(
         if preprocessed_path and preprocessed_path != audio_path:
             safe_unlink(preprocessed_path)
 
-    elapsed = time.time() - t0
-    info(f"Transcription completed in {elapsed:.1f}s")
+    info(f"Transcription completed in {time.time() - t0:.1f}s")
 
-    if not text.strip():
+    if not transcript.strip():
         log("No speech detected.")
         _notify("asr2clip", "No speech detected.")
         return
 
-    output_transcript(text, to_clipboard=True, to_stdout=True, to_file=output_file)
-    _notify("asr2clip", text[:100])
+    final = transcript
+    if postprocessor is not None and not isinstance(postprocessor, NonePostProcessor):
+        from datetime import date
+        metadata = PostMetadata(
+            date=date.today().isoformat(),
+            duration_s=duration,
+            language=language or "auto",
+            prompt_name=postprocessor.name,
+            diarized=is_diarized,
+            source="toggle",
+        )
+        log(f"Post-processing with '{postprocessor.name}'…")
+        t_post = time.time()
+        result = postprocessor.process(transcript, metadata=metadata)
+        info(f"Post-processing completed in {time.time() - t_post:.1f}s")
+        final = format_output(
+            template_str, result=result, transcript=transcript,
+            metadata=metadata, model=postprocessor.model,
+            backend=postprocessor.backend_type,
+        )
+
+    output_transcript(final, to_clipboard=True, to_stdout=True, to_file=output_file)
+    _notify("asr2clip", final[:100])

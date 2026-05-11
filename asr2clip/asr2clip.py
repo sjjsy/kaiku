@@ -115,30 +115,23 @@ def process_recording(
     output_file: str | None = None,
     language: str | None = None,
     preprocessor=None,
+    postprocessor=None,
+    template_str: str = "{result}",
 ):
-    """Record audio, transcribe, and output the result.
-
-    Args:
-        config: Configuration dictionary.
-        device: Audio device name or index.
-        output_file: Optional file to append transcript to.
-        preprocessor: AudioPreprocessor instance to apply before transcription.
-    """
+    """Record audio, transcribe, and output the result."""
     import time
+    from .postprocessors import NonePostProcessor, format_output, PostMetadata
     from .preprocessors import NonePreprocessor
 
-    # Check clipboard support
     if not check_clipboard_support():
         warning("Clipboard support may not be available.")
         print_clipboard_help()
 
     setup_signal_handlers(daemon_mode=False)
-
     log("Recording... Press Ctrl+C to stop (press twice to cancel)")
 
     t0 = time.time()
     audio_data = record_audio(device=device)
-
     duration = get_audio_duration(audio_data)
     if duration < 0.1:
         log("Recording too short or empty. Exiting.")
@@ -157,18 +150,37 @@ def process_recording(
 
     try:
         t1 = time.time()
-        text = transcribe_with_config(temp_path, config, language=language)
+        transcript = transcribe_with_config(temp_path, config, language=language)
         info(f"Transcription completed in {time.time() - t1:.1f}s")
 
-        if text.strip():
-            output_transcript(
-                text,
-                to_clipboard=True,
-                to_stdout=True,
-                to_file=output_file,
+        if not transcript.strip():
+            log("No speech detected in the recording.")
+            return
+
+        result = transcript
+        if postprocessor is not None and not isinstance(postprocessor, NonePostProcessor):
+            from datetime import date
+            metadata = PostMetadata(
+                date=date.today().isoformat(),
+                duration_s=duration,
+                language=language or "auto",
+                prompt_name=postprocessor.name,
+                diarized=False,
+                source="file",
+            )
+            log(f"Post-processing with '{postprocessor.name}'...")
+            t_post = time.time()
+            result = postprocessor.process(transcript, metadata=metadata)
+            info(f"Post-processing completed in {time.time() - t_post:.1f}s")
+            final = format_output(
+                template_str, result=result, transcript=transcript,
+                metadata=metadata, model=postprocessor.model,
+                backend=postprocessor.backend_type,
             )
         else:
-            log("No speech detected in the recording.")
+            final = result
+
+        output_transcript(final, to_clipboard=True, to_stdout=True, to_file=output_file)
 
     finally:
         safe_unlink(temp_path)
@@ -180,16 +192,14 @@ def process_file(
     output_file: str | None = None,
     language: str | None = None,
     preprocessor=None,
+    postprocessor=None,
+    template_str: str = "{result}",
+    diarize: bool = False,
+    num_speakers: int | None = None,
 ):
-    """Transcribe an existing audio or video file.
-
-    Args:
-        config: Configuration dictionary.
-        input_file: Path to the audio/video file.
-        output_file: Optional file to append transcript to.
-        preprocessor: AudioPreprocessor instance to apply before transcription.
-    """
+    """Transcribe an existing audio or video file."""
     import time
+    from .postprocessors import NonePostProcessor, PostMetadata, format_output
     from .preprocessors import NonePreprocessor
 
     if not os.path.exists(input_file):
@@ -208,7 +218,6 @@ def process_file(
         temp_path = input_file
         cleanup_temp = False
 
-    # Apply preprocessing (load → process → re-save) when a real preprocessor is active
     if preprocessor is not None and not isinstance(preprocessor, NonePreprocessor):
         try:
             audio_data, sr = load_wav(temp_path)
@@ -225,18 +234,57 @@ def process_file(
 
     try:
         t1 = time.time()
-        text = transcribe_with_config(temp_path, config, language=language)
+        is_diarized = False
+        if diarize:
+            from .diarize import DiarizationError, run_diarization
+            try:
+                log("Running diarization (WhisperX)...")
+                transcript = run_diarization(
+                    temp_path, config, language=language, num_speakers=num_speakers
+                )
+                is_diarized = True
+            except DiarizationError as e:
+                print(f"Diarization error: {e}", file=sys.stderr)
+                sys.exit(1)
+        else:
+            transcript = transcribe_with_config(temp_path, config, language=language)
         info(f"Transcription completed in {time.time() - t1:.1f}s")
 
-        if text.strip():
-            output_transcript(
-                text,
-                to_clipboard=True,
-                to_stdout=True,
-                to_file=output_file,
+        if not transcript.strip():
+            log("No speech detected in the audio file.")
+            return
+
+        try:
+            import wave as _wave
+            with _wave.open(temp_path) as wf:
+                duration_s = wf.getnframes() / wf.getframerate()
+        except Exception:
+            duration_s = 0.0
+
+        result = transcript
+        if postprocessor is not None and not isinstance(postprocessor, NonePostProcessor):
+            from datetime import date
+            metadata = PostMetadata(
+                date=date.today().isoformat(),
+                duration_s=duration_s,
+                language=language or "auto",
+                prompt_name=postprocessor.name,
+                diarized=is_diarized,
+                source="file",
+            )
+            log(f"Post-processing with '{postprocessor.name}'...")
+            t_post = time.time()
+            result = postprocessor.process(transcript, metadata=metadata)
+            info(f"Post-processing completed in {time.time() - t_post:.1f}s")
+            final = format_output(
+                template_str, result=result, transcript=transcript,
+                metadata=metadata, model=postprocessor.model,
+                backend=postprocessor.backend_type,
             )
         else:
-            log("No speech detected in the audio file.")
+            final = result
+
+        output_transcript(final, to_clipboard=True, to_stdout=True, to_file=output_file)
 
     finally:
         if cleanup_temp:
@@ -244,67 +292,26 @@ def process_file(
 
 
 def _build_parser() -> argparse.ArgumentParser:
-    """Build the argument parser for asr2clip.
-
-    Returns:
-        Configured ArgumentParser instance.
-    """
+    """Build the argument parser for asr2clip."""
     parser = argparse.ArgumentParser(
         description="Record audio and transcribe to clipboard using ASR API",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-Modes:
-  asr2clip                             # Single recording (Ctrl+C to stop)
-  asr2clip --vad                       # Continuous with voice detection
-  asr2clip --interval 60               # Continuous with fixed interval
-  asr2clip -i audio.mp3                # Transcribe existing audio file
-  asr2clip -i meeting.mp4              # Transcribe from video (audio extracted automatically)
-  asr2clip -d pulse                    # Record using PulseAudio default input (overrides config)
-  asr2clip -d plughw:Snowball          # Record using a specific ALSA device (stable across reboots)
+Examples:
+  asr2clip                                    # record, transcribe, copy to clipboard
+  asr2clip --vad -o meeting.txt               # continuous VAD transcription to file
+  asr2clip --interval 60                      # fixed-interval continuous recording
+  asr2clip -i audio.mp3                       # transcribe an existing file
+  asr2clip --toggle                           # toggle recording (for keyboard shortcuts)
+  asr2clip -p deepfilter --toggle             # toggle with DeepFilterNet noise reduction
+  asr2clip -i m.mp3 -r                        # robust chunked long-file transcription
+  asr2clip -i m.m4a -D -s 3                  # speaker diarization, 3 speakers
+  asr2clip --toggle -P solo-restructured      # toggle → LLM-structured memo
+  asr2clip --serve                            # start local sherpa-onnx ASR server
+  asr2clip --edit                             # create/open config in editor
+  asr2clip --test                             # verify backend and preprocessors
 
-With output file:
-  asr2clip --vad -o meeting.txt        # Save transcripts to file
-  asr2clip -i audio.mp3 -o out.txt     # Transcribe file and save
-
-Setup:
-  asr2clip --edit                      # Create/edit configuration
-  asr2clip --generate_config           # Create new config file (probes available enhancers)
-  asr2clip --test                      # Test default backend and configured preprocessors
-  asr2clip --list_devices              # List audio devices
-  asr2clip --print_config              # Print config template (shows all options)
-
-Local ASR server (sherpa-onnx):
-  asr2clip --serve                     # Start local ASR server on :8000
-  asr2clip --serve --port 9000         # Start on custom port
-  asr2clip --download-model            # Download SenseVoice model
-
-Audio preprocessing before transcription (only for non-VAD usage):
-  asr2clip -P deepfilter               # Record + denoise with DeepFilterNet3 (best quality)
-  asr2clip -P pyrnnoise                # Record + denoise with RNNoise (lowest latency)
-  asr2clip -P noisereduce              # Record + spectral subtraction
-  asr2clip -P none                     # Disable preprocessing for this run
-  asr2clip -P deepfilter -i m.mp4      # File transcription with denoising
-  asr2clip -P deepfilter -i m.mp4 -R   # Robust chunked + denoised
-  asr2clip --test                      # Checks backend AND both configured preprocessors
-
-Toggle mode (useful as a keyboard shortcut with WM keybinding):
-  asr2clip --toggle                    # First call: start recording in background
-  asr2clip --toggle                    # Second call: stop, transcribe, copy to clipboard
-  asr2clip -P deepfilter --toggle      # Toggle mode with DeepFilterNet denoising
-
-When whisper.cpp is installed and configured as 'backends.wcpp' with type 'whisper_cpp' in config:
-  asr2clip -b wcpp --test                      # Test the local offline transcription configuration
-  asr2clip -b wcpp                             # Single recording via whisper.cpp
-  asr2clip -b wcpp -i a.wav                    # Transcribe file with whisper.cpp
-  asr2clip -b wcpp -P deepfilter -i m.mp4      # Offline + denoised video transcription
-
-Robust long-file transcription:
-  asr2clip -i m.mp3 -R                         # Chunked transcription with quality checking
-  asr2clip -i m.mp3 -R -C 60                   # Use 60 s chunks instead of default 180
-  asr2clip -i m.mp3 -R -o t.txt                # Stream chunks to file (tail -f)
-  asr2clip -i m.mp3 -R -b wcpp                 # Robust mode with whisper.cpp
-  asr2clip -i m.mp3 -R -b wcpp -l fi           # Robust mode, Finnish, offline
-  asr2clip -i m.mkv -R -P deepfilter -o t.txt  # Video + denoise + robust
+See https://github.com/sjjsy/asr2clip for full documentation and configuration examples.
 """,
     )
 
@@ -312,32 +319,66 @@ Robust long-file transcription:
         "-v", "--version", action="version", version=f"asr2clip {__version__}"
     )
     parser.add_argument(
-        "-c",
-        "--config",
-        metavar="FILE",
+        "-q", "--quiet", action="store_true",
+        help="Quiet mode — only output transcription and errors",
+    )
+
+    # Setup
+    setup_group = parser.add_argument_group("Setup")
+    setup_group.add_argument(
+        "-c", "--config", metavar="FILE",
         help="Path to configuration file",
         default=None,
     )
-    parser.add_argument(
-        "-q",
-        "--quiet",
-        action="store_true",
-        help="Quiet mode - only output transcription and errors",
+    setup_group.add_argument(
+        "-e", "--edit", action="store_true",
+        help="Open configuration file in editor (creates default config if missing)",
     )
-    parser.add_argument(
-        "-b",
-        "--backend",
-        metavar="NAME",
+    setup_group.add_argument(
+        "--generate_config", action="store_true",
+        help="Write config template to ~/.config/asr2clip/config.yaml",
+    )
+    setup_group.add_argument(
+        "--print_config", action="store_true",
+        help="Print config template to stdout",
+    )
+    setup_group.add_argument(
+        "--test", action="store_true",
+        help="Test backend connectivity and configured preprocessors, then exit",
+    )
+
+    # Audio
+    audio_group = parser.add_argument_group("Audio")
+    audio_group.add_argument(
+        "--list_devices", action="store_true",
+        help="List available audio input devices",
+    )
+    audio_group.add_argument(
+        "-d", "--device", metavar="DEV",
+        help="Audio input device (name, ALSA name, or index). Overrides config.",
+        default=None,
+    )
+    audio_group.add_argument(
+        "-p", "--preprocessor", metavar="NAME",
         default=None,
         help=(
-            "Named backend to use (defined under 'backends:' in config). "
-            "Overrides backend_live / backend_file in config."
+            "Audio preprocessor: none, noisereduce, pyrnnoise, deepfilter. "
+            "Overrides preprocessor_live / preprocessor_file in config."
         ),
     )
-    parser.add_argument(
-        "-i",
-        "--input",
-        metavar="FILE",
+
+    # Transcription
+    trans_group = parser.add_argument_group("Transcription")
+    trans_group.add_argument(
+        "-b", "--backend", metavar="NAME",
+        default=None,
+        help=(
+            "ASR backend to use (key under 'asr_backends:' in config). "
+            "Overrides asr_backend_live / asr_backend_file."
+        ),
+    )
+    trans_group.add_argument(
+        "-i", "--input", metavar="FILE",
         help=(
             "Transcribe an existing audio or video file instead of recording. "
             "Supported: wav, mp3, m4a, ogg, flac, aac, opus, wma, "
@@ -345,116 +386,36 @@ Robust long-file transcription:
         ),
         default=None,
     )
-    parser.add_argument(
-        "-P",
-        "--preprocessor",
-        metavar="NAME",
-        default=None,
-        help=(
-            "Audio preprocessor to apply before transcription. "
-            "Choices: none, noisereduce, pyrnnoise, deepfilter. "
-            "Overrides preprocessor_live / preprocessor_file in config."
-        ),
-    )
-    parser.add_argument(
-        "-o",
-        "--output",
-        metavar="FILE",
+    trans_group.add_argument(
+        "-o", "--output", metavar="FILE",
         help="Append transcripts to file",
         default=None,
     )
-    parser.add_argument(
-        "--test",
-        action="store_true",
-        help="Test backend connectivity and configured preprocessors, then exit",
-    )
-    parser.add_argument(
-        "--list_devices", action="store_true", help="List available audio input devices"
-    )
-    parser.add_argument(
-        "-d",
-        "--device",
-        metavar="DEV",
-        help="Audio input device (name, ALSA name, or index). Overrides config.",
-        default=None,
-    )
-    parser.add_argument(
-        "-l", "--language",
-        metavar="LANG",
+    trans_group.add_argument(
+        "-l", "--language", metavar="LANG",
         default=None,
         help=(
             "Language hint for transcription (ISO-639-1, e.g. 'fi', 'en'). "
             "Overrides config. Omit to auto-detect."
         ),
     )
-    parser.add_argument(
-        "-e", "--edit", action="store_true", help="Open configuration file in editor"
-    )
-    parser.add_argument(
-        "--generate_config",
-        action="store_true",
-        help="Create config file at ~/.config/asr2clip/config.yaml",
-    )
-    parser.add_argument(
-        "--print_config",
-        action="store_true",
-        help="Print template configuration to stdout",
-    )
-    parser.add_argument(
-        "--vad",
-        action="store_true",
-        help=(
-            "Continuous recording with voice activity detection (VAD). "
-            "Transcribes automatically when silence is detected after speech. "
-            "Requires sherpa-onnx: pip install asr2clip[vad]. "
-            "The Silero VAD model (~629 KB) is downloaded automatically on first use."
-        ),
-    )
-    parser.add_argument(
-        "--interval",
-        type=float,
-        metavar="SEC",
-        default=None,
-        help="Continuous recording with fixed interval (seconds)",
-    )
-    parser.add_argument(
-        "--silence_threshold",
-        type=float,
-        metavar="PROB",
-        default=None,
-        help="VAD speech probability threshold, 0.0-1.0 (default: 0.5)",
-    )
-    parser.add_argument(
-        "--silence_duration",
-        type=float,
-        metavar="SEC",
-        default=1.5,
-        help="Silence duration to trigger transcription (default: 1.5)",
-    )
-
-    parser.add_argument(
-        "-R",
-        "--robust",
-        action="store_true",
+    trans_group.add_argument(
+        "-r", "--robust", action="store_true",
         help=(
             "Robust mode for -i file input: split at silence boundaries, "
-            "check quality, retry bad chunks, stream output (tail-f friendly)."
+            "quality-check chunks, retry failures, stream output (tail-f friendly)."
         ),
     )
-    parser.add_argument(
-        "-C",
-        "--chunk-duration",
-        type=int,
-        metavar="SEC",
+    trans_group.add_argument(
+        "-C", "--chunk-duration", type=int, metavar="SEC",
         default=180,
-        help="Maximum chunk duration in seconds for --robust mode (default: 180)",
+        help="Max chunk duration in seconds for -r/--robust mode (default: 180)",
     )
-    parser.add_argument(
-        "--toggle",
-        action="store_true",
+    trans_group.add_argument(
+        "--toggle", action="store_true",
         help=(
             "Toggle recording: first call starts, second call stops and transcribes. "
-            "Designed for keyboard shortcuts (e.g. awesome WM keybinding)."
+            "Designed for keyboard shortcuts."
         ),
     )
 
@@ -463,7 +424,7 @@ Robust long-file transcription:
     server_group.add_argument(
         "--serve",
         action="store_true",
-        help="Start the local ASR API server",
+        help="Start the local sherpa-onnx ASR API server",
     )
     server_group.add_argument(
         "--host",
@@ -491,6 +452,82 @@ Robust long-file transcription:
         "--download-model",
         action="store_true",
         help="Download the SenseVoice model and exit",
+    )
+
+    # VAD (continuous recording)
+    vad_group = parser.add_argument_group("VAD (continuous recording)")
+    vad_group.add_argument(
+        "--vad", action="store_true",
+        help=(
+            "Continuous recording with voice activity detection. "
+            "Transcribes automatically when silence is detected after speech. "
+            "Requires sherpa-onnx: pip install asr2clip[vad]."
+        ),
+    )
+    vad_group.add_argument(
+        "--interval", type=float, metavar="SEC",
+        default=None,
+        help="Continuous recording with fixed interval (seconds)",
+    )
+    vad_group.add_argument(
+        "--silence_threshold", type=float, metavar="PROB",
+        default=None,
+        help="VAD speech probability threshold, 0.0-1.0 (default: 0.5)",
+    )
+    vad_group.add_argument(
+        "--silence_duration", type=float, metavar="SEC",
+        default=1.5,
+        help="Silence duration to trigger transcription (default: 1.5 s)",
+    )
+
+    # Diarization
+    diarize_group = parser.add_argument_group("Diarization")
+    diarize_group.add_argument(
+        "-D", "--diarize", action="store_true",
+        help=(
+            "Speaker diarization via WhisperX. "
+            "Replaces the configured ASR backend for this run. "
+            "Output: '[HH:MM:SS] SPEAKER_NN: text'. "
+            "Requires: pip install asr2clip[diarize] and HF_TOKEN env var."
+        ),
+    )
+    diarize_group.add_argument(
+        "-s", "--speakers", type=int, metavar="N",
+        default=None,
+        help=(
+            "Expected number of speakers (hint to pyannote for better accuracy). "
+            "If omitted, pyannote infers automatically."
+        ),
+    )
+
+    # Post-processing
+    post_group = parser.add_argument_group("Post-processing")
+    post_group.add_argument(
+        "-P", "--post", metavar="NAME",
+        default=None,
+        help=(
+            "LLM post-processor name (key in 'postprocessors:' config) "
+            "or an inline system-prompt string. "
+            "Requires 'postprocessor_backends:' in config. "
+            "Overrides postprocessor_live / postprocessor_file for this run."
+        ),
+    )
+    post_group.add_argument(
+        "-M", "--post-model", metavar="MODEL",
+        default=None,
+        help=(
+            "LLM model used for the post-processing (f. ex. claude-sonnet-4-6). "
+            "Overrides the post-processor config for this run."
+        ),
+    )
+    post_group.add_argument(
+        "-T", "--template", metavar="NAME",
+        default=None,
+        help=(
+            "Output template name from 'output_templates:' in config. "
+            "Controls what is written to clipboard/-o FILE. "
+            "Overrides the template specified in the prompt definition."
+        ),
     )
 
     return parser
@@ -594,7 +631,7 @@ def main():
 
     device = get_audio_device(config, args.device)
 
-    # Resolve preprocessors once; pass objects into each code path
+    # Resolve preprocessors
     from .preprocessors import make_preprocessor
     preprocessor_live = make_preprocessor(
         resolve_preprocessor_config(config, args.preprocessor, "live")
@@ -608,12 +645,35 @@ def main():
     if preprocessor_file.name != "none":
         info(f"File preprocessor: {preprocessor_file.name}")
 
+    # Resolve post-processors and output templates
+    from .postprocessors import (
+        make_postprocessor,
+        resolve_output_template,
+        resolve_postprocessor_config,
+    )
+    post_name_live = resolve_postprocessor_config(config, args.post, "live")
+    post_name_file = resolve_postprocessor_config(config, args.post, "file")
+
+    postprocessor_live = make_postprocessor(post_name_live, config, args.post_model)
+    postprocessor_file = make_postprocessor(post_name_file, config, args.post_model)
+    template_live = resolve_output_template(config, post_name_live, args.template)
+    template_file = resolve_output_template(config, post_name_file, args.template)
+
+    if postprocessor_live.name != "none":
+        info(f"Live post-processor: {postprocessor_live.name}")
+    if postprocessor_file.name != "none":
+        info(f"File post-processor: {postprocessor_file.name}")
+
     if args.toggle:
         from .toggle import toggle_recording
         toggle_recording(
             backend_config_live, device, args.output,
             language=args.language,
             preprocessor=preprocessor_live,
+            postprocessor=postprocessor_live,
+            template_str=template_live,
+            diarize=args.diarize,
+            num_speakers=args.speakers,
         )
         return
 
@@ -626,12 +686,18 @@ def main():
                 chunk_duration=args.chunk_duration,
                 language=args.language,
                 preprocessor=preprocessor_file,
+                postprocessor=postprocessor_file,
+                template_str=template_file,
             )
         else:
             process_file(
                 backend_config_file, args.input, args.output,
                 language=args.language,
                 preprocessor=preprocessor_file,
+                postprocessor=postprocessor_file,
+                template_str=template_file,
+                diarize=args.diarize,
+                num_speakers=args.speakers,
             )
         return
 
@@ -665,6 +731,8 @@ def main():
         backend_config_live, device, args.output,
         language=args.language,
         preprocessor=preprocessor_live,
+        postprocessor=postprocessor_live,
+        template_str=template_live,
     )
 
 

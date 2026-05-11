@@ -70,20 +70,26 @@ def process_file_robust(
     chunk_duration: int = 180,
     language: str | None = None,
     preprocessor=None,
+    postprocessor=None,
+    template_str: str = "{result}",
 ):
     """Transcribe a long audio file in silence-bounded chunks with quality checks.
 
-    Each chunk is written to output_file immediately so the user can
-    `tail -f` it while processing continues.
+    Each chunk is written to output_file immediately (tail-f friendly). After all
+    chunks complete, the full assembled transcript is post-processed and the output
+    template is applied.
 
     Args:
         config: Full configuration dictionary.
         input_file: Path to the audio file.
-        output_file: Optional file to append chunks to (tail-f friendly).
+        output_file: Optional file to append chunks to.
         chunk_duration: Maximum chunk length in seconds (default 180).
         preprocessor: AudioPreprocessor instance to apply before chunking.
+        postprocessor: PostProcessor instance to apply to the full transcript.
+        template_str: Output template string (from resolve_output_template).
     """
     import sys
+    from .postprocessors import NonePostProcessor, PostMetadata, format_output
     from .preprocessors import NonePreprocessor
 
     if not os.path.exists(input_file):
@@ -194,7 +200,30 @@ def process_file_robust(
 
     full_text = "\n\n".join(all_text_parts)
 
-    copy_transcript_to_clipboard(full_text, output_file)
+    transcript = full_text
+    final = transcript
+
+    if postprocessor is not None and not isinstance(postprocessor, NonePostProcessor):
+        from datetime import date
+        metadata = PostMetadata(
+            date=date.today().isoformat(),
+            duration_s=total_s,
+            language=language or "auto",
+            prompt_name=postprocessor.name,
+            diarized=False,
+            source="file",
+        )
+        log(f"Post-processing full transcript with '{postprocessor.name}'…")
+        t_post = time.time()
+        result = postprocessor.process(transcript, metadata=metadata)
+        info(f"Post-processing completed in {time.time() - t_post:.1f}s")
+        final = format_output(
+            template_str, result=result, transcript=transcript,
+            metadata=metadata, model=postprocessor.model,
+            backend=postprocessor.backend_type,
+        )
+
+    copy_transcript_to_clipboard(final, output_file)
     if output_file:
         log(f"Full transcript written to {output_file}")
 
