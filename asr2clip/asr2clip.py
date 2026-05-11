@@ -298,18 +298,17 @@ def _build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  asr2clip                                    # record, transcribe, copy to clipboard
-  asr2clip --vad -o meeting.txt               # continuous VAD transcription to file
-  asr2clip --interval 60                      # fixed-interval continuous recording
-  asr2clip -i audio.mp3                       # transcribe an existing file
-  asr2clip --toggle                           # toggle recording (for keyboard shortcuts)
-  asr2clip -p deepfilter --toggle             # toggle with DeepFilterNet noise reduction
-  asr2clip -i m.mp3 -r                        # robust chunked long-file transcription
-  asr2clip -i m.m4a -D -s 3                  # speaker diarization, 3 speakers
-  asr2clip --toggle -P solo-restructured      # toggle → LLM-structured memo
-  asr2clip --serve                            # start local sherpa-onnx ASR server
   asr2clip --edit                             # create/open config in editor
   asr2clip --test                             # verify backend and preprocessors
+  asr2clip                                    # record, transcribe, copy to clipboard
+  asr2clip --toggle                           # toggle recording (for keyboard shortcuts)
+  asr2clip --toggle -P solo-restructured      # toggle, and produce LLM-structured memo
+  asr2clip -i audio.mp3                       # transcribe an existing file
+  asr2clip -i m.mp3 -p deepfilter -r          # neural denoising + chunked transcription
+  asr2clip -i m.m4a -D -s 3                   # speaker diarization, 3 speakers
+  asr2clip --serve                            # start local sherpa-onnx ASR server
+  asr2clip --vad -o meeting.txt               # continuous VAD transcription to file
+  asr2clip --interval 60                      # fixed-interval continuous recording
 
 See https://github.com/sjjsy/asr2clip for full documentation and configuration examples.
 """,
