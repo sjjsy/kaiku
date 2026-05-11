@@ -68,7 +68,7 @@ backend_file: openai                          # backend for -i file transcriptio
 # audio_device: "plughw:Snowball"            # ALSA device name — bypasses system mixer
 # audio_device: 3                            # device index from --list_devices
 
-## Audio pre-processing (noise reduction before transcription):
+## Audio pre-processing (noise reduction before transcription in non-VAD usage):
 # Options: none, noisereduce, pyrnnoise, deepfilter
 #   none        — no pre-processing, zero latency, no extra dependencies
 #   noisereduce — spectral subtraction; best for stationary noise (fan, AC)
@@ -78,7 +78,7 @@ backend_file: openai                          # backend for -i file transcriptio
 #   deepfilter  — DeepFilterNet3, best quality, medium CPU
 #                 install: pip install asr2clip[deepfilter]
 # Override at runtime: asr2clip -P deepfilter -i meeting.mp4
-preprocessor_live: none                      # applied to live recordings (toggle, single-shot, VAD)
+preprocessor_live: none                      # applied to live recordings (toggle, single-shot)
 preprocessor_file: none                      # applied to file transcription (-i)
 
 ## Other parameters:
