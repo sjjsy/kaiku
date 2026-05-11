@@ -792,24 +792,6 @@ asr2clip operates within a four-stage pipeline:
 
 The tables below cover the ecosystem at each pipeline stage and compare competing end-user tools. asr2clip covers stages 1–3 in a single composable CLI.
 
-### ASR engines
-
-ASR engines convert audio to text. asr2clip is a frontend: it delegates transcription to an ASR backend, supporting two locally-run backends (whisper.cpp, sherpa-onnx) and any OpenAI-compatible HTTP endpoint for cloud or self-hosted services. The engines listed as integrated below are ones asr2clip directly calls or supports as backends; the others are libraries or specialized tools that require custom wrappers to use.
-
-| Project | License | Stars | Best for | In asr2clip |
-|---------|---------|-------|----------|-------------|
-| [OpenAI Whisper](https://github.com/openai/whisper) | MIT | 80k+ | Gold standard; 99 languages; most widely reproduced | Via API (`whisper-1`) or indirectly through sherpa-onnx and whisper.cpp |
-| [whisper.cpp](https://github.com/ggerganov/whisper.cpp) | MIT | 80k+ | Fully offline; best CPU performance; GGML-quantised models | **Yes** — `type: whisper_cpp` backend; subprocess call |
-| [faster-whisper](https://github.com/SYSTRAN/faster-whisper) | MIT | 15k+ | 4× faster than Whisper; identical accuracy; INT8/FP16 via CTranslate2 | Not directly; used internally by WhisperX and Meetily |
-| [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) | Apache-2 | 4k+ | ONNX inference; multi-model-family; model auto-download; Python-native | **Yes** — `--serve` local server; `type: api` backend |
-| [WhisperX](https://github.com/m-bain/whisperX) | BSD | 13k+ | Whisper + word-level timestamps + speaker diarization in one pipeline | **Yes** — via `--diarize` flag |
-| [SenseVoice](https://github.com/FunAudioLLM/SenseVoice) | Apache-2 | 6k+ | Emotion + language event detection; excellent CJK | Via sherpa-onnx default model; also SiliconFlow API |
-| [Vosk](https://github.com/alphacep/vosk-api) | Apache-2 | 8k+ | Lightweight; 20+ languages; embedded and low-RAM devices | No — lower accuracy than Whisper family |
-| [NVIDIA Parakeet TDT](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2) | Apache-2 | (NeMo) | 3 380× faster than real-time; English only; GPU | No — English-only; GPU-dependent; no multilingual support |
-| [SpeechBrain](https://github.com/speechbrain/speechbrain) | Apache-2 | 9k+ | Research platform; fine-tuning; custom model training | No — research library, not a drop-in backend |
-| [Coqui STT](https://github.com/coqui-ai/STT) | MPL-2 | 5k+ | DeepSpeech successor; trainable on custom data | No — lower quality than Whisper; limited community activity |
-| [Kaldi](https://github.com/kaldi-asr/kaldi) | Apache-2 | 14k+ | Enterprise/research; highly configurable; steep setup | No — complex; not a practical CLI backend |
-
 ### Audio preprocessing (noise reduction)
 
 Audio preprocessing cleans the signal before transcription. asr2clip integrates all three libraries below as optional extras (`pip install asr2clip[enhance]`); they run in a pipeline with loudness normalisation applied after cleaning.
@@ -831,6 +813,24 @@ VAD classifies audio frames as speech or silence, enabling automatic segment bou
 | [Silero VAD](https://github.com/snakers4/silero-vad) | MIT | 14k+ | 629 KB model; enterprise-grade; ONNX + PyTorch; auto-downloads | **Yes** — via sherpa-onnx in `--vad` and `--robust` |
 | [WebRTC VAD](https://github.com/wiseman/py-webrtcvad) | BSD | 1k+ | Google's classic GMM-based VAD; very fast, lower accuracy | No — less accurate than Silero; not integrated |
 | [pyannote VAD](https://github.com/pyannote/pyannote-audio) | MIT | 6k+ | Neural VAD embedded in the pyannote diarization pipeline | Indirectly — activated during `--diarize` via WhisperX |
+
+### ASR engines
+
+ASR engines convert audio to text. asr2clip is a frontend: it delegates transcription to an ASR backend, supporting two locally-run backends (whisper.cpp, sherpa-onnx) and any OpenAI-compatible HTTP endpoint for cloud or self-hosted services. The engines listed as integrated below are ones asr2clip directly calls or supports as backends; the others are libraries or specialized tools that require custom wrappers to use.
+
+| Project | License | Stars | Best for | In asr2clip |
+|---------|---------|-------|----------|-------------|
+| [OpenAI Whisper](https://github.com/openai/whisper) | MIT | 80k+ | Gold standard; 99 languages; most widely reproduced | Via API (`whisper-1`) or indirectly through sherpa-onnx and whisper.cpp |
+| [whisper.cpp](https://github.com/ggerganov/whisper.cpp) | MIT | 80k+ | Fully offline; best CPU performance; GGML-quantised models | **Yes** — `type: whisper_cpp` backend; subprocess call |
+| [faster-whisper](https://github.com/SYSTRAN/faster-whisper) | MIT | 15k+ | 4× faster than Whisper; identical accuracy; INT8/FP16 via CTranslate2 | Not directly; used internally by WhisperX and Meetily |
+| [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) | Apache-2 | 4k+ | ONNX inference; multi-model-family; model auto-download; Python-native | **Yes** — `--serve` local server; `type: api` backend |
+| [WhisperX](https://github.com/m-bain/whisperX) | BSD | 13k+ | Whisper + word-level timestamps + speaker diarization in one pipeline | **Yes** — via `--diarize` flag |
+| [SenseVoice](https://github.com/FunAudioLLM/SenseVoice) | Apache-2 | 6k+ | Emotion + language event detection; excellent CJK | Via sherpa-onnx default model; also SiliconFlow API |
+| [Vosk](https://github.com/alphacep/vosk-api) | Apache-2 | 8k+ | Lightweight; 20+ languages; embedded and low-RAM devices | No — lower accuracy than Whisper family |
+| [NVIDIA Parakeet TDT](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2) | Apache-2 | (NeMo) | 3 380× faster than real-time; English only; GPU | No — English-only; GPU-dependent; no multilingual support |
+| [SpeechBrain](https://github.com/speechbrain/speechbrain) | Apache-2 | 9k+ | Research platform; fine-tuning; custom model training | No — research library, not a drop-in backend |
+| [Coqui STT](https://github.com/coqui-ai/STT) | MPL-2 | 5k+ | DeepSpeech successor; trainable on custom data | No — lower quality than Whisper; limited community activity |
+| [Kaldi](https://github.com/kaldi-asr/kaldi) | Apache-2 | 14k+ | Enterprise/research; highly configurable; steep setup | No — complex; not a practical CLI backend |
 
 ### Speaker diarization
 
