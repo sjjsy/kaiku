@@ -125,19 +125,44 @@ def format_output(
 # ---------------------------------------------------------------------------
 
 def _load_context(paths: list) -> str | None:
-    """Expand glob patterns, read matching files, return a combined context block."""
+    """Expand glob patterns, read matching files, return organized context block.
+
+    Output format includes:
+    - Index: list of loaded files
+    - Separator: clear delimiters between files
+    - Content: each file's content separated by visual breaks
+
+    This makes context easily scannable for the LLM.
+    """
     if not paths:
         return None
-    texts: list[str] = []
+    files: list[tuple[str, str]] = []  # (full_path, content)
     for pattern in paths:
         for path in sorted(glob.glob(os.path.expanduser(str(pattern)))):
             try:
                 with open(path, encoding="utf-8", errors="replace") as fh:
                     content = fh.read()
-                texts.append(f"### {os.path.basename(path)}\n{content}")
+                files.append((path, content))
             except OSError as e:
                 print(f"Warning: context_path could not read '{path}': {e}", file=sys.stderr)
-    return "\n\n".join(texts) if texts else None
+
+    if not files:
+        return None
+
+    # Build index + content
+    lines = ["Context files:", ""]
+    for path, _ in files:
+        lines.append(f"  • {os.path.basename(path)}")
+    lines.append("")
+
+    # Add each file with clear delimiters
+    for path, content in files:
+        lines.append(f"\n{'=' * 70}")
+        lines.append(f"Context File: {os.path.basename(path)}")
+        lines.append(f"{'=' * 70}\n")
+        lines.append(content)
+
+    return "\n".join(lines)
 
 
 def _resolve_prompt(name: str, config: dict, _seen: set | None = None) -> dict:

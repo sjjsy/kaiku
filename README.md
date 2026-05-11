@@ -477,7 +477,7 @@ asr2clip -i meeting.mp3 -r                    # chunked, quality-checked
 asr2clip -i m.mp3 -rC 60                      # 60 s chunks instead of default 180
 asr2clip -i m.mp3 -ro transcript.txt          # write chunks to file as they complete (tail -f)
 asr2clip -i m.mp3 -rb wcpp -l fi -o t.txt     # fully offline, Finnish language
-asr2clip -i m.mp3 -rP group -T full -o t.txt  # LLM meeting notes + original transcript
+asr2clip -i m.mp3 -rP group-restructured -T bare -o t.md  # LLM meeting notes + original transcript
 ```
 
 Long transcripts often exceed the clipboard size limit; using `-o FILE` is recommended.
@@ -649,6 +649,8 @@ Each prompt under `postprocessors:` can have the following fields:
 | `context_path:` | list of strings | File glob patterns to inject as context. Glob patterns are expanded and combined with inherited patterns when using `extends:`. |
 
 **Inheritance behavior:** When a prompt uses `extends:`, it inherits all parent fields. Child fields override parent fields, except `context_path:` which accumulates (both parent and child patterns are expanded and combined).
+
+**Context file formatting:** Files specified in `context_path:` are injected into the LLM prompt with an index and clear delimiters. Each file appears with its name and visual separators, making the context easily scannable for the LLM.
 
 Example with inheritance:
 

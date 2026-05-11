@@ -151,11 +151,11 @@ postprocessors:                               # FIXME: These are not commented o
       [/] Action that is in progress (by person A, due by date B, if specified)
       [ ] Action that is to be done but not yet started>
 
-  solo-private:                               # extends solo-restructured; inherits personal context + adds private context
+  solo-private:                               # extends solo-restructured with private context and leverages an offline backend for privacy
     extends: solo-restructured
     backend: ollama                           # use local offline ollama model for sensitive content
     context_path:
-      - "~/.asr2clip/context/private.md"      # added to inherited personal.md via extends
+      - "~/.asr2clip/context/private.md"      # include private info to improve reasoning
     extra: |
       This content is strictly private and must not be shared. Write "*Confidential - Do Not Share*" as both the first and last line of the memo.
 
@@ -177,8 +177,8 @@ postprocessors:                               # FIXME: These are not commented o
 
   group-restructured:
     context_path:
-      - "~/project_x/README.md"               # Essential project information
-      - "~/project_x/todo.md"                 # Information about current status and ongoing tasks
+      - "~/project_x/README.md"               # essential project information
+      - "~/project_x/todo.md"                 # information about current status and ongoing tasks
     template: full
     prompt: |
       As output, produce a concise, structured, legible memo that promotes flow for the whole team.
@@ -205,11 +205,11 @@ postprocessors:                               # FIXME: These are not commented o
       [/] Action that is in progress (by person A, due by date B, if specified)
       [ ] Action that is to be done but not yet started>
 
-  group-private:                              # extends group-restructured; inherits project context + adds confidential context
+  group-private:                              # extends group-restructured with confidential context and leverages an offline backend for privacy
     extends: group-restructured
     backend: ollama                           # use local offline ollama model for sensitive content
     context_path:
-      - "~/project_x/confidential.md"         # added to inherited project files via extends
+      - "~/project_x/confidential.md"         # include confidential info to improve reasoning
     extra: |
       This content is strictly private and must not be shared. Write "*Confidential - Do Not Share*" as both the first and last line of the memo.
 
