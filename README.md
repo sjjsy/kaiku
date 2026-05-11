@@ -5,44 +5,73 @@
 
 [中文](README_zh.md)
 
-This tool records speech, transcribes it, and copies the result to your clipboard, or a local file.
+This ASR tool records speech, transcribes it, and copies the result to your clipboard, or a local file; and supports VAD:
+- **ASR** (Automatic Speech Recognition) converts spoken audio into text.
+- **VAD** (Voice Activity Detection) classifies audio frames as speech or silence, enabling hands-free continuous transcription.
 
-It provides Automatic Speech Recognition (ASR) with cloud APIs (OpenAI-compatible) as well as fully local, offline transcription via [whisper.cpp](https://github.com/ggerganov/whisper.cpp) — no API key required for local use.
+The tool can provide ASR through multipel backends: cloud APIs (OpenAI-compatible) for maximum model choice and accuracy with no local setup, and/or fully local, offline [whisper.cpp](https://github.com/ggerganov/whisper.cpp) and [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) backends (no API key required for local use).
 
-It provides audio preprocessing, chunked transcription, language specification, and other options to enhance trancription quality and provide a nice user experience for various use cases.
+VAD requires [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) and it uses the [Silero VAD](https://github.com/snakers4/silero-vad) model.
+
+Audio preprocessing, chunked transcription, language specification, and other options to enhance transcription quality and the user experience for various use cases are provided but all features are not yet available in VAD mode.
 
 ## TL;DR
 
 **Cloud (API) path:**
 ```bash
 pip install asr2clip
-asr2clip --edit    # add your API key
-asr2clip --test    # verify
-asr2clip           # record and transcribe
+asr2clip --generate_config   # create config with all backend examples
+asr2clip --edit              # fill in your API key
+asr2clip --test              # verify
+asr2clip                     # record and transcribe
 ```
 
-**Local offline path (no API key needed):**
+**Local offline path — whisper.cpp:**
 ```bash
 pip install asr2clip
-# configure whisper.cpp binary and model path as e.g. 'wcpp' — see Multiple Backends below
+# build whisper.cpp and download a model, then configure it in config
+asr2clip --generate_config   # shows a wcpp backend example
 asr2clip --test -b wcpp
 asr2clip -b wcpp
+```
+
+**Local offline path — sherpa-onnx (model auto-downloads):**
+```bash
+pip install asr2clip[vad]
+asr2clip --download-model    # download SenseVoice model on first use
+asr2clip --serve &           # start local ASR API server
+# configure a backend pointing to http://127.0.0.1:8000/v1/ — see Local ASR server below
+asr2clip --test -b sonnx
+asr2clip -b sonnx
 ```
 
 ## Prerequisites
 
 - **Python 3.8 or higher**
 - **ASR backend** — one of:
-  - A cloud API key (OpenAI/Whisper, Groq, SiliconFlow, xinference, or any OpenAI-compatible endpoint)
-  - A local [whisper.cpp](https://github.com/ggerganov/whisper.cpp) installation (fully offline, no key needed)
+  - A cloud API key (OpenAI Whisper, Groq, SiliconFlow, xinference, or any OpenAI-compatible endpoint)
+  - A local [whisper.cpp](https://github.com/ggerganov/whisper.cpp) binary and model file (fully offline, no key needed)
+  - A local [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) ASR server (`pip install asr2clip[vad]`, model auto-downloads)
 
 ### System Dependencies
+
+Required:
 
 | Dependency | Purpose | Linux | macOS | Windows |
 |------------|---------|-------|-------|---------|
 | **ffmpeg** | Audio format conversion | `apt install ffmpeg` | `brew install ffmpeg` | [Download](https://ffmpeg.org/download.html) |
 | **PortAudio** | Audio recording | `apt install libportaudio2` | `brew install portaudio` | Included with sounddevice |
 | **Clipboard** | Copy to clipboard | Built-in (copykitten) | Built-in | Built-in |
+
+Optional Python packages (install only what you need):
+
+| Extra | Install command | Purpose | Section |
+|-------|----------------|---------|---------|
+| `noisereduce` | `pip install asr2clip[noisereduce]` | Spectral noise reduction | [Audio pre-processing](#audio-pre-processing-noise-reduction) |
+| `pyrnnoise` | `pip install asr2clip[pyrnnoise]` | Neural GRU noise reduction | [Audio pre-processing](#audio-pre-processing-noise-reduction) |
+| `deepfilter` | `pip install asr2clip[deepfilter]` | DeepFilterNet3 best-quality denoising | [Audio pre-processing](#audio-pre-processing-noise-reduction) |
+| `enhance` | `pip install asr2clip[enhance]` | All three noise reduction options above | [Audio pre-processing](#audio-pre-processing-noise-reduction) |
+| `vad` | `pip install asr2clip[vad]` | VAD continuous recording + local sherpa-onnx ASR server | [Continuous recording](#continuous-recording), [Local ASR server](#local-asr-server-sherpa-onnx) |
 
 ## Installation
 
@@ -56,6 +85,18 @@ pipx install asr2clip
 pip install --upgrade asr2clip
 ```
 
+Noise reduction for single-shot/toggle/file recordings, plus VAD for continuous mode:
+```bash
+pip install asr2clip[enhance,vad]
+```
+
+Note: audio pre-processing is not yet applied in VAD/interval continuous mode. `enhance` is still useful if you use both modes.
+
+Everything — noise reduction, VAD, and the local sherpa-onnx ASR server:
+```bash
+pip install asr2clip[enhance,vad]
+```
+
 **From source:**
 ```bash
 git clone https://github.com/Oaklight/asr2clip.git
@@ -66,8 +107,9 @@ pip install -e .
 ## Configuration
 
 ```bash
-asr2clip --edit          # create/open config in your default editor
-asr2clip --print_config  # print all available options
+asr2clip --generate_config   # write a fully annotated config with all backend examples
+asr2clip --edit              # create/open config in your default editor
+asr2clip --print_config      # print the annotated template to stdout
 ```
 
 Config file is created at `~/.config/asr2clip/config.yaml`. Locations searched in order:
@@ -76,72 +118,135 @@ Config file is created at `~/.config/asr2clip/config.yaml`. Locations searched i
 3. `~/.config/asr2clip.conf`
 4. `~/.asr2clip.conf`
 
-### Cloud API backend (single backend, simplest form)
+### Backends
 
-```yaml
-api_base_url: "https://api.openai.com/v1/"
-api_key: "YOUR_API_KEY"
-model_name: "whisper-1"
-# audio_device: "pulse"   # optional, see --list_devices
-```
+All backends are defined under a `backends:` section. Name them whatever you like and switch at runtime with `-b NAME`. `default_backend` names which one to use when `-b` is not given.
 
-Compatible services: OpenAI, [Groq](https://console.groq.com/), [SiliconFlow](https://siliconflow.cn/), [xinference](https://inference.readthedocs.io/en/latest/), and others.
+`asr2clip --generate_config` writes a fully annotated config with every supported backend type listed as commented-out examples — uncomment and fill in the one(s) you want.
 
-### Local offline backend (whisper.cpp, no API key)
+A minimal working config (cloud API):
 
 ```yaml
 backends:
-  wcpp:
-    type: whisper_cpp
-    binary: ~/path/to/whisper.cpp/build/bin/whisper-cli
-    model:  ~/path/to/whisper.cpp/models/ggml-large-v3-turbo-q8_0.bin
-    # language: auto   # auto-detect language
-    # threads: 4
+  openai:
+    type: api
+    api_base_url: "https://api.openai.com/v1/"
+    api_key: "YOUR_API_KEY"
+    model_name: "whisper-1"
+default_backend: openai
 ```
 
-```bash
-asr2clip --test -b wcpp   # verify
-asr2clip -b wcpp          # record and transcribe offline
-```
-
-See the [whisper.cpp](https://github.com/ggerganov/whisper.cpp) project for build instructions and model downloads.
-
-### Multiple named backends
-
-Define several backends and switch between them at runtime with `-b`:
+A multi-backend example:
 
 ```yaml
-default_backend: groq
 backends:
   groq:
     type: api
     api_base_url: "https://api.groq.com/openai/v1/"
     api_key: "YOUR_GROQ_KEY"
     model_name: "whisper-large-v3-turbo"
+  sonnx:
+    type: api
+    api_base_url: "http://127.0.0.1:8000/v1/"
+    model_name: "SenseVoiceSmall"
   wcpp:
     type: whisper_cpp
     binary: ~/path/to/whisper.cpp/build/bin/whisper-cli
     model:  ~/path/to/whisper.cpp/models/ggml-large-v3-turbo-q8_0.bin
+default_backend: groq
 ```
 
 ```bash
 asr2clip                       # use default backend (groq)
-asr2clip -b wcpp               # use whisper.cpp
-asr2clip -b wcpp -i audio.wav  # transcribe file offline
-asr2clip --test -b wcpp        # test a specific backend
+asr2clip -b sonnx              # use your local sherpa-onnx server
+asr2clip -b wcpp               # use your local whisper.cpp installation
+asr2clip -b wcpp -i audio.wav  # transcribe a file offline
+asr2clip --test -b groq        # test a specific backend
 ```
+
+**Supported `type` values:**
+
+| `type` | Description | Requires |
+|--------|-------------|---------|
+| `api` | Any OpenAI-compatible HTTP endpoint | API key or local server |
+| `whisper_cpp` | whisper.cpp binary via subprocess | whisper.cpp build + `.bin` model file |
+
+Compatible cloud services for `type: api`: OpenAI, [Groq](https://console.groq.com/), [SiliconFlow](https://siliconflow.cn/), [xinference](https://inference.readthedocs.io/en/latest/), and others.
+
+### Local ASR: whisper.cpp vs. sherpa-onnx
+
+Both provide fully offline, no-API-key ASR running on your machine. Here is how to choose between them:
+
+| | whisper.cpp | sherpa-onnx (via `--serve`) |
+|---|---|---|
+| **What it is** | C++ reimplementation of OpenAI Whisper | ONNX-runtime inference toolkit with Python bindings |
+| **ASR models** | Whisper family (GGML quantised) | Whisper, SenseVoice, paraformer, zipformer, and more |
+| **Integration** | Subprocess call to external C++ binary | Python-native; exposes a local HTTP API |
+| **Setup** | Build C++ from source; download `.bin` model manually | `pip install asr2clip[vad]` + `asr2clip --download-model` |
+| **Model auto-download** | No | Yes |
+| **Streaming ASR** | Separate `whisper-stream` binary | Built-in (model-dependent) |
+| **Dev activity** | Mature, stable | Very active (k2-fsa / Next-gen Kaldi team) |
+| **Already a dependency?** | No | Yes — `pip install asr2clip[vad]` already pulls in sherpa-onnx |
+
+**When to choose whisper.cpp:** You already have it built, or you prefer GGML-quantised Whisper models and want the C++ inference stack without extra Python ML packages.
+
+**When to choose sherpa-onnx:** You want zero C++ build steps, you already installed `asr2clip[vad]` (sherpa-onnx is already there), you want to try models beyond the Whisper family, or you want an actively developed upstream.
+
+See [whisper.cpp](https://github.com/ggerganov/whisper.cpp) for build instructions and model downloads, and [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) for its model zoo and documentation.
+
+### Local ASR server (sherpa-onnx)
+
+`asr2clip` can run a local OpenAI-compatible ASR API server backed by sherpa-onnx. Once running, configure it as a regular `type: api` backend:
+
+```bash
+pip install asr2clip[vad]
+asr2clip --download-model          # download SenseVoice model (~1 GB, once)
+asr2clip --serve                   # start server at 127.0.0.1:8000
+```
+
+Corresponding config backend:
+```yaml
+backends:
+  sonnx:
+    type: api
+    api_base_url: "http://127.0.0.1:8000/v1/"
+    model_name: "SenseVoiceSmall"
+```
+
+Server options: `--host HOST`, `--port PORT`, `--model-dir DIR`, `--num-threads N`.
 
 ### Audio device
 
 ```bash
-asr2clip --list_devices        # list available input devices
-asr2clip --device pulse        # use a specific device for this run
+asr2clip --list_devices            # list available input devices with names and indices
+asr2clip -d "plughw:Snowball"      # use a specific ALSA device for this run
 ```
 
-Or set permanently in config:
+**Recommended — use system audio routing:**
+
+On Linux, set `audio_device` to `"pulse"` or `"pipewire"` and select the active microphone in `pavucontrol` or your desktop sound settings. The system mixer handles format conversion and device matching.
+
 ```yaml
-audio_device: "pulse"          # or a device index like 12
+audio_device: "pulse"              # PulseAudio routes to whichever mic is set as default input
 ```
+
+**Targeting a specific device directly:**
+
+For dedicated hardware (USB mic, audio interface) you can bypass the system mixer using an ALSA `plughw:` device name. `plughw:` handles sample-rate conversion; `hw:` is raw (may fail if rates mismatch).
+
+```yaml
+audio_device: "plughw:Snowball"    # ALSA plughw — format conversion included
+audio_device: 3                    # device index from --list_devices
+```
+
+| Value | System | Notes |
+|-------|--------|-------|
+| `"pulse"` | PulseAudio (Linux) | Recommended; configure mic via `pavucontrol` |
+| `"pipewire"` | PipeWire (Linux) | Recommended on modern Linux |
+| `"plughw:Snowball"` | ALSA (Linux) | Direct USB mic access with format conversion |
+| `"hw:2,0"` | ALSA (Linux) | Raw direct access, card 2 device 0 |
+| `3` | Any | Device index from `--list_devices` |
+| `"BlackHole 2ch"` | macOS | Virtual routing device |
 
 ### Audio pre-processing (noise reduction)
 
@@ -289,7 +394,7 @@ asr2clip -i meeting.mp3 -R -o transcript.txt  # write chunks to file as they com
 asr2clip -i m.mp3 -Rb wcpp -l fi -o o.txt     # fully offline, Finnish language
 ```
 
-Long transcripts will exceed the clipboard size limit; using `-o FILE` is recommended. When the limit is exceeded, the file path is copied to clipboard automatically (see note above).
+Long transcripts often exceed the clipboard size limit; using `-o FILE` is recommended. When the limit is exceeded, the file path is copied to clipboard automatically (see note above).
 
 ### CLI reference
 
@@ -368,7 +473,7 @@ Local ASR server:
 | Audio not captured | Run `asr2clip --list_devices` and select a working device |
 | Clipboard not working | Install `xclip` (X11) or `wl-clipboard` (Wayland) |
 | API errors | Check your API key and endpoint in config |
-| whisper.cpp errors | Run `asr2clip --test -b local`; check binary and model paths |
+| whisper.cpp errors | Run `asr2clip --test -b wcpp`; check binary and model paths |
 | Silent audio | Try a different audio device with `--device` |
 | Video/audio format rejected | Ensure `ffmpeg` is installed (`apt install ffmpeg` / `brew install ffmpeg`) |
 | Preprocessor not found | Run `asr2clip --test` to see which are available and their install commands |
