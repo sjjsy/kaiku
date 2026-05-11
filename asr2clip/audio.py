@@ -95,7 +95,7 @@ def _resample_audio(audio: np.ndarray, from_rate: int, to_rate: int) -> np.ndarr
     if channels > 1:
         resampled = resampled.reshape(-1, channels)
     else:
-        resampled = resampled.reshape(-1, 1)
+        resampled = resampled.flatten()
     return resampled
 
 
@@ -175,6 +175,10 @@ def record_audio(
 
     if actual_rate != sample_rate:
         audio = _resample_audio(audio, actual_rate, sample_rate)
+
+    # sounddevice gives (n_frames, channels); squeeze mono to 1D
+    if audio.ndim > 1:
+        audio = audio.mean(axis=1) if audio.shape[1] > 1 else audio[:, 0]
 
     return audio
 

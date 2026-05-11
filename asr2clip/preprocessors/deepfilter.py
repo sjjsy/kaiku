@@ -37,6 +37,9 @@ class DeepFilterNetPreprocessor(AudioPreprocessor):
         import torch
         import torchaudio.functional as F_audio
 
+        if audio.ndim > 1:
+            audio = audio.mean(axis=1) if audio.shape[1] > 1 else audio[:, 0]
+
         model, df_state, _ = init_df()
         model_sr = df_state.sr()
 

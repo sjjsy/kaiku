@@ -45,6 +45,9 @@ class PyRNNoisePreprocessor(AudioPreprocessor):
             )
             sys.exit(1)
 
+        if audio.ndim > 1:
+            audio = audio.mean(axis=1) if audio.shape[1] > 1 else audio[:, 0]
+
         # Resample to 48 kHz for RNNoise
         if sample_rate != _RNNOISE_RATE:
             g = gcd(sample_rate, _RNNOISE_RATE)
