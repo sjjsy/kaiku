@@ -2,7 +2,7 @@
 
 _INSTALL_HINT = (
     "Local ASR server dependencies are not installed. "
-    "Install them with: pip install asr2clip[local_asr]"
+    "Install them with: pip install asr2clip[vad]"
 )
 
 
