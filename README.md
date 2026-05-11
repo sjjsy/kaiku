@@ -242,6 +242,7 @@ Config file is created at `~/.config/asr2clip/config.yaml`. Locations searched i
 4. `~/.asr2clip.conf`
 
 Note: The created config file embeds mostly commented-out configuration options along with brief explanations for most features.
+See [`asr2clip.conf.example`](asr2clip.conf.example) in the repo for a complete, current example with all backend and feature documentation.
 The following sections tackle some of these in more detail where relevant.
 
 ## Audio
