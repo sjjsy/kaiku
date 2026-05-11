@@ -128,11 +128,13 @@ def _load_context(paths: list) -> str | None:
     """Expand glob patterns, read matching files, return organized context block.
 
     Output format includes:
-    - Index: list of loaded files
+    - Index: list of loaded files with relative paths
     - Separator: clear delimiters between files
     - Content: each file's content separated by visual breaks
 
-    This makes context easily scannable for the LLM.
+    File paths are shown relative to their common prefix, e.g.
+    ~/.asr2clip/context/personal.md and ~/.asr2clip/context/private.md
+    are shown as context/personal.md and context/private.md.
     """
     if not paths:
         return None
@@ -149,16 +151,29 @@ def _load_context(paths: list) -> str | None:
     if not files:
         return None
 
+    # Find common directory: paths relative to this will show distinguishing parts
+    full_paths = [path for path, _ in files]
+    if len(files) > 1:
+        common_dir = os.path.commonpath(full_paths)
+    else:
+        common_dir = os.path.dirname(files[0][0])
+
+    # If commonpath is a file (shouldn't happen with files), use its parent
+    if not os.path.isdir(common_dir):
+        common_dir = os.path.dirname(common_dir)
+
     # Build index + content
     lines = ["Context files:", ""]
     for path, _ in files:
-        lines.append(f"  • {os.path.basename(path)}")
+        rel_path = os.path.relpath(path, common_dir)
+        lines.append(f"  • {rel_path}")
     lines.append("")
 
     # Add each file with clear delimiters
     for path, content in files:
+        rel_path = os.path.relpath(path, common_dir)
         lines.append(f"\n{'=' * 70}")
-        lines.append(f"Context File: {os.path.basename(path)}")
+        lines.append(f"Context File: {rel_path}")
         lines.append(f"{'=' * 70}\n")
         lines.append(content)
 
