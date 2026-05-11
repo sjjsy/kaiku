@@ -122,7 +122,7 @@ Config file is created at `~/.config/asr2clip/config.yaml`. Locations searched i
 
 ### Backends
 
-All backends are defined under a `backends:` section. Name them whatever you like and switch at runtime with `-b NAME`. `default_backend_live` and `default_backend_file` name which backend to use for each mode when `-b` is not given — the same idea as `preprocessor_live` / `preprocessor_file`. `-b` overrides both.
+All backends are defined under a `backends:` section. Name them whatever you like and switch at runtime with `-b NAME`. `backend_live` and `backend_file` name which backend to use for each mode when `-b` is not given — the same idea as `preprocessor_live` / `preprocessor_file`. `-b` overrides both.
 
 `asr2clip --generate_config` writes a fully annotated config with every supported backend type listed as commented-out examples — uncomment and fill in the one(s) you want.
 
@@ -135,8 +135,8 @@ backends:
     api_base_url: "https://api.openai.com/v1/"
     api_key: "YOUR_API_KEY"
     model_name: "whisper-1"
-default_backend_live: openai
-default_backend_file: openai
+backend_live: openai
+backend_file: openai
 ```
 
 A multi-backend example with per-mode defaults:
@@ -156,13 +156,13 @@ backends:
     type: whisper_cpp
     binary: ~/path/to/whisper.cpp/build/bin/whisper-cli
     model:  ~/path/to/whisper.cpp/models/ggml-large-v3-turbo-q8_0.bin
-default_backend_live: groq    # live/toggle/VAD recording
-default_backend_file: wcpp    # -i file transcription
+backend_live: groq    # live/toggle/VAD recording
+backend_file: wcpp    # -i file transcription
 ```
 
 ```bash
-asr2clip                       # live recording → groq (default_backend_live)
-asr2clip -i audio.wav          # file transcription → wcpp (default_backend_file)
+asr2clip                       # live recording → groq (backend_live)
+asr2clip -i audio.wav          # file transcription → wcpp (backend_file)
 asr2clip -b sonnx              # override for this run (both modes)
 asr2clip -b wcpp -i audio.wav  # transcribe a file with a specific backend
 asr2clip --test                # tests both live and file backends if they differ
@@ -421,7 +421,7 @@ optional arguments:
   -q, --quiet           Quiet mode - only output transcription and errors
   -b NAME, --backend NAME
                         Named backend to use (defined under 'backends:' in config).
-                        Overrides default_backend_live / default_backend_file in config.
+                        Overrides backend_live / backend_file in config.
   -i FILE, --input FILE
                         Transcribe an existing audio or video file instead of
                         recording. Supported: wav, mp3, m4a, ogg, flac, aac,

@@ -54,8 +54,8 @@ backends:
   #   model:  ~/path/to/whisper.cpp/models/ggml-large-v3-turbo-q8_0.bin
   #   # language: auto                        # 'auto' or ISO-639-1 (e.g. fi, en)
   #   # threads: 4
-default_backend_live: openai                  # backend for live/toggle/VAD recording
-default_backend_file: openai                  # backend for -i file transcription
+backend_live: openai                          # backend for live/toggle/VAD recording
+backend_file: openai                          # backend for -i file transcription
 
 # quiet: false                               # true = only output transcription and errors
 # org_id:                                    # OpenAI organization ID (rarely needed)
@@ -322,7 +322,7 @@ def resolve_backend_name(
         return None
     if backend_name:
         return backend_name
-    mode_key = "default_backend_live" if mode == "live" else "default_backend_file"
+    mode_key = "backend_live" if mode == "live" else "backend_file"
     return config.get(mode_key) or next(iter(backends))
 
 
@@ -344,8 +344,8 @@ def resolve_backend_config(
             type: whisper_cpp
             binary: ...
             model: ...
-        default_backend_live: groq    # live/toggle/VAD recording
-        default_backend_file: local   # -i file transcription
+        backend_live: groq    # live/toggle/VAD recording
+        backend_file: local   # -i file transcription
 
     Args:
         config: Full configuration dictionary.
@@ -368,8 +368,8 @@ def resolve_backend_config(
             "      type: api\n"
             "      api_key: YOUR_KEY\n"
             "      ...\n"
-            "  default_backend_live: groq\n"
-            "  default_backend_file: groq\n"
+            "  backend_live: groq\n"
+            "  backend_file: groq\n"
         )
         import sys
         sys.exit(1)

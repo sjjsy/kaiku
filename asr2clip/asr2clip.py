@@ -331,7 +331,7 @@ Robust long-file transcription:
         default=None,
         help=(
             "Named backend to use (defined under 'backends:' in config). "
-            "Overrides default_backend_live / default_backend_file in config."
+            "Overrides backend_live / backend_file in config."
         ),
     )
     parser.add_argument(
