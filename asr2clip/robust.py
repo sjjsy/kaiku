@@ -99,15 +99,15 @@ def process_file_robust(
     info(f"Audio loaded: {total_s:.1f}s total ({time.time() - t0:.1f}s to load)")
 
     if preprocessor is not None and not isinstance(preprocessor, NonePreprocessor):
-        log(f"Pre-processing audio with {preprocessor.name}...")
+        log(f"Preprocessing audio with {preprocessor.name}...")
         t_pre = time.time()
         try:
             audio_np = audiosegment_to_float32(audio)
             audio_np = preprocessor.process(audio_np, 16000)
             audio = float32_to_audiosegment(audio_np, 16000)
-            info(f"Pre-processing completed in {time.time() - t_pre:.2f}s")
+            info(f"Preprocessing completed in {time.time() - t_pre:.2f}s")
         except Exception as e:
-            warning(f"Pre-processing failed ({e}), using audio as-is.")
+            warning(f"Preprocessing failed ({e}), using audio as-is.")
 
     max_chunk_ms = chunk_duration * 1000
     boundaries = _find_chunk_boundaries(audio, max_chunk_ms)

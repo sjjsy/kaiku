@@ -1,4 +1,4 @@
-"""Base class for audio pre-processors."""
+"""Base class for audio preprocessors."""
 
 from __future__ import annotations
 
@@ -43,7 +43,7 @@ def loudnorm(
 
 
 class AudioPreprocessor(ABC):
-    """Abstract base for audio pre-processing applied before transcription."""
+    """Abstract base for audio preprocessing applied before transcription."""
 
     @property
     @abstractmethod

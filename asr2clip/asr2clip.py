@@ -90,7 +90,7 @@ def test_config(
     from .preprocessors import check_preprocessor_available
 
     print_separator()
-    info("Checking pre-processors...")
+    info("Checking preprocessors...")
 
     cfg_live = resolve_preprocessor_config(full_config, preprocessor_override, "live")
     cfg_file = resolve_preprocessor_config(full_config, preprocessor_override, "file")
@@ -147,10 +147,10 @@ def process_recording(
     info(f"Recorded {duration:.1f}s of audio ({time.time() - t0:.1f}s elapsed)")
 
     if preprocessor is not None and not isinstance(preprocessor, NonePreprocessor):
-        log(f"Pre-processing audio with {preprocessor.name}...")
+        log(f"Preprocessing audio with {preprocessor.name}...")
         t_pre = time.time()
         audio_data = preprocessor.process(audio_data, 16000)
-        info(f"Pre-processing completed in {time.time() - t_pre:.2f}s")
+        info(f"Preprocessing completed in {time.time() - t_pre:.2f}s")
 
     log("Processing...")
     temp_path = save_audio(audio_data)
@@ -208,20 +208,20 @@ def process_file(
         temp_path = input_file
         cleanup_temp = False
 
-    # Apply pre-processing (load → process → re-save) when a real preprocessor is active
+    # Apply preprocessing (load → process → re-save) when a real preprocessor is active
     if preprocessor is not None and not isinstance(preprocessor, NonePreprocessor):
         try:
             audio_data, sr = load_wav(temp_path)
-            log(f"Pre-processing audio with {preprocessor.name}...")
+            log(f"Preprocessing audio with {preprocessor.name}...")
             t_pre = time.time()
             audio_data = preprocessor.process(audio_data, sr)
-            info(f"Pre-processing completed in {time.time() - t_pre:.2f}s")
+            info(f"Preprocessing completed in {time.time() - t_pre:.2f}s")
             if cleanup_temp:
                 os.unlink(temp_path)
             temp_path = save_audio(audio_data, sr)
             cleanup_temp = True
         except Exception as e:
-            warning(f"Pre-processing failed ({e}), using audio as-is.")
+            warning(f"Preprocessing failed ({e}), using audio as-is.")
 
     try:
         t1 = time.time()
@@ -273,19 +273,19 @@ Setup:
   asr2clip --list_devices              # List audio devices
   asr2clip --print_config              # Print config template (shows all options)
 
-Audio pre-processing (noise reduction before transcription):
-  asr2clip -P deepfilter               # Record + denoise with DeepFilterNet3 (best quality)
-  asr2clip -P pyrnnoise                # Record + denoise with RNNoise (lowest latency)
-  asr2clip -P noisereduce              # Record + spectral subtraction
-  asr2clip -P none                     # Disable pre-processing for this run
-  asr2clip -P deepfilter -i m.mp4      # File transcription with denoising
-  asr2clip -P deepfilter -i m.mp4 -R   # Robust chunked + denoised
-  asr2clip --test                      # Checks backend AND both configured preprocessors
-
 Local ASR server (sherpa-onnx):
   asr2clip --serve                     # Start local ASR server on :8000
   asr2clip --serve --port 9000         # Start on custom port
   asr2clip --download-model            # Download SenseVoice model
+
+Audio preprocessing before transcription (only for non-VAD usage):
+  asr2clip -P deepfilter               # Record + denoise with DeepFilterNet3 (best quality)
+  asr2clip -P pyrnnoise                # Record + denoise with RNNoise (lowest latency)
+  asr2clip -P noisereduce              # Record + spectral subtraction
+  asr2clip -P none                     # Disable preprocessing for this run
+  asr2clip -P deepfilter -i m.mp4      # File transcription with denoising
+  asr2clip -P deepfilter -i m.mp4 -R   # Robust chunked + denoised
+  asr2clip --test                      # Checks backend AND both configured preprocessors
 
 Toggle mode (useful as a keyboard shortcut with WM keybinding):
   asr2clip --toggle                    # First call: start recording in background
@@ -351,7 +351,7 @@ Robust long-file transcription:
         metavar="NAME",
         default=None,
         help=(
-            "Audio pre-processor to apply before transcription. "
+            "Audio preprocessor to apply before transcription. "
             "Choices: none, noisereduce, pyrnnoise, deepfilter. "
             "Overrides preprocessor_live / preprocessor_file in config."
         ),

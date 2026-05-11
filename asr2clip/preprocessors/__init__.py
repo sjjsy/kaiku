@@ -1,4 +1,4 @@
-"""Audio pre-processor package for asr2clip."""
+"""Audio preprocessor package for asr2clip."""
 
 from __future__ import annotations
 

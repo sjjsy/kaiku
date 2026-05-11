@@ -57,7 +57,7 @@ backends:
   #   # threads: 4
 ## Default backend choices (can be overridden via CLI with -b BACKEND):
 backend_live: openai                          # backend for live/toggle/VAD recording
-backend_file: openai                          # backend for -i file transcription
+backend_file: openai                          # backend for file transcription (-i FILE)
 
 ## Default audio input choice (can be overridden via CLI with -d DEVICE):
 # Note: "pulse"/"pipewire" uses whichever mic is set as default in system settings.
@@ -68,9 +68,9 @@ backend_file: openai                          # backend for -i file transcriptio
 # audio_device: "plughw:Snowball"            # ALSA device name — bypasses system mixer
 # audio_device: 3                            # device index from --list_devices
 
-## Audio pre-processing (noise reduction before transcription in non-VAD usage):
+## Audio preprocessing before transcription (only for non-VAD usage):
 # Options: none, noisereduce, pyrnnoise, deepfilter
-#   none        — no pre-processing, zero latency, no extra dependencies
+#   none        — no preprocessing, zero latency, no extra dependencies
 #   noisereduce — spectral subtraction; best for stationary noise (fan, AC)
 #                 install: pip install asr2clip[noisereduce]
 #   pyrnnoise   — Mozilla RNNoise GRU; best for non-stationary noise (babble)
@@ -78,8 +78,8 @@ backend_file: openai                          # backend for -i file transcriptio
 #   deepfilter  — DeepFilterNet3, best quality, medium CPU
 #                 install: pip install asr2clip[deepfilter]
 # Override at runtime: asr2clip -P deepfilter -i meeting.mp4
-preprocessor_live: none                      # applied to live recordings (toggle, single-shot)
-preprocessor_file: none                      # applied to file transcription (-i)
+preprocessor_live: none                      # applied to live single-shot recordings
+preprocessor_file: none                      # applied to file transcription (-i FILE)
 
 ## Other parameters:
 # quiet: false                               # true = only output transcription and errors

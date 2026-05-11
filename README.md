@@ -70,10 +70,10 @@ Optional Python packages (install only what you need):
 | Extra | Install command | Purpose | Section |
 |-------|----------------|---------|---------|
 | `vad` | `pip install asr2clip[vad]` | VAD continuous recording + local sherpa-onnx ASR server | [Continuous recording](#continuous-recording), [Local ASR server](#local-asr-server-sherpa-onnx) |
-| `noisereduce` | `pip install asr2clip[noisereduce]` | Spectral noise reduction | [Audio pre-processing](#audio-pre-processing-noise-reduction) |
-| `pyrnnoise` | `pip install asr2clip[pyrnnoise]` | Neural GRU noise reduction | [Audio pre-processing](#audio-pre-processing-noise-reduction) |
-| `deepfilter` | `pip install asr2clip[deepfilter]` | DeepFilterNet3 best-quality denoising | [Audio pre-processing](#audio-pre-processing-noise-reduction) |
-| `enhance` | `pip install asr2clip[enhance]` | All three noise reduction options above | [Audio pre-processing](#audio-pre-processing-noise-reduction) |
+| `noisereduce` | `pip install asr2clip[noisereduce]` | Spectral noise reduction | [Audio preprocessing](#audio-preprocessing-noise-reduction) |
+| `pyrnnoise` | `pip install asr2clip[pyrnnoise]` | Neural GRU noise reduction | [Audio preprocessing](#audio-preprocessing-noise-reduction) |
+| `deepfilter` | `pip install asr2clip[deepfilter]` | DeepFilterNet3 best-quality denoising | [Audio preprocessing](#audio-preprocessing-noise-reduction) |
+| `enhance` | `pip install asr2clip[enhance]` | All three noise reduction options above | [Audio preprocessing](#audio-preprocessing-noise-reduction) |
 
 ## Installation
 
@@ -97,7 +97,7 @@ Only the deepfilter package for high quality single-shot/toggle/file recordings:
 pip install asr2clip[deepfilter]
 ```
 
-Note: The audio pre-processing options are not yet applied in VAD/interval continuous mode, but of course they are still useful if you do not use VAD exclusively.
+Note: The audio preprocessing options are not yet applied in VAD/interval continuous mode, but of course they are still useful if you do not use VAD exclusively.
 
 **From source:**
 ```bash
@@ -253,14 +253,14 @@ audio_device: 3                    # device index from --list_devices
 | `3` | Any | Device index from `--list_devices` |
 | `"BlackHole 2ch"` | macOS | Virtual routing device |
 
-### Audio pre-processing (noise reduction)
+### Audio preprocessing (noise reduction)
 
 asr2clip can denoise audio before sending it to the transcription backend. This
 is especially useful in noisy environments (café, open-plan office, outdoor) or
 when recording with variable speaker distances. Whisper and similar models
 are sensitive to background noise and tend to hallucinate when the signal is poor.
 
-**Available pre-processors:**
+**Available preprocessors:**
 
 | Name | Technology | Extra dependencies | Con | Best for |
 |------|-----------|-------------------|-----|----------|
@@ -386,7 +386,7 @@ VAD options:
 - `--silence_threshold PROB`: speech probability threshold, 0.0–1.0 (default: 0.5); lower = more sensitive
 - `--silence_duration SEC`: how long silence must last to trigger a transcription (default: 1.5 s)
 
-> **Note:** Audio pre-processing (`-P`) is not yet applied in VAD/interval continuous mode — only in single recording, toggle, and file transcription modes.
+> **Note:** Audio preprocessing (`-P`) is not yet applied in VAD/interval continuous mode — only in single recording, toggle, and file transcription modes.
 
 ### Robust long-file transcription
 
@@ -427,7 +427,7 @@ optional arguments:
                         recording. Supported: wav, mp3, m4a, ogg, flac, aac,
                         opus, wma, mp4, mov, mkv, webm, avi, flv, mvi
   -P NAME, --preprocessor NAME
-                        Audio pre-processor to apply before transcription.
+                        Audio preprocessor to apply before transcription.
                         Choices: none, noisereduce, pyrnnoise, deepfilter.
                         Overrides preprocessor_live / preprocessor_file in config.
   -o FILE, --output FILE
@@ -483,7 +483,7 @@ Local ASR server:
 | Silent audio | Try a different audio device with `--device` |
 | Video/audio format rejected | Ensure `ffmpeg` is installed (`apt install ffmpeg` / `brew install ffmpeg`) |
 | Preprocessor not found | Run `asr2clip --test` to see which are available and their install commands |
-| Pre-processing too slow | Switch `preprocessor_live` to `noisereduce` or `none` in config |
+| Preprocessing too slow | Switch `preprocessor_live` to `noisereduce` or `none` in config |
 
 Run `asr2clip --test` (or `asr2clip --test -b <name>`) to diagnose issues. The test
 command also verifies that your configured preprocessors are installed and importable.

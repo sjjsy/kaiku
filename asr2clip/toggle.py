@@ -149,7 +149,7 @@ def toggle_recording(
         config: Full configuration dictionary.
         device: Audio input device (name string or index).
         output_file: Optional file to append transcript to.
-        preprocessor: Audio pre-processor to apply before transcription.
+        preprocessor: Audio preprocessor to apply before transcription.
     """
     lock_path = _lock_path()
 
@@ -235,19 +235,19 @@ def _transcribe_and_output(
     except Exception:
         info("Transcribing recorded audio…")
 
-    # Apply pre-processing if requested
+    # Apply preprocessing if requested
     preprocessed_path: str | None = None
     if preprocessor is not None and not isinstance(preprocessor, NonePreprocessor):
         try:
             audio_data, sr = load_wav(audio_path)
-            log(f"Pre-processing audio with {preprocessor.name}…")
+            log(f"Preprocessing audio with {preprocessor.name}…")
             t_pre = time.time()
             audio_data = preprocessor.process(audio_data, sr)
-            info(f"Pre-processing completed in {time.time() - t_pre:.2f}s")
+            info(f"Preprocessing completed in {time.time() - t_pre:.2f}s")
             preprocessed_path = save_audio(audio_data, sr)
             transcribe_path = preprocessed_path
         except Exception as e:
-            warning(f"Pre-processing failed ({e}), using original audio.")
+            warning(f"Preprocessing failed ({e}), using original audio.")
             transcribe_path = audio_path
     else:
         transcribe_path = audio_path
