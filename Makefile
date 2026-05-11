@@ -26,12 +26,28 @@ clean:
 	rm -rf $(BUILD_DIR) $(DIST_DIR) *.egg-info
 	@echo "Cleanup complete."
 
+# Run the test suite
+test:
+	@echo "Running unit tests..."
+	pytest tests/unit -v
+
+test-e2e:
+	@echo "Running E2E tests (requires whisper-cli on PATH)..."
+	pytest tests/e2e -v
+
+test-all:
+	@echo "Running all tests..."
+	pytest tests/ -v
+
 # Help target
 help:
 	@echo "Available targets:"
-	@echo "  build   - Build the pip package"
-	@echo "  push    - Push the package to PyPI"
-	@echo "  clean   - Clean up build and distribution files"
-	@echo "  help    - Show this help message"
+	@echo "  build     - Build the pip package"
+	@echo "  push      - Push the package to PyPI"
+	@echo "  clean     - Clean up build and distribution files"
+	@echo "  test      - Run unit tests"
+	@echo "  test-e2e  - Run E2E tests (requires whisper-cli)"
+	@echo "  test-all  - Run all tests"
+	@echo "  help      - Show this help message"
 
-.PHONY: all build push clean help
+.PHONY: all build push clean test test-e2e test-all help

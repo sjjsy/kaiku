@@ -57,27 +57,50 @@ def _is_alsa_device(device: str | int | None) -> bool:
     return any(device.startswith(p) for p in _ALSA_PREFIXES)
 
 
+def _friendly_to_alsa(device: str) -> str | None:
+    """Resolve a PortAudio friendly name to an ALSA plughw: string for arecord.
+
+    sounddevice device names often embed the ALSA index, e.g.
+    'Blue Snowball: USB Audio (hw:2,0)' → 'plughw:2,0'.
+    Returns None when the index cannot be found.
+    """
+    import re
+    try:
+        import sounddevice as sd
+        info = sd.query_devices(device, "input")
+        m = re.search(r"\(hw:(\d+),(\d+)\)", info["name"])
+        if m:
+            return f"plughw:{m.group(1)},{m.group(2)}"
+    except Exception:
+        pass
+    return None
+
 
 def _start_arecord(audio_path: str, device: str | int | None) -> int | None:
     """Start arecord in background. Returns PID, or None if arecord is unusable."""
     if not shutil.which("arecord"):
         return None
 
-    rate = _device_native_rate(device if _is_alsa_device(device) else None) or 44100
+    # Resolve friendly PortAudio name → ALSA string for arecord
+    alsa_device: str | int | None = device
+    if isinstance(device, str) and not _is_alsa_device(device):
+        resolved = _friendly_to_alsa(device)
+        if resolved:
+            alsa_device = resolved
+        else:
+            warning(
+                f"Device '{device}' could not be mapped to an ALSA name; "
+                "arecord will use the default device."
+            )
+            alsa_device = None
+
+    rate = _device_native_rate(alsa_device if _is_alsa_device(alsa_device) else None) or 44100
     cmd = ["arecord", "-f", "S16_LE", "-r", str(rate), "-c", "1"]
 
     if isinstance(device, int):
         warning("Toggle mode uses arecord; integer device indices not supported. Using default device.")
-    elif device is not None and _is_alsa_device(device):
-        cmd += ["-D", device]
-    elif device is not None:
-        # Friendly name (e.g. "Blue Snowball") — not valid for arecord; use pulse
-        if shutil.which("arecord"):
-            warning(
-                f"Device '{device}' is not an ALSA name; arecord will use the "
-                "default device. Set audio_device to an ALSA name (e.g. 'pulse') "
-                "in your config to route to a specific device."
-            )
+    elif alsa_device is not None and _is_alsa_device(alsa_device):
+        cmd += ["-D", alsa_device]
 
     cmd.append(audio_path)
     proc = subprocess.Popen(

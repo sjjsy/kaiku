@@ -176,7 +176,7 @@ def output_transcript(
         to_file: Optional file path to append transcript to.
     """
     if to_clipboard:
-        copy_transcript_to_clipboard(text, output_file if to_file else None)
+        copy_transcript_to_clipboard(text, to_file if to_file else None)
 
     if to_stdout:
         print(text)

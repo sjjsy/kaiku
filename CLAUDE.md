@@ -23,7 +23,7 @@ Output routing, prompt engineering, context injection beyond `context_path`, per
 
 ## Post-processing system
 
-- All prompts are **user-defined in config** — no hardcoded prompts. Five prompts are shipped in the config template: `solo-base`, `solo-enhanced`, `solo-restructured`, `solo-private`, `group`.
+- All prompts are **user-defined in config** — no hardcoded prompts. Five prompts are shipped in the config template: `solo-base`, `solo-enhance`, `solo-restructure`, `solo-private`, `group`.
 - `postprocessors/__init__.py`: `make_postprocessor()`, `resolve_output_template()`, `format_output()`
 - Prompt resolution supports `extends:` + `extra:` inheritance (user-defined only, circular guard in `_resolve_prompt`)
 - Per-prompt `backend:`, `model:`, `template:`, `context_path:` fields
@@ -78,7 +78,7 @@ Lowercase = earlier/basic feature. Uppercase = later/advanced feature.
 - **Inline comments in bash code blocks:** Always pad to 46 characters before `#` so comments start at the same column. Format: `command` + spaces to position 46, then `# comment`. Apply to the epilog in `_build_parser()` and all bash example blocks in the README.
 - **Argument group order in `_build_parser()`:** Setup → Audio → Transcription → Local ASR server → VAD (continuous recording) → Diarization → Post-processing.
 - **Config key names:** ASR backends use `asr_backends:`, `asr_backend_live:`, `asr_backend_file:` (mirrors `postprocessor_backends:` naming). No backward-compat fallbacks.
-- **Post-processing prompt names:** Built-in prompts are `solo-base`, `solo-enhanced`, `solo-restructured`, `solo-private`, `group`. Output template names are `bare` and `full`. Use these in all examples and documentation.
+- **Post-processing prompt names:** Built-in prompts are `solo-base`, `solo-enhance`, `solo-restructure`, `solo-private`, `group`. Output template names are `bare` and `full`. Use these in all examples and documentation.
 
 ## README structure
 

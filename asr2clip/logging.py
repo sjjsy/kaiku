@@ -386,6 +386,15 @@ def print_error(message: str):
     print_status(f"✗ {message}", "error")
 
 
+def print_warning(message: str):
+    """Print a warning message (non-fatal advisory).
+
+    Args:
+        message: The message to print.
+    """
+    print_status(f"⚠ {message}", "warning")
+
+
 def print_separator(char: str = "─", width: int = 40):
     """Print a separator line.
 

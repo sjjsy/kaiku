@@ -53,6 +53,7 @@ def test_config(
     backend_config: dict,
     full_config: dict | None = None,
     preprocessor_override: str | None = None,
+    mode: str = "both",
 ) -> bool:
     """Test the configuration by checking backend connectivity and preprocessor availability.
 
@@ -60,6 +61,7 @@ def test_config(
         backend_config: Resolved backend configuration dictionary.
         full_config: Full (unresolved) configuration dictionary for preprocessor checks.
         preprocessor_override: Name supplied via -P/--preprocessor flag.
+        mode: Which preprocessor mode(s) to check — "live", "file", or "both".
 
     Returns:
         True if all configured components are accessible.
@@ -86,27 +88,145 @@ def test_config(
     if full_config is None:
         return backend_ok
 
-    # Check preprocessors
+    # Check preprocessors — only for the modes relevant to this backend invocation
     from .preprocessors import check_preprocessor_available
 
     print_separator()
     info("Checking preprocessors...")
 
-    cfg_live = resolve_preprocessor_config(full_config, preprocessor_override, "live")
-    cfg_file = resolve_preprocessor_config(full_config, preprocessor_override, "file")
+    modes_to_check = (
+        [("live", "live"), ("file", "file")] if mode == "both"
+        else [("live", "live")] if mode == "live"
+        else [("file", "file")]
+    )
 
     pp_ok = True
-    for label, name in [("live", cfg_live), ("file", cfg_file)]:
+    for label, m in modes_to_check:
+        name = resolve_preprocessor_config(full_config, preprocessor_override, m)
         avail, hint = check_preprocessor_available(name)
         if avail:
             print_success(f"Preprocessor ({label}): {name}")
         else:
-            print_error(
-                f"Preprocessor ({label}): {name} — NOT AVAILABLE  ({hint})"
-            )
+            print_error(f"Preprocessor ({label}): {name} — NOT AVAILABLE  ({hint})")
             pp_ok = False
 
     return backend_ok and pp_ok
+
+
+def _test_postprocessors(config: dict, post_override: str | None, model_override: str | None) -> bool:
+    """Check that post-processor backends are reachable. Returns True if all OK."""
+    import shutil
+    from .postprocessors import resolve_postprocessor_config
+    from .postprocessors import _resolve_backend, _resolve_prompt
+    from .utils import print_error, print_success
+
+    print_separator()
+    info("Checking post-processors...")
+
+    ok = True
+    seen: set = set()
+
+    for mode in ("live", "file"):
+        name = resolve_postprocessor_config(config, post_override, mode)
+        label = f"({mode})"
+
+        if name in (None, "none"):
+            print_success(f"Post-processor {label}: none")
+            continue
+
+        # Deduplicate: if live and file use the same named processor, only check once
+        if name in seen:
+            print_success(f"Post-processor {label}: {name}  (same as above)")
+            continue
+        seen.add(name)
+
+        # Resolve backend type
+        try:
+            resolved = _resolve_prompt(name, config)
+            backend_cfg = _resolve_backend(config, resolved["backend_name"], model_override)
+        except SystemExit:
+            print_error(f"Post-processor {label}: {name} — config error (see above)")
+            ok = False
+            continue
+
+        btype = backend_cfg["type"]
+        model = backend_cfg.get("model", "")
+        model_note = f"  model: {model}" if model else ""
+
+        if btype == "claude_code":
+            if shutil.which("claude"):
+                print_success(f"Post-processor {label}: {name}  (claude_code{model_note})")
+                print_success("  claude CLI: found")
+            else:
+                print_error(f"Post-processor {label}: {name}  (claude_code{model_note})")
+                print_error("  claude CLI: NOT FOUND — install from https://claude.ai/code")
+                ok = False
+
+        elif btype == "openai_compat":
+            from .transcribe import test_transcription
+            api_base = backend_cfg.get("api_base_url", "")
+            api_key = backend_cfg.get("api_key", "sk-none")
+            org_id = None
+            print_success(f"Post-processor {label}: {name}  (openai_compat{model_note})")
+            print_key_value("  Endpoint", api_base)
+            reachable = test_transcription(api_key, api_base, model, org_id)
+            if not reachable:
+                ok = False
+        else:
+            print_error(f"Post-processor {label}: {name} — unknown backend type '{btype}'")
+            ok = False
+
+    return ok
+
+
+def _test_clipboard() -> bool:
+    """Check clipboard availability. Returns True if OK."""
+    from .utils import print_error, print_success
+    import shutil, os
+
+    print_separator()
+    info("Checking clipboard...")
+
+    if os.environ.get("WAYLAND_DISPLAY") and shutil.which("wl-copy"):
+        print_success("wl-copy available (Wayland)")
+        return True
+    try:
+        import copykitten
+        copykitten.copy("")
+        print_success("copykitten available (X11 / fallback)")
+        return True
+    except Exception as e:
+        from .utils import print_error
+        print_error(f"Clipboard unavailable: {e}")
+        print_error("  Install wl-copy (Wayland) or ensure copykitten works on X11")
+        return False
+
+
+def _test_diarization(config: dict) -> None:
+    """Check diarization dependencies. Prints warnings; never blocks overall success."""
+    import importlib.util
+    from .utils import print_success, print_warning
+
+    print_separator()
+    info("Checking diarization (optional)...")
+
+    if importlib.util.find_spec("whisperx") is None:
+        print_warning("whisperx: not installed  →  pip install asr2clip[diarize]")
+        print_warning("  (--diarize will not work until installed)")
+        return
+
+    print_success("whisperx: installed")
+
+    hf_token = config.get("diarize_hf_token") or os.environ.get("HF_TOKEN")
+    if hf_token:
+        masked = f"{'*' * 8}...{hf_token[-4:]}" if len(hf_token) > 4 else "****"
+        print_success(f"HuggingFace token: {masked}")
+    else:
+        print_warning(
+            "HuggingFace token: not set\n"
+            "  Set HF_TOKEN env var or add 'diarize_hf_token: hf_...' to config.\n"
+            "  (--diarize will fail until token is provided)"
+        )
 
 
 def process_recording(
@@ -208,6 +328,37 @@ def process_file(
 
     log(f"Processing file: {input_file}")
 
+    if input_file.lower().endswith(".txt"):
+        with open(input_file, encoding="utf-8") as fh:
+            transcript = fh.read()
+        if not transcript.strip():
+            log("Transcript file is empty.")
+            return
+        result = transcript
+        if postprocessor is not None and not isinstance(postprocessor, NonePostProcessor):
+            from datetime import date
+            metadata = PostMetadata(
+                date=date.today().isoformat(),
+                duration_s=0.0,
+                language=language or "auto",
+                prompt_name=postprocessor.name,
+                diarized=False,
+                source="file",
+            )
+            log(f"Post-processing with '{postprocessor.name}'...")
+            t_post = time.time()
+            result = postprocessor.process(transcript, metadata=metadata)
+            info(f"Post-processing completed in {time.time() - t_post:.1f}s")
+            final = format_output(
+                template_str, result=result, transcript=transcript,
+                metadata=metadata, model=postprocessor.model,
+                backend=postprocessor.backend_type,
+            )
+        else:
+            final = result
+        output_transcript(final, to_clipboard=True, to_stdout=True, to_file=output_file)
+        return
+
     if not input_file.lower().endswith(".wav"):
         t0 = time.time()
         log("Converting to WAV format...")
@@ -302,7 +453,7 @@ Examples:
   asr2clip --test                             # verify backend and preprocessors
   asr2clip                                    # record, transcribe, copy to clipboard
   asr2clip --toggle                           # toggle recording (for keyboard shortcuts)
-  asr2clip --toggle -P solo-restructured      # toggle, and produce LLM-structured memo
+  asr2clip --toggle -P solo-restructure      # toggle, and produce LLM-structured memo
   asr2clip -i audio.mp3                       # transcribe an existing file
   asr2clip -i m.mp3 -p deepfilter -r          # neural denoising + chunked transcription
   asr2clip -i m.m4a -D -s 3                   # speaker diarization, 3 speakers
@@ -619,13 +770,24 @@ def main():
 
     if args.test:
         if live_name == file_name or file_name is None:
-            success = test_config(backend_config_live, config, args.preprocessor)
+            ok_asr = test_config(backend_config_live, config, args.preprocessor, mode="both")
         else:
             info("--- live backend ---")
-            ok_live = test_config(backend_config_live, config, args.preprocessor)
+            ok_live = test_config(backend_config_live, config, args.preprocessor, mode="live")
             info("--- file backend ---")
-            ok_file = test_config(backend_config_file, config, args.preprocessor)
-            success = ok_live and ok_file
+            ok_file = test_config(backend_config_file, config, args.preprocessor, mode="file")
+            ok_asr = ok_live and ok_file
+
+        ok_post = _test_postprocessors(config, args.post, args.post_model)
+        ok_clip = _test_clipboard()
+        _test_diarization(config)  # informational only; never blocks success
+
+        print_separator()
+        success = ok_asr and ok_post and ok_clip
+        if success:
+            info("All checks passed.")
+        else:
+            info("Some checks failed — see details above.")
         sys.exit(0 if success else 1)
 
     device = get_audio_device(config, args.device)
@@ -639,10 +801,14 @@ def main():
         resolve_preprocessor_config(config, args.preprocessor, "file")
     )
 
-    if preprocessor_live.name != "none":
-        info(f"Live preprocessor: {preprocessor_live.name}")
-    if preprocessor_file.name != "none":
-        info(f"File preprocessor: {preprocessor_file.name}")
+    if preprocessor_live.name == preprocessor_file.name:
+        if preprocessor_live.name != "none":
+            info(f"Preprocessor: {preprocessor_live.name}")
+    else:
+        if preprocessor_live.name != "none":
+            info(f"Live preprocessor: {preprocessor_live.name}")
+        if preprocessor_file.name != "none":
+            info(f"File preprocessor: {preprocessor_file.name}")
 
     # Resolve post-processors and output templates
     from .postprocessors import (

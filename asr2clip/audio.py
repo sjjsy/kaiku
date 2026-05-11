@@ -80,6 +80,19 @@ def _device_native_rate(device: str | int | None) -> int | None:
         return None
 
 
+def _sounddevice_device(device: str | int | None) -> str | int | None:
+    """Translate ALSA hw:/plughw: strings to a PortAudio-compatible form.
+
+    arecord accepts 'plughw:2,0' but sounddevice/PortAudio does not.
+    Strip the prefix so PortAudio can match by card name substring.
+    """
+    if not isinstance(device, str):
+        return device
+    if device.startswith("hw:") or device.startswith("plughw:"):
+        return device.split(":", 1)[1].split(",")[0]
+    return device
+
+
 def _resample_audio(audio: np.ndarray, from_rate: int, to_rate: int) -> np.ndarray:
     """Resample a (N, channels) float32 array from from_rate to to_rate via pydub."""
     from pydub import AudioSegment  # noqa: PLC0415 — intentional lazy import
@@ -119,6 +132,7 @@ def record_audio(
     Returns:
         Recorded audio as numpy array at sample_rate Hz.
     """
+    device = _sounddevice_device(device)
     audio_chunks: list = []
     actual_rate = sample_rate
 

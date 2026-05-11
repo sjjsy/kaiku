@@ -57,12 +57,12 @@ class ClaudeCodePostProcessor(PostProcessor):
             speakers=", ".join(metadata.speakers) if metadata.speakers else "",
         )
         if self._context_text:
-            user_content = f"## Context\n\n{self._context_text}\n\n---\n\n{user_content}"
+            user_content = f"# Context Files\n\n{self._context_text}\n\n# Transcript Processing Instructions\n\n{user_content}"
 
         cmd = ["claude"]
         if self._model:
-            cmd += ["-m", self._model]
-        cmd += ["-p", self._system_prompt, "--no-markdown"]
+            cmd += ["--model", self._model]
+        cmd += ["-p", self._system_prompt]
 
         try:
             result = subprocess.run(

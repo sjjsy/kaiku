@@ -116,19 +116,22 @@ postprocessors:                               # FIXME: These are not commented o
       Both the recording and the transcribing may have produced sub-standard quality which may make your work more demanding.
       Overcome any possible mistakes in the transcript and attempt to understand the true intent of the speaker.
 
-  solo-enhanced:
+  solo-enhance:
     extends: solo-base
     extra: |
       The content may be intended to constitute a message, an email, a command, a personal diary or note entry, or an unstructured thinking-aloud segment, or something else.
-      Produce an improved transcript that honors the author's original choice of words, structures and flow but fix misspellings and grammatical and transcription mistakes, reduce unnecessary words and repetition and otherwise improve the quality and legibility of the transcript.
+      Produce an enhanced transcript that honors the author's original choice of words, structures and flow but fix misspellings and grammatical and transcription mistakes, reduce unnecessary words and repetition and otherwise improve the quality and legibility of the transcript.
+      Output the enhanced transcript without any frontmatter or leading "meta" notes.
+      Any significant interpretation uncertainties that have substantive impact on the information content can however be noted at the end after a separator line '\n---\n\n'.
 
-  solo-restructured:
+  solo-restructure:
     extends: solo-base
     context_path:
       - "~/.asr2clip/context/personal.md"     # include personal context info to improve reasoning
     extra: |
       The content may be from a long unstructured dictation or thinking-aloud session for some purpose (which may be deducible from the transcript itself).
       Produce a concise, structured memo that maximizes legibility and usefulness.
+#      Write in the main language that was used in the transcript.
       The following provides a template. Omit sections that would have no clear content.
 
       # YYYY-MM-DD HH:SS Solo Notes on <Topic in Title Case>
@@ -151,8 +154,8 @@ postprocessors:                               # FIXME: These are not commented o
       [/] Action that is in progress (by person A, due by date B, if specified)
       [ ] Action that is to be done but not yet started>
 
-  solo-private:                               # extends solo-restructured with private context and leverages an offline backend for privacy
-    extends: solo-restructured
+  solo-private:                               # extends solo-restructure with private context and leverages an offline backend for privacy
+    extends: solo-restructure
     backend: ollama                           # use local offline ollama model for sensitive content
     context_path:
       - "~/.asr2clip/context/private.md"      # include private info to improve reasoning
@@ -169,13 +172,16 @@ postprocessors:                               # FIXME: These are not commented o
       Both the recording and the transcribing may have produced sub-standard quality which may make your work more demanding.
       Overcome any possible mistakes in the transcript and attempt to understand the true intent of each speaker.
 
-  group-enhanced:
+  group-enhance:
     extends: group-base
     extra: |
       The content may be from a structured or freeform discussion, brainstorming or debating session, or something else.
       Produce an improved transcript that honors each speakers' original choice of words, structures and flow but fix misspellings and grammatical and transcription mistakes, reduce unnecessary words and repetition and otherwise improve the quality and legibility of the transcript.
+      Output the enhanced transcript without any frontmatter or leading "meta" notes.
+      Any significant interpretation uncertainties that have substantive impact on the information content can however be noted at the end after a separator line '\n---\n\n'.
 
-  group-restructured:
+  group-restructure:
+    extends: group-base
     context_path:
       - "~/project_x/README.md"               # essential project information
       - "~/project_x/todo.md"                 # information about current status and ongoing tasks
@@ -205,8 +211,8 @@ postprocessors:                               # FIXME: These are not commented o
       [/] Action that is in progress (by person A, due by date B, if specified)
       [ ] Action that is to be done but not yet started>
 
-  group-private:                              # extends group-restructured with confidential context and leverages an offline backend for privacy
-    extends: group-restructured
+  group-private:                              # extends group-restructure with confidential context and leverages an offline backend for privacy
+    extends: group-restructure
     backend: ollama                           # use local offline ollama model for sensitive content
     context_path:
       - "~/project_x/confidential.md"         # include confidential info to improve reasoning

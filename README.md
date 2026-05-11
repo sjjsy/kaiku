@@ -1,4 +1,4 @@
-# asr2clip -- Speech-to-Text Clipboard Tool — With Everything You'd Want :)
+# asr2clip -- Speech-to-Text Clipboard Tool + Everything You'd Want :)
 
 [![PyPI version](https://img.shields.io/pypi/v/asr2clip?color=green)](https://pypi.org/project/asr2clip/)
 [![License](https://img.shields.io/github/license/Oaklight/asr2clip?color=green)](https://github.com/Oaklight/asr2clip/blob/master/LICENSE)
@@ -151,7 +151,7 @@ Examples:
   asr2clip --test                             # verify backend and preprocessors
   asr2clip                                    # record, transcribe, copy to clipboard
   asr2clip --toggle                           # toggle recording (for keyboard shortcuts)
-  asr2clip --toggle -P solo-restructured      # toggle, and produce LLM-structured memo
+  asr2clip --toggle -P solo-restructure      # toggle, and produce LLM-structured memo
   asr2clip -i audio.mp3                       # transcribe an existing file
   asr2clip -i m.mp3 -p deepfilter -r          # neural denoising + chunked transcription
   asr2clip -i m.m4a -D -s 3                   # speaker diarization, 3 speakers
@@ -477,7 +477,7 @@ asr2clip -i meeting.mp3 -r                    # chunked, quality-checked
 asr2clip -i m.mp3 -rC 60                      # 60 s chunks instead of default 180
 asr2clip -i m.mp3 -ro transcript.txt          # write chunks to file as they complete (tail -f)
 asr2clip -i m.mp3 -rb wcpp -l fi -o t.txt     # fully offline, Finnish language
-asr2clip -i m.mp3 -rP group-restructured -T bare -o t.md  # LLM meeting notes + original transcript
+asr2clip -i m.mp3 -rP group-restructure -T bare -o t.md  # LLM meeting notes + original transcript
 ```
 
 Long transcripts often exceed the clipboard size limit; using `-o FILE` is recommended.
@@ -490,7 +490,7 @@ Toggle mode lets you bind a single keyboard shortcut to start and stop recording
 asr2clip --toggle                             # first press: start recording in background
 asr2clip --toggle                             # second press: stop, transcribe, copy to clipboard
 asr2clip -b wcpp --toggle                     # same, using local whisper.cpp
-asr2clip --toggle -P solo-restructured        # toggle → structured personal memo
+asr2clip --toggle -P solo-restructure        # toggle → structured personal memo
 ```
 
 Toggle mode requires a POSIX system (Linux, macOS). Example awesome WM keybinding:
@@ -660,17 +660,19 @@ postprocessors:
     backend: groq
     prompt: |
       You are a professional transcript scribe ...
+    context_path:
+      - "~/.asr2clip/context/personal.md"     # Context file to help the LLM "read between the lines"
 
-  solo-enhanced:
+  solo-enhance:
     extends: solo-base            # inherits backend, prompt
     extra: |
       Also improve grammar and style ...
 
   solo-private:
-    extends: solo-enhanced        # inherits backend, prompt + extra
+    extends: solo-enhance        # inherits backend, prompt + extra
     backend: ollama               # override: use local model for privacy
     context_path:
-      - "~/.asr2clip/context/private.md"  # accumulates with parent's context
+      - "~/.asr2clip/context/private-*.md"  # accumulates with parent's context
 ```
 
 ### Built-in prompts
@@ -682,23 +684,23 @@ Shipped in the config template, ready to use:
 | Name | Purpose |
 |------|---------|
 | `solo-base` | Correct errors and clean up a personal single-speaker transcript |
-| `solo-enhanced` | Improve quality, fix grammar and word choice while honoring the author's style |
-| `solo-restructured` | Restructure a personal dictation into a structured memo with sections |
-| `solo-private` | Like `solo-restructured` but defaults to a local offline model to ensure privacy |
+| `solo-enhance` | Improve quality, fix grammar and word choice while honoring the author's style |
+| `solo-restructure` | Restructure a personal dictation into a structured memo with sections |
+| `solo-private` | Like `solo-restructure` but defaults to a local offline model to ensure privacy |
 
 **Meeting/group discussion prompts:**
 
 | Name | Purpose |
 |------|---------|
 | `group-base` | Correct errors and clean up a group discussion transcript |
-| `group-enhanced` | Improve quality of group transcript while honoring each speaker's style |
-| `group-restructured` | Restructure a group discussion into a meeting memo with summary, decisions, action items |
-| `group-private` | Like `group-restructured` but defaults to a local offline model to ensure privacy |
+| `group-enhance` | Improve quality of group transcript while honoring each speaker's style |
+| `group-restructure` | Restructure a group discussion into a meeting memo with summary, decisions, action items |
+| `group-private` | Like `group-restructure` but defaults to a local offline model to ensure privacy |
 
 ```bash
-asr2clip --toggle -P solo-enhanced          # toggle → improved personal transcript
-asr2clip --toggle -P solo-restructured      # toggle → structured personal memo
-asr2clip -i meeting.m4a -D -P group-restructured  # diarize + meeting memo
+asr2clip --toggle -P solo-enhance          # toggle → improved personal transcript
+asr2clip --toggle -P solo-restructure      # toggle → structured personal memo
+asr2clip -i meeting.m4a -D -P group-restructure  # diarize + meeting memo
 asr2clip --toggle -P "List action items."   # inline system prompt
 ```
 
@@ -714,13 +716,13 @@ postprocessors:
       ...
     template: bare
 
-  solo-restructured:
+  solo-restructure:
     extends: solo-base
     extra: |
       Produce a concise, structured memo ...
 
   solo-private:
-    extends: solo-restructured
+    extends: solo-restructure
     # backend: ollama    # local model for sensitive content
 ```
 
