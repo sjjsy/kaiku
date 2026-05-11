@@ -19,60 +19,53 @@ CONFIG_PATHS = [
 # Default config location for new configs
 DEFAULT_CONFIG_PATH = os.path.expanduser("~/.config/asr2clip/config.yaml")
 
-# Default config template
-CONFIG_TEMPLATE = """api_base_url: "https://api.openai.com/v1/"  # or other compatible API base URL
-api_key: "YOUR_API_KEY"                     # api key for the platform
-model_name: "whisper-1"                     # or other compatible model
-# quiet: false                              # optional, `true` only allow errors and transcriptions
-# org_id: none                              # optional, only required if you are using OpenAI organization id
-# audio_device: null                        # optional, audio input device (name or index)
-                                            # use `asr2clip --list_devices` to see available devices
-                                            # common values: "pulse", "pipewire", or device index like 12
-"""
-
 _CONFIG_TEMPLATE_STATIC = """
-api_base_url: "https://api.openai.com/v1/"  # or other compatible API base URL
-api_key: "YOUR_API_KEY"                     # api key for the platform
-model_name: "whisper-1"                     # or other compatible model
-# quiet: false                              # optional, `true` only allow errors and transcriptions
-# org_id: none                              # optional, only required if you are using OpenAI organization id
-# audio_device: null                        # optional, audio input device (name or index). Use --list_devices to see available devices
+# asr2clip configuration — uncomment and fill in one backend to start.
+# Test with: asr2clip --test -b <name>   Switch at runtime: asr2clip -b <name>
+backends:
+  # openai:                                   # OpenAI Whisper API
+  #   type: api
+  #   api_base_url: "https://api.openai.com/v1/"
+  #   api_key: "sk-..."
+  #   model_name: "whisper-1"
+  #   # language: en                          # ISO-639-1; omit to auto-detect
+  # groq:                                     # Groq — fast, free tier available
+  #   type: api
+  #   api_base_url: "https://api.groq.com/openai/v1/"
+  #   api_key: "YOUR_GROQ_KEY"
+  #   model_name: "whisper-large-v3-turbo"
+  # siliconflow:                              # SiliconFlow
+  #   type: api
+  #   api_base_url: "https://api.siliconflow.com/v1/"
+  #   api_key: "YOUR_API_KEY"
+  #   model_name: "FunAudioLLM/SenseVoiceSmall"
+  # xinference:                               # xinference or other self-hosted endpoint
+  #   type: api
+  #   api_base_url: "http://localhost:9997/v1/"
+  #   api_key: "any"                          # required field, value not checked
+  #   model_name: "SenseVoiceSmall"
+  # sonnx:                                    # local sherpa-onnx server (pip install asr2clip[vad])
+  #   type: api
+  #   api_base_url: "http://127.0.0.1:8000/v1/"
+  #   model_name: "SenseVoiceSmall"
+  # wcpp:                                     # whisper.cpp — build from source, fully offline
+  #   type: whisper_cpp
+  #   binary: ~/path/to/whisper.cpp/build/bin/whisper-cli
+  #   model:  ~/path/to/whisper.cpp/models/ggml-large-v3-turbo-q8_0.bin
+  #   # language: auto                        # 'auto' or ISO-639-1 (e.g. fi, en)
+  #   # threads: 4
+default_backend: openai
 
-# xinference or other selfhosted platform
-# api_base_url: "https://localhost:9997/v1" # or other compatible API base URL
-# api_key: "none-or-random"
-# model_name: "SenseVoiceSmall"             # or other compatible model
+# quiet: false                               # true = only output transcription and errors
+# org_id:                                    # OpenAI organization ID (rarely needed)
 
-# SiliconFlow or other compatible platform
-# api_base_url: "https://api.siliconflow.com/v1/"  # or other compatible API base URL
-# api_key: "YOUR_API_KEY"                          # api key for the platform
-# model_name: "FunAudioLLM/SenseVoiceSmall"
-
-# --- Multiple named backends (recommended) ---
-# default_backend: groq
-# backends:
-#   groq:
-#     type: api
-#     api_base_url: "https://api.groq.com/openai/v1/"
-#     api_key: "YOUR_GROQ_KEY"
-#     model_name: "whisper-large-v3-turbo"
-#     # language: fi                          # optional, ISO-639-1 code (e.g. fi, en); omit to auto-detect
-#   local:
-#     type: whisper_cpp
-#     binary: ~/path/to/whisper.cpp/build/bin/whisper-cli
-#     model:  ~/path/to/whisper.cpp/models/ggml-large-v3-turbo-q8_0.bin
-#     # language: auto                        # optional; 'auto' or ISO-639-1 code (e.g. fi)
-#     # threads: 4
-#     # timestamps: false
-#     # timeout_multiplier: 4.0
-#
-# Select at runtime:  asr2clip -b local -i meeting.mp3
-#
-# --- Legacy single-backend format (still supported) ---
-# backend: whisper_cpp
-# whisper_cpp:
-#   binary: ~/path/to/whisper-cli
-#   model:  ~/path/to/ggml-model.bin
+# Audio input: "pulse"/"pipewire" uses whichever mic is set as default in system settings.
+# Configure active mic in pavucontrol or your desktop sound panel.
+# To force a specific device, run `asr2clip --list_devices` for names and indices.
+# audio_device: "pulse"                      # PulseAudio (recommended on Linux)
+# audio_device: "pipewire"                   # PipeWire (recommended on modern Linux)
+# audio_device: "plughw:Snowball"            # ALSA device name — bypasses system mixer
+# audio_device: 3                            # device index from --list_devices
 """
 
 
@@ -210,7 +203,7 @@ def open_in_editor(config_file: str | None = None):
             os.makedirs(config_dir, exist_ok=True)
 
         with open(config_path, "w") as f:
-            f.write(CONFIG_TEMPLATE)
+            f.write(_build_full_template().strip() + "\n")
         print(f"Created new config file: {config_path}")
 
     # Determine which editor to use
