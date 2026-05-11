@@ -634,22 +634,69 @@ postprocessor_backends:
     model: "claude-haiku-4-5-20251001"
 ```
 
+### Postprocessor configuration
+
+Each prompt under `postprocessors:` can have the following fields:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `prompt:` | string | System prompt text. Required unless `extends:` is used. |
+| `extends:` | string | Name of another prompt to inherit from. Inherits `prompt`, `backend`, `model`, and `context_path` from parent. |
+| `extra:` | string | Text appended to the inherited prompt (only with `extends:`). |
+| `backend:` | string | Which `postprocessor_backends:` entry to use. Overrides inherited backend. |
+| `model:` | string | Override the backend's default model for this prompt. |
+| `template:` | string | Output template name from `output_templates:` section (default: `default`). Controls final output format. |
+| `context_path:` | list of strings | File glob patterns to inject as context. Glob patterns are expanded and combined with inherited patterns when using `extends:`. |
+
+**Inheritance behavior:** When a prompt uses `extends:`, it inherits all parent fields. Child fields override parent fields, except `context_path:` which accumulates (both parent and child patterns are expanded and combined).
+
+Example with inheritance:
+
+```yaml
+postprocessors:
+  solo-base:
+    backend: groq
+    prompt: |
+      You are a professional transcript scribe ...
+
+  solo-enhanced:
+    extends: solo-base            # inherits backend, prompt
+    extra: |
+      Also improve grammar and style ...
+
+  solo-private:
+    extends: solo-enhanced        # inherits backend, prompt + extra
+    backend: ollama               # override: use local model for privacy
+    context_path:
+      - "~/.asr2clip/context/private.md"  # accumulates with parent's context
+```
+
 ### Built-in prompts
 
 Shipped in the config template, ready to use:
+
+**Personal dictation prompts:**
 
 | Name | Purpose |
 |------|---------|
 | `solo-base` | Correct errors and clean up a personal single-speaker transcript |
 | `solo-enhanced` | Improve quality, fix grammar and word choice while honoring the author's style |
 | `solo-restructured` | Restructure a personal dictation into a structured memo with sections |
-| `solo-private` | Like `solo-restructured` with privacy handling (names/locations omitted) |
-| `group` | Meeting notetaker: summary, decisions, action items, open questions |
+| `solo-private` | Like `solo-restructured` but defaults to a local offline model to ensure privacy |
+
+**Meeting/group discussion prompts:**
+
+| Name | Purpose |
+|------|---------|
+| `group-base` | Correct errors and clean up a group discussion transcript |
+| `group-enhanced` | Improve quality of group transcript while honoring each speaker's style |
+| `group-restructured` | Restructure a group discussion into a meeting memo with summary, decisions, action items |
+| `group-private` | Like `group-restructured` but defaults to a local offline model to ensure privacy |
 
 ```bash
-asr2clip --toggle -P solo-enhanced          # toggle → improved transcript
+asr2clip --toggle -P solo-enhanced          # toggle → improved personal transcript
 asr2clip --toggle -P solo-restructured      # toggle → structured personal memo
-asr2clip -i meeting.m4a -D -P group        # diarize + meeting notes
+asr2clip -i meeting.m4a -D -P group-restructured  # diarize + meeting memo
 asr2clip --toggle -P "List action items."   # inline system prompt
 ```
 
@@ -677,7 +724,7 @@ postprocessors:
 
 ### Output templates
 
-Output templates control what ends up in clipboard / `-o FILE`. Two are shipped; select with `-T NAME`:
+Output templates control what ends up in clipboard / `-o FILE`. The output format depends on your template and LLM instructions — can be Markdown, [ReStructuredText](https://docutils.sourceforge.io/rst.html), plain text, or any text-based format. Two templates are shipped; select with `-T NAME`:
 
 ```yaml
 output_templates:

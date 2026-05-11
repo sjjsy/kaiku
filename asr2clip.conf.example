@@ -106,69 +106,39 @@ asr_backend_file: wcpp                        # backend for file transcription (
 #   model:         override the backend's default model for this prompt
 #   template:      output template name from output_templates below (default: "default")
 #   context_path:  list of file glob patterns; contents are injected into the LLM request
-postprocessors:
+postprocessors:                               # FIXME: These are not commented out but you still need to adapt them for yourself to make them work
   solo-base:
-    prompt: |
-      You are a professional personal transcript scribe.
-      Your client used a transcriber tool that may have produced sub-standard quality.
-      The recording should only contain your client's (= author/user) voice.
-#   backend: groq
+    backend: groq
     template: bare
+    prompt: |
+      You are a professional personal transcript scribe and memo writer.
+      Attached is a transcript from a recording that should only contain your client's (= author/user) voice.
+      Both the recording and the transcribing may have produced sub-standard quality which may make your work more demanding.
+      Overcome any possible mistakes in the transcript and attempt to understand the true intent of the speaker.
 
   solo-enhanced:
     extends: solo-base
     extra: |
       The content may be intended to constitute a message, an email, a command, a personal diary or note entry, or an unstructured thinking-aloud segment, or something else.
-      Produce an improved transcript that honors the author's original choice of words, structures and flow but fix misspellings, misinterpretations and grammatical mistakes, reduce unnecessary words and repetition and otherwise improve the quality and legibility of the transcript.
+      Produce an improved transcript that honors the author's original choice of words, structures and flow but fix misspellings and grammatical and transcription mistakes, reduce unnecessary words and repetition and otherwise improve the quality and legibility of the transcript.
 
   solo-restructured:
     extends: solo-base
+    context_path:
+      - "~/.asr2clip/context/personal.md"     # include personal context info to improve reasoning
     extra: |
       The content may be from a long unstructured dictation or thinking-aloud session for some purpose (which may be deducible from the transcript itself).
       Produce a concise, structured memo that maximizes legibility and usefulness.
       The following provides a template. Omit sections that would have no clear content.
 
-      # YYYY-MM-DD HH:SS Solo Notes on <Topic>
-      Tags: <tags>
+      # YYYY-MM-DD HH:SS Solo Notes on <Topic in Title Case>
+      Tags: memo, <3-10 tags relevant to the content of the meeting>
 
       ## Summary
-      <2-3 sentences>
+      <2-5 sentences describing the purpose, nature and content of the meeting overall>
 
       ## Key points
-      <Bulleted list>
-
-      ## Open questions
-      <Bulleted list>
-
-      ## Progress and action items
-      <[x] Action that is already done
-      [/] Action that is in progress (by person A, due by date B, if specified)
-      [ ] Action that is to be done but not yet started>
-#   context_path:
-#     - "~/.asr2clip/context/personal.md"     # include personal context info to improve reasoning
-
-  solo-private:                               # extends solo-restructured with privacy instructions
-    extends: solo-restructured
-#   backend: ollama                           # use local ollama model for sensitive content
-#   context_path:
-#     - "~/.asr2clip/context/personal.md"
-#     - "~/.asr2clip/context/private.md"      # include private info to improve reasoning
-
-  group:
-    prompt: |
-      You are a professional meeting notetaker.
-      Your team used a transcriber tool that may have produced sub-standard quality.
-      Produce a concise, structured, legible memo that promotes flow for the whole team.
-      The following provides a template. Omit sections that would have no clear content.
-
-      # YYYY-MM-DD HH:SS Meeting on <Topic>
-      Tags: <tags>
-
-      ## Summary
-      <2-6 sentences, depending on length and breadth of discussion>
-
-      ## Key points
-      <Bulleted list; Important to get all essential discussion contributions covered>
+      <Bulleted list; Important to get all essential discussion topics and contributions covered; Chronological flow is preferred here>
 
       ## Decision made
       <Bulleted list>
@@ -180,12 +150,68 @@ postprocessors:
       <[x] Action that is already done
       [/] Action that is in progress (by person A, due by date B, if specified)
       [ ] Action that is to be done but not yet started>
-#   context_path:
-#     - "~/project_x/README.md"
-#     - "~/project_x/todo.md"
-#   backend: anthropic
-#   model: claude-sonnet-4-6
+
+  solo-private:                               # extends solo-restructured; inherits personal context + adds private context
+    extends: solo-restructured
+    backend: ollama                           # use local offline ollama model for sensitive content
+    context_path:
+      - "~/.asr2clip/context/private.md"      # added to inherited personal.md via extends
+    extra: |
+      This content is strictly private and must not be shared. Write "*Confidential - Do Not Share*" as both the first and last line of the memo.
+
+  group-base:
+    backend: anthropic
+    model: claude-sonnet-4-6
+    template: bare
+    prompt: |
+      You are a professional meeting notetaker.
+      Attached is a transcript from a recorded group discussion that contains multiple separate and individual speakers.
+      Both the recording and the transcribing may have produced sub-standard quality which may make your work more demanding.
+      Overcome any possible mistakes in the transcript and attempt to understand the true intent of each speaker.
+
+  group-enhanced:
+    extends: group-base
+    extra: |
+      The content may be from a structured or freeform discussion, brainstorming or debating session, or something else.
+      Produce an improved transcript that honors each speakers' original choice of words, structures and flow but fix misspellings and grammatical and transcription mistakes, reduce unnecessary words and repetition and otherwise improve the quality and legibility of the transcript.
+
+  group-restructured:
+    context_path:
+      - "~/project_x/README.md"               # Essential project information
+      - "~/project_x/todo.md"                 # Information about current status and ongoing tasks
     template: full
+    prompt: |
+      As output, produce a concise, structured, legible memo that promotes flow for the whole team.
+      The memo should be very concise but still comprehensively contain all relevant information from the discussion, at least such as to remind participants of their contributions.
+      The following provides a template. Omit sections that would have no clear content.
+
+      # YYYY-MM-DD HH:SS Meeting on <Topic in Title Case>
+      Tags: memo, <3-10 tags relevant to the content of the meeting>
+
+      ## Summary
+      <2-5 sentences describing the purpose, nature and content of the meeting overall>
+
+      ## Key points
+      <Bulleted list; Important to get all essential discussion topics and contributions covered; Chronological flow is preferred here>
+
+      ## Decision made
+      <Bulleted list>
+
+      ## Open questions
+      <Bulleted list; flag minority positions explicitly; unresolved disagreements are more important than resolved ones>
+
+      ## Progress and action items
+      <[x] Action that is already done
+      [/] Action that is in progress (by person A, due by date B, if specified)
+      [ ] Action that is to be done but not yet started>
+
+  group-private:                              # extends group-restructured; inherits project context + adds confidential context
+    extends: group-restructured
+    backend: ollama                           # use local offline ollama model for sensitive content
+    context_path:
+      - "~/project_x/confidential.md"         # added to inherited project files via extends
+    extra: |
+      This content is strictly private and must not be shared. Write "*Confidential - Do Not Share*" as both the first and last line of the memo.
 
 ## Which post-processor to apply automatically (none = disabled):
 postprocessor_live: none                      # toggle / VAD / single live recording

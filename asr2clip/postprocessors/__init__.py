@@ -173,12 +173,14 @@ def _resolve_prompt(name: str, config: dict, _seen: set | None = None) -> dict:
     base_prompt = ""
     base_backend: str | None = None
     base_model: str | None = None
+    base_context_paths: list = []
 
     if "extends" in defn:
         base = _resolve_prompt(defn["extends"], config, _seen)
         base_prompt = base["system_prompt"]
         base_backend = base["backend_name"]
         base_model = base["model"]
+        base_context_paths = base["context_paths"]
 
     own_prompt: str = defn.get("prompt", "")
     extra: str = defn.get("extra", "").strip()
@@ -206,7 +208,7 @@ def _resolve_prompt(name: str, config: dict, _seen: set | None = None) -> dict:
     # Child fields override base; fall back to base if child does not specify
     backend_name: str | None = defn.get("backend") or base_backend
     model: str | None = defn.get("model") or base_model
-    context_paths: list = defn.get("context_path") or []
+    context_paths: list = base_context_paths + (defn.get("context_path") or [])
     template_name: str = defn.get("template", "default")
 
     return {
