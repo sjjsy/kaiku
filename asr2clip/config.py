@@ -19,9 +19,10 @@ CONFIG_PATHS = [
 # Default config location for new configs
 DEFAULT_CONFIG_PATH = os.path.expanduser("~/.config/asr2clip/config.yaml")
 
-_CONFIG_TEMPLATE_STATIC = """
+_CONFIG_TEMPLATE = """
 # asr2clip configuration — uncomment and fill in one backend to start.
 # Test with: asr2clip --test -b <name>   Switch at runtime: asr2clip -b <name>
+## Backend configurations:
 backends:
   # openai:                                   # OpenAI Whisper API
   #   type: api
@@ -54,79 +55,36 @@ backends:
   #   model:  ~/path/to/whisper.cpp/models/ggml-large-v3-turbo-q8_0.bin
   #   # language: auto                        # 'auto' or ISO-639-1 (e.g. fi, en)
   #   # threads: 4
+## Default backend choices (can be overridden via CLI with -b BACKEND):
 backend_live: openai                          # backend for live/toggle/VAD recording
 backend_file: openai                          # backend for -i file transcription
 
-# quiet: false                               # true = only output transcription and errors
-# org_id:                                    # OpenAI organization ID (rarely needed)
-
-# Audio input: "pulse"/"pipewire" uses whichever mic is set as default in system settings.
+## Default audio input choice (can be overridden via CLI with -d DEVICE):
+# Note: "pulse"/"pipewire" uses whichever mic is set as default in system settings.
 # Configure active mic in pavucontrol or your desktop sound panel.
 # To force a specific device, run `asr2clip --list_devices` for names and indices.
 # audio_device: "pulse"                      # PulseAudio (recommended on Linux)
 # audio_device: "pipewire"                   # PipeWire (recommended on modern Linux)
 # audio_device: "plughw:Snowball"            # ALSA device name — bypasses system mixer
 # audio_device: 3                            # device index from --list_devices
+
+## Audio pre-processing (noise reduction before transcription):
+# Options: none, noisereduce, pyrnnoise, deepfilter
+#   none        — no pre-processing, zero latency, no extra dependencies
+#   noisereduce — spectral subtraction; best for stationary noise (fan, AC)
+#                 install: pip install asr2clip[noisereduce]
+#   pyrnnoise   — Mozilla RNNoise GRU; best for non-stationary noise (babble)
+#                 install: pip install asr2clip[pyrnnoise]
+#   deepfilter  — DeepFilterNet3, best quality, medium CPU
+#                 install: pip install asr2clip[deepfilter]
+# Override at runtime: asr2clip -P deepfilter -i meeting.mp4
+preprocessor_live: none                      # applied to live recordings (toggle, single-shot, VAD)
+preprocessor_file: none                      # applied to file transcription (-i)
+
+## Other parameters:
+# quiet: false                               # true = only output transcription and errors
+# org_id:                                    # OpenAI organization ID (rarely needed)
 """
-
-
-def _build_preprocessor_section() -> str:
-    """Generate the preprocessor config block, probing installed libraries."""
-    from .preprocessors import LATENCY_ORDER, QUALITY_ORDER, probe_available
-
-    available = probe_available()
-    not_installed = [p for p in QUALITY_ORDER if p not in available]
-
-    detected_str = ", ".join(available) if available else "none"
-    not_installed_str = ", ".join(not_installed) if not_installed else "all installed"
-
-    best_file = next((p for p in QUALITY_ORDER if p in available), "none")
-    best_live = next((p for p in LATENCY_ORDER if p in available), "none")
-
-    lines = [
-        "",
-        "# --- Audio pre-processing ---",
-        f"# Detected on this system: {detected_str}",
-        f"# Not installed: {not_installed_str}",
-        "#",
-        "# Options and trade-offs:",
-        "#   none        — no pre-processing, zero latency, no extra dependencies",
-        "#   noisereduce — spectral subtraction (scipy), low CPU, no resampling needed at 16 kHz",
-        "#                 best for stationary noise (fan, AC); install: pip install asr2clip[noisereduce]",
-        "#   pyrnnoise   — Mozilla RNNoise GRU; requires 16→48→16 kHz resampling (scipy)",
-        "#                 best for non-stationary noise (babble); install: pip install asr2clip[pyrnnoise]",
-        "#   deepfilter  — DeepFilterNet3, best quality, medium CPU, torch-based (no scipy)",
-        "#                 install: pip install asr2clip[deepfilter]",
-        "#",
-    ]
-
-    if not available:
-        lines.append(
-            "# No enhancement libraries detected. Install one above to enable pre-processing."
-        )
-        lines.append("# Switch to 'none' if you notice added latency during recording.")
-    elif best_live != best_file:
-        lines.append(
-            "# Using lower-latency option for live recordings, higher-quality for files."
-        )
-        lines.append("# Switch preprocessor_live to 'none' if recording latency increases.")
-    else:
-        lines.append("# Switch to 'none' if you notice added latency during recording.")
-
-    lines += [
-        "#",
-        f"preprocessor_live: {best_live}   # applied to live recordings (toggle, single-shot, VAD)",
-        f"preprocessor_file: {best_file}   # applied to file transcription (-i)",
-        "#",
-        "# Override at runtime:  asr2clip -P deepfilter -i meeting.mp4",
-    ]
-
-    return "\n".join(lines)
-
-
-def _build_full_template() -> str:
-    """Return the full config template with a dynamic preprocessor section."""
-    return _CONFIG_TEMPLATE_STATIC.rstrip() + "\n" + _build_preprocessor_section() + "\n"
 
 
 def find_config_path(config_file: str | None = None) -> str | None:
@@ -204,7 +162,7 @@ def open_in_editor(config_file: str | None = None):
             os.makedirs(config_dir, exist_ok=True)
 
         with open(config_path, "w") as f:
-            f.write(_build_full_template().strip() + "\n")
+            f.write(_CONFIG_TEMPLATE.strip() + "\n")
         print(f"Created new config file: {config_path}")
 
     # Determine which editor to use
@@ -247,7 +205,7 @@ def generate_config(
     Returns:
         Path to the generated config file, or None if print_only.
     """
-    content = _build_full_template().strip() + "\n"
+    content = _CONFIG_TEMPLATE.strip() + "\n"
 
     if print_only:
         print(content)
