@@ -456,15 +456,18 @@ Both provide fully offline, no-API-key ASR. Here is how to choose:
 |---|---|---|
 | **What it is** | C++ reimplementation of OpenAI Whisper | ONNX-runtime inference with Python bindings |
 | **ASR models** | Whisper family (GGML quantised) | Whisper, [SenseVoice](https://github.com/FunAudioLLM/SenseVoice), paraformer, zipformer, and more |
+| **Language coverage** | 99 languages — full OpenAI Whisper training set | Varies by model; SenseVoice default covers ~50 languages (strongest for CJK); Whisper models via sherpa-onnx add 99 |
+| **Multilingual quality** | Best local option for European and other non-English languages; `large-v3-turbo` recommended | SenseVoice leads for Chinese, Japanese, Korean and handles emotion/event detection; weaker for many European languages |
+| **Python ML deps** | None — single binary + model file | Yes — ONNX runtime and sherpa-onnx Python packages |
 | **Integration** | Subprocess call to external C++ binary | Python-native; exposes a local HTTP API |
 | **Setup** | Build C++ from source; download `.bin` model manually | `pip install asr2clip[vad]` + `asr2clip --download-model` |
 | **Model auto-download** | No | Yes |
 | **VAD support** | No | Yes (built-in via sherpa-onnx) |
 | **Dev activity** | Mature, stable | Very active (k2-fsa / Next-gen Kaldi team) |
 
-**When to choose whisper.cpp:** You already have it built, or you prefer GGML-quantised Whisper models without extra Python ML packages.
+**When to choose whisper.cpp:** Your primary language is non-English — especially European languages (Finnish, German, French, etc.) where `ggml-large-v3-turbo` delivers the best local accuracy of any backend. Also the right choice when you want no Python ML package dependencies: the binary and model file are self-contained, with nothing added to your Python environment.
 
-**When to choose sherpa-onnx:** You want zero C++ build steps, you already installed `asr2clip[vad]` (sherpa-onnx is already there), or you want VAD support or models beyond the Whisper family.
+**When to choose sherpa-onnx:** You are transcribing Chinese, Japanese, or Korean (SenseVoice is the stronger choice there), you want model auto-download and zero C++ build steps, you already installed `asr2clip[vad]` (sherpa-onnx is already present), or you need VAD support or access to models beyond the Whisper family.
 
 See [whisper.cpp](https://github.com/ggerganov/whisper.cpp) for build instructions and [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) for its model zoo.
 
