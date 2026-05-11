@@ -262,12 +262,12 @@ are sensitive to background noise and tend to hallucinate when the signal is poo
 
 **Available preprocessors:**
 
-| Name | Technology | Extra dependencies | Con | Best for |
-|------|-----------|-------------------|-----|----------|
-| `none` | — | none (default) | — | clean recordings |
-| `noisereduce` | Spectral subtraction | scipy | Works best on stationary noise | steady hum, fan noise |
-| `pyrnnoise` | Mozilla RNNoise GRU | scipy | Requires 16 kHz→48 kHz resampling; may sound slightly robotic | babble, non-stationary noise |
-| `deepfilter` | DeepFilterNet3 neural | torch + Rust wheel | Medium CPU; ~70 MB model download on first use | noisy files, variable speaker distance, best quality |
+| Name | Technology | Extra dependencies | Best for | Project |
+|------|-----------|-------------------|----------|---------|
+| `none` | — | none (default) | clean recordings | — |
+| `noisereduce` | Spectral subtraction | scipy | steady hum, fan noise | [GitHub](https://github.com/timsainb/noisereduce) |
+| `pyrnnoise` | Mozilla RNNoise GRU | scipy | babble, non-stationary noise; very low CPU | [GitHub](https://github.com/g-node/pyrnnoise) |
+| `deepfilter` | DeepFilterNet3 neural | torch + Rust wheel | noisy files, variable speaker distance, best quality | [GitHub](https://github.com/Rikorose/DeepFilterNet) |
 
 **A note on `pyrnnoise` and sample rates:** RNNoise internally operates at 48 kHz. Because
 asr2clip records and converts all audio to 16 kHz before transcription, pyrnnoise always
