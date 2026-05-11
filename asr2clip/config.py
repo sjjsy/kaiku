@@ -75,11 +75,11 @@ backend_file: openai                          # backend for file transcription (
 #                 install: pip install asr2clip[noisereduce]
 #   pyrnnoise   — Mozilla RNNoise GRU; best for non-stationary noise (babble)
 #                 install: pip install asr2clip[pyrnnoise]
-#   deepfilter  — DeepFilterNet3, best quality, medium CPU
+#   deepfilter  — DeepFilterNet3, best quality overall, medium CPU
 #                 install: pip install asr2clip[deepfilter]
 # Override at runtime: asr2clip -P deepfilter -i meeting.mp4
-preprocessor_live: none                      # applied to live single-shot recordings
-preprocessor_file: none                      # applied to file transcription (-i FILE)
+preprocessor_live: none                      # applied to live single-shot recordings; consider noisereduce
+preprocessor_file: none                      # applied to file transcription (-i FILE); consider deepfilter
 
 ## Other parameters:
 # quiet: false                               # true = only output transcription and errors
