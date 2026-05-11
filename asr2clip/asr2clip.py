@@ -23,10 +23,10 @@ from .config import (
     generate_config,
     get_api_config,
     get_audio_device,
-    list_backends,
     open_in_editor,
     read_config,
     resolve_backend_config,
+    resolve_backend_name,
     resolve_preprocessor_config,
 )
 from .daemon import continuous_recording
@@ -329,7 +329,10 @@ Robust long-file transcription:
         "--backend",
         metavar="NAME",
         default=None,
-        help="Named backend to use (defined under 'backends:' in config)",
+        help=(
+            "Named backend to use (defined under 'backends:' in config). "
+            "Overrides default_backend_live / default_backend_file in config."
+        ),
     )
     parser.add_argument(
         "-i",
@@ -565,17 +568,28 @@ def main():
     setup_logging(verbose=not quiet)
     set_verbose(not quiet)
 
-    # Resolve the effective backend config (supports named backends)
-    backend_config = resolve_backend_config(config, args.backend)
+    # Resolve per-mode backend configs (live vs file, like preprocessor_live/file)
+    backend_config_live = resolve_backend_config(config, args.backend, "live")
+    backend_config_file = resolve_backend_config(config, args.backend, "file")
 
-    if args.backend:
-        info(f"Using backend: {args.backend}")
-    elif list_backends(config):
-        default = config.get("default_backend") or next(iter(config["backends"]))
-        info(f"Using backend: {default}")
+    live_name = resolve_backend_name(config, args.backend, "live")
+    file_name = resolve_backend_name(config, args.backend, "file")
+    if live_name and live_name == file_name:
+        info(f"Using backend: {live_name}")
+    elif live_name and file_name:
+        info(f"Using backend (live): {live_name}  (file): {file_name}")
+    elif live_name:
+        info(f"Using backend: {live_name}")
 
     if args.test:
-        success = test_config(backend_config, config, args.preprocessor)
+        if live_name == file_name or file_name is None:
+            success = test_config(backend_config_live, config, args.preprocessor)
+        else:
+            info("--- live backend ---")
+            ok_live = test_config(backend_config_live, config, args.preprocessor)
+            info("--- file backend ---")
+            ok_file = test_config(backend_config_file, config, args.preprocessor)
+            success = ok_live and ok_file
         sys.exit(0 if success else 1)
 
     device = get_audio_device(config, args.device)
@@ -597,7 +611,7 @@ def main():
     if args.toggle:
         from .toggle import toggle_recording
         toggle_recording(
-            backend_config, device, args.output,
+            backend_config_live, device, args.output,
             language=args.language,
             preprocessor=preprocessor_live,
         )
@@ -608,21 +622,21 @@ def main():
         if args.robust:
             from .robust import process_file_robust
             process_file_robust(
-                backend_config, args.input, args.output,
+                backend_config_file, args.input, args.output,
                 chunk_duration=args.chunk_duration,
                 language=args.language,
                 preprocessor=preprocessor_file,
             )
         else:
             process_file(
-                backend_config, args.input, args.output,
+                backend_config_file, args.input, args.output,
                 language=args.language,
                 preprocessor=preprocessor_file,
             )
         return
 
     if args.vad or args.interval is not None:
-        api_key, api_base_url, model_name, org_id = get_api_config(backend_config)
+        api_key, api_base_url, model_name, org_id = get_api_config(backend_config_live)
         if args.vad:
             try:
                 __import__("sherpa_onnx")
@@ -648,7 +662,7 @@ def main():
         return
 
     process_recording(
-        backend_config, device, args.output,
+        backend_config_live, device, args.output,
         language=args.language,
         preprocessor=preprocessor_live,
     )

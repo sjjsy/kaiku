@@ -9,11 +9,13 @@ This ASR tool records speech, transcribes it, and copies the result to your clip
 - **ASR** (Automatic Speech Recognition) converts spoken audio into text.
 - **VAD** (Voice Activity Detection) classifies audio frames as speech or silence, enabling hands-free continuous transcription.
 
-The tool can provide ASR through multipel backends: cloud APIs (OpenAI-compatible) for maximum model choice and accuracy with no local setup, and/or fully local, offline [whisper.cpp](https://github.com/ggerganov/whisper.cpp) and [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) backends (no API key required for local use).
+The tool can provide ASR through multiple backends:
+cloud APIs (OpenAI-compatible, such as [Groq](https://api.groq.com/openai/v1/)) for maximum model choice and accuracy with no local setup, and/or
+offline fully local backends ([whisper.cpp](https://github.com/ggerganov/whisper.cpp), [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx)).
 
 VAD requires [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) and it uses the [Silero VAD](https://github.com/snakers4/silero-vad) model.
 
-Audio preprocessing, chunked transcription, language specification, and other options to enhance transcription quality and the user experience for various use cases are provided but all features are not yet available in VAD mode.
+Audio preprocessing, chunked transcription, language specification, and other options to enhance transcription quality and the user experience for various use cases are provided but not all features are available for all backends and/or the VAD mode.
 
 ## TL;DR
 
@@ -67,11 +69,11 @@ Optional Python packages (install only what you need):
 
 | Extra | Install command | Purpose | Section |
 |-------|----------------|---------|---------|
+| `vad` | `pip install asr2clip[vad]` | VAD continuous recording + local sherpa-onnx ASR server | [Continuous recording](#continuous-recording), [Local ASR server](#local-asr-server-sherpa-onnx) |
 | `noisereduce` | `pip install asr2clip[noisereduce]` | Spectral noise reduction | [Audio pre-processing](#audio-pre-processing-noise-reduction) |
 | `pyrnnoise` | `pip install asr2clip[pyrnnoise]` | Neural GRU noise reduction | [Audio pre-processing](#audio-pre-processing-noise-reduction) |
 | `deepfilter` | `pip install asr2clip[deepfilter]` | DeepFilterNet3 best-quality denoising | [Audio pre-processing](#audio-pre-processing-noise-reduction) |
 | `enhance` | `pip install asr2clip[enhance]` | All three noise reduction options above | [Audio pre-processing](#audio-pre-processing-noise-reduction) |
-| `vad` | `pip install asr2clip[vad]` | VAD continuous recording + local sherpa-onnx ASR server | [Continuous recording](#continuous-recording), [Local ASR server](#local-asr-server-sherpa-onnx) |
 
 ## Installation
 
@@ -85,17 +87,17 @@ pipx install asr2clip
 pip install --upgrade asr2clip
 ```
 
-Noise reduction for single-shot/toggle/file recordings, plus VAD for continuous mode:
+Everything — all noise reduction options + VAD and the local sherpa-onnx ASR server:
 ```bash
 pip install asr2clip[enhance,vad]
 ```
 
-Note: audio pre-processing is not yet applied in VAD/interval continuous mode. `enhance` is still useful if you use both modes.
-
-Everything — noise reduction, VAD, and the local sherpa-onnx ASR server:
+Only the deepfilter package for high quality single-shot/toggle/file recordings:
 ```bash
-pip install asr2clip[enhance,vad]
+pip install asr2clip[deepfilter]
 ```
+
+Note: The audio pre-processing options are not yet applied in VAD/interval continuous mode, but of course they are still useful if you do not use VAD exclusively.
 
 **From source:**
 ```bash
@@ -120,7 +122,7 @@ Config file is created at `~/.config/asr2clip/config.yaml`. Locations searched i
 
 ### Backends
 
-All backends are defined under a `backends:` section. Name them whatever you like and switch at runtime with `-b NAME`. `default_backend` names which one to use when `-b` is not given.
+All backends are defined under a `backends:` section. Name them whatever you like and switch at runtime with `-b NAME`. `default_backend_live` and `default_backend_file` name which backend to use for each mode when `-b` is not given — the same idea as `preprocessor_live` / `preprocessor_file`. `-b` overrides both.
 
 `asr2clip --generate_config` writes a fully annotated config with every supported backend type listed as commented-out examples — uncomment and fill in the one(s) you want.
 
@@ -133,10 +135,11 @@ backends:
     api_base_url: "https://api.openai.com/v1/"
     api_key: "YOUR_API_KEY"
     model_name: "whisper-1"
-default_backend: openai
+default_backend_live: openai
+default_backend_file: openai
 ```
 
-A multi-backend example:
+A multi-backend example with per-mode defaults:
 
 ```yaml
 backends:
@@ -153,14 +156,16 @@ backends:
     type: whisper_cpp
     binary: ~/path/to/whisper.cpp/build/bin/whisper-cli
     model:  ~/path/to/whisper.cpp/models/ggml-large-v3-turbo-q8_0.bin
-default_backend: groq
+default_backend_live: groq    # live/toggle/VAD recording
+default_backend_file: wcpp    # -i file transcription
 ```
 
 ```bash
-asr2clip                       # use default backend (groq)
-asr2clip -b sonnx              # use your local sherpa-onnx server
-asr2clip -b wcpp               # use your local whisper.cpp installation
-asr2clip -b wcpp -i audio.wav  # transcribe a file offline
+asr2clip                       # live recording → groq (default_backend_live)
+asr2clip -i audio.wav          # file transcription → wcpp (default_backend_file)
+asr2clip -b sonnx              # override for this run (both modes)
+asr2clip -b wcpp -i audio.wav  # transcribe a file with a specific backend
+asr2clip --test                # tests both live and file backends if they differ
 asr2clip --test -b groq        # test a specific backend
 ```
 
@@ -294,8 +299,8 @@ asr2clip --test                     # also checks that configured preprocessors 
 
 **Config** (set different preprocessors for live vs. file transcription):
 ```yaml
-preprocessor_live: noisereduce  # spectral, no resampling overhead for live 16 kHz audio
-preprocessor_file: deepfilter   # best quality for longer file transcription
+preprocessor_live: noisereduce      # spectral, no resampling overhead for live 16 kHz audio
+preprocessor_file: deepfilter       # best quality for longer file transcription
 ```
 
 `asr2clip --generate_config` probes your system and writes these keys automatically
@@ -415,7 +420,8 @@ optional arguments:
                         Path to configuration file
   -q, --quiet           Quiet mode - only output transcription and errors
   -b NAME, --backend NAME
-                        Named backend to use (defined under 'backends:' in config)
+                        Named backend to use (defined under 'backends:' in config).
+                        Overrides default_backend_live / default_backend_file in config.
   -i FILE, --input FILE
                         Transcribe an existing audio or video file instead of
                         recording. Supported: wav, mp3, m4a, ogg, flac, aac,

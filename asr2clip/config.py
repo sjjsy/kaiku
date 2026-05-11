@@ -54,7 +54,8 @@ backends:
   #   model:  ~/path/to/whisper.cpp/models/ggml-large-v3-turbo-q8_0.bin
   #   # language: auto                        # 'auto' or ISO-639-1 (e.g. fi, en)
   #   # threads: 4
-default_backend: openai
+default_backend_live: openai                  # backend for live/toggle/VAD recording
+default_backend_file: openai                  # backend for -i file transcription
 
 # quiet: false                               # true = only output transcription and errors
 # org_id:                                    # OpenAI organization ID (rarely needed)
@@ -301,12 +302,40 @@ def resolve_preprocessor_config(
     return config.get(key, config.get("preprocessor", "none"))
 
 
-def resolve_backend_config(config: dict, backend_name: str | None = None) -> dict:
+def resolve_backend_name(
+    config: dict,
+    backend_name: str | None = None,
+    mode: str = "live",
+) -> str | None:
+    """Return the effective backend name for the given mode.
+
+    Args:
+        config: Full configuration dictionary.
+        backend_name: CLI override (takes priority).
+        mode: 'live' for microphone recording, 'file' for -i file input.
+
+    Returns:
+        Backend name string, or None if config has no backends section.
+    """
+    backends = config.get("backends")
+    if not backends:
+        return None
+    if backend_name:
+        return backend_name
+    mode_key = "default_backend_live" if mode == "live" else "default_backend_file"
+    return config.get(mode_key) or next(iter(backends))
+
+
+def resolve_backend_config(
+    config: dict,
+    backend_name: str | None = None,
+    mode: str = "live",
+) -> dict:
     """Return the effective backend config dict for transcription.
 
     Supports two formats:
 
-    New (named backends):
+    Named backends format:
         backends:
           groq:
             type: api
@@ -315,17 +344,13 @@ def resolve_backend_config(config: dict, backend_name: str | None = None) -> dic
             type: whisper_cpp
             binary: ...
             model: ...
-        default_backend: groq
-
-    Legacy (flat, backward-compatible):
-        backend: whisper_cpp   # or omit for api
-        api_key: ...
-        whisper_cpp:
-          binary: ...
+        default_backend_live: groq    # live/toggle/VAD recording
+        default_backend_file: local   # -i file transcription
 
     Args:
         config: Full configuration dictionary.
         backend_name: Override which named backend to use (from --backend flag).
+        mode: 'live' for microphone recording, 'file' for -i file input.
 
     Returns:
         A flat config dict recognised by transcribe_with_config().
@@ -335,26 +360,21 @@ def resolve_backend_config(config: dict, backend_name: str | None = None) -> dic
     """
     backends = config.get("backends")
     if not backends:
-        if backend_name:
-            print(
-                f"Error: --backend '{backend_name}' specified but config has no named backends.\n"
-                "Add a 'backends:' section to your config file, for example:\n\n"
-                "  default_backend: groq\n"
-                "  backends:\n"
-                "    groq:\n"
-                "      type: api\n"
-                "      api_key: YOUR_KEY\n"
-                "      ...\n"
-                "    local:\n"
-                "      type: whisper_cpp\n"
-                "      binary: ~/path/to/whisper-cli\n"
-                "      model:  ~/path/to/model.bin\n"
-            )
-            import sys
-            sys.exit(1)
-        return config
+        print(
+            "Error: config has no 'backends:' section.\n"
+            "Run 'asr2clip --generate_config' to create a fresh config, for example:\n\n"
+            "  backends:\n"
+            "    groq:\n"
+            "      type: api\n"
+            "      api_key: YOUR_KEY\n"
+            "      ...\n"
+            "  default_backend_live: groq\n"
+            "  default_backend_file: groq\n"
+        )
+        import sys
+        sys.exit(1)
 
-    name = backend_name or config.get("default_backend") or next(iter(backends))
+    name = resolve_backend_name(config, backend_name, mode)
     if name not in backends:
         available = ", ".join(backends)
         print(f"Error: backend '{name}' not found in config. Available: {available}")
