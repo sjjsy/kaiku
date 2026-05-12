@@ -183,14 +183,9 @@ def transcribe_with_config(
     """
     from .config import resolve_backend_name, resolve_backend_config
 
-    # Determine which backend to use (check legacy "backend" key first, then resolve from config)
-    backend_name = config.get("backend")
-    if not backend_name:
-        # Try to resolve from asr_backend_file (file transcription mode), or fall back to _live
-        backend_name = config.get("asr_backend_file") or resolve_backend_name(config, None, "file")
-
-    # Check if this is a whisper_cpp backend
-    backend_config = resolve_backend_config(config, backend_name, "file") if backend_name else {}
+    # Determine which backend to use (file transcription mode)
+    backend_name = resolve_backend_name(config, None, "file")
+    backend_config = resolve_backend_config(config, backend_name, "file")
     if backend_config.get("backend") == "whisper_cpp":
         from .backends.whisper_cpp import WhisperCppConfig, transcribe as wc_transcribe
         cfg = WhisperCppConfig.from_config(config)
