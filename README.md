@@ -5,7 +5,9 @@
 
 [中文](README_zh.md)
 
-Record speech, transcribe it, and copy the result to clipboard or a file. Supports cloud and fully-local [ASR backends](#asr-backends), [VAD](#vad-continuous-recording) (for background daemons) and [toggle](#toggle-mode) (for keyboard shortcuts), [noise reduction](#audio-preprocessing-noise-reduction), [speaker diarization](#diarization), and [LLM post-processing](#llm-post-processing).
+Record speech, transcribe it, and copy the result to clipboard or a file. Supports cloud and fully-local [ASR backends](#asr-backends), [VAD](#vad-continuous-recording) (for background daemons) and [toggle](#toggle-mode) (for keyboard shortcuts), [noise reduction](#audio-preprocessing-noise-reduction), [speaker diarization](#diarization), and [AI post-processing](#post-processing-with-ai-models).
+
+Jump to the [Related projects](#related-projects) section at the end to understand the landscape of ASR related tooling and why this project was developed for the open source community.
 
 ## TL;DR
 
@@ -622,9 +624,11 @@ diarize_min_speakers: 2
 diarize_max_speakers: 6
 ```
 
-## LLM post-processing
+## Post-processing (with AI models)
 
-LLM post-processing refines transcripts by passing them through a language model with custom instructions. Use this to fix errors, improve grammar, restructure notes, extract decisions, or produce consistent formatted outputs. It's valuable for frequent dictators (researchers, journalists, managers) and teams with important discussions. For group transcripts, use [diarization](#diarization) first to attribute segments to speakers, then post-process for richer structured output (meeting memos with decisions and action items).
+Post-processing refines transcripts by passing them through an artificial intelligence system with custom instructions.
+Use this to fix transcription errors, improve grammar, condense transcripts, or restructure them into consistently formatted memos with essential information extracted.
+The feature is especially valuable for frequent dictators (researchers, journalists, managers) and teams with important discussions, decisions, tasks and timelines.
 
 | Flag | Description |
 |------|-------------|
@@ -659,6 +663,10 @@ Examples below; see the full configuration section for all available fields.
 | `group-restructure` | Restructure a group discussion into a meeting memo with summary, decisions, action items |
 | `group-private` | Like `group-restructure` but defaults to a local offline model to ensure privacy |
 
+Tips:
+* To get richer and more accurate memos from meetings and debates, use [diarization](#diarization) first to attribute segments to speakers.
+* Add context files (see configuration below) to help the model better connect the dots between each individual participant and the contents discussed.
+
 #### Post-processor usage examples
 
 ```bash
@@ -675,7 +683,7 @@ asr2clip --toggle -P "List action items."   # inline system prompt
 | `openai_compat` | [Ollama](https://ollama.com/) (local), [Groq](https://console.groq.com/), [Anthropic API](https://www.anthropic.com/api), [OpenAI](https://platform.openai.com/), any OpenAI-compatible endpoint |
 | `claude_code` | [Claude Code](https://claude.ai/code) CLI — uses your CC session/subscription, no per-token billing |
 
-### Post-processor backend setup
+### Backend setup
 
 ```yaml
 # ~/.config/asr2clip/config.yaml
@@ -788,8 +796,8 @@ GNU Affero General Public License v3.0. See the [LICENSE](LICENSE) file for deta
 asr2clip operates within a four-stage pipeline:
 
 ```
-[Audio capture] → [ASR / transcription] → [LLM post-processing] → [Output: clipboard / file]
-     stage 1            stage 2                   stage 3                     stage 4
+[Audio capture] → [ASR / transcription] → [Post-processing] → [Output: clipboard / file]
+     stage 1            stage 2                stage 3                 stage 4
 ```
 
 The tables below cover the ecosystem at each pipeline stage and compare competing end-user tools. asr2clip covers stages 1–3 in a single composable CLI.
