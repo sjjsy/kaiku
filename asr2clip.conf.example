@@ -107,7 +107,7 @@ postprocessor_backends:                       # FIXME: Update this section based
 #   template:      output template name from output_templates below (default: "default")
 #   context_path:  list of file glob patterns; contents are injected into the LLM request
 postprocessors:                               # FIXME: These are not commented out but you still need to adapt them for yourself to make them work
-  solo-base:
+  solo-base:                                  # Note this is a "base" and is not intended to be used as a post-processor directly; The solo-enhance was devised as the minimal post-processor.
     backend: groq
     template: bare
     prompt: |
@@ -162,7 +162,7 @@ postprocessors:                               # FIXME: These are not commented o
     extra: |
       This content is strictly private and must not be shared. Write "*Confidential - Do Not Share*" as both the first and last line of the memo.
 
-  group-base:
+  group-base:                                  # Note this is a "base" and is not intended to be used as a post-processor directly; The group-enhance was devised as the minimal post-processor for group discussion transcripts.
     backend: anthropic
     model: claude-sonnet-4-6
     template: bare

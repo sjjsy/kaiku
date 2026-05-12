@@ -293,7 +293,7 @@ audio_device: 3                    # device index from --list_devices
 
 ### Audio preprocessing (noise reduction)
 
-Audio preprocessing enhances a recording before transcription by filtering unwanted signal content. **Noise reduction** is a key preprocessing technique that removes background sound — café chatter, fan hum, keyboard clicks — while preserving speech intelligibility. Preprocessing is useful in noisy environments or when your [ASR backend](#asr-backends) struggles with poor signal quality, producing errors or hallucinations. asr2clip provides three noise reduction libraries, each with different strengths depending on noise type and available compute resources. All apply loudness normalization (RMS → −20 dBFS) after cleaning to ensure the ASR backend receives a consistently strong signal.
+Audio preprocessing enhances a recording before transcription by filtering unwanted signal content. **Noise reduction** is a key preprocessing technique that removes background sound — café chatter, fan hum, keyboard clicks — while preserving speech intelligibility. Preprocessing is useful in noisy environments or when your [ASR backend](#asr-backends) struggles with poor signal quality, producing errors or hallucinations. asr2clip provides three noise reduction libraries, each with different strengths depending on noise type and available compute resources.
 
 ### Available preprocessors
 
@@ -324,6 +324,10 @@ Audio preprocessing enhances a recording before transcription by filtering unwan
 - **Cloud API** (Groq, OpenAI): Optional preprocessing for mildly noisy audio; use preprocessing aggressively for café-grade noise to maximize transcription quality.
 - **Speaker diarization** (`--diarize` via WhisperX): Preprocessing before diarization is recommended in noisy settings — speaker separation depends on clear voice boundaries, which noise obscures.
 
+### Loudness normalisation
+
+To complete the audio enhancement after noise reduction with any of the three preprocessors, `asr2clip` applies a loudnorm pass (RMS → −20 dBFS, peak ceiling −0.1 dBFS) to ensure the ASR backend receives a consistently strong, unclipped signal.
+
 ### Installing preprocessors
 
 ```bash
@@ -352,10 +356,6 @@ preprocessor_file: deepfilter       # best quality for longer file transcription
 ```
 
 `asr2clip --generate_config` writes a template config with examples. Set `preprocessor_live` and `preprocessor_file` to your preferred option, or override for a single run with `-p`.
-
-### Loudness normalisation
-
-All three preprocessors apply a loudnorm pass after cleaning (RMS → −20 dBFS, peak ceiling −0.1 dBFS) to ensure the ASR backend receives a consistently strong, unclipped signal.
 
 ## Transcription
 
@@ -638,7 +638,7 @@ The feature is especially valuable for frequent dictators (researchers, journali
 
 ### Post-processors (prompt templates)
 
-Five prompts are provided in the config template as examples; each is a starting point that requires configuration:
+Six post-processor specs are provided in the config template as examples; each is a starting point that requires configuration:
 - **Setup a `postprocessor_backends:` entry** (Ollama, Groq, Anthropic API, OpenAI, Claude Code, or any OpenAI-compatible endpoint)
 - **Assign that backend to the prompt** (via the `backend:` field) or set a default with `postprocessor_live` / `postprocessor_file`
 - **Update the context file list** via `context_path:` to help the LLM understand context if required; Delete it if no extra context neeeded.
@@ -649,7 +649,6 @@ Examples below; see the full configuration section for all available fields.
 
 | Name | Purpose |
 |------|---------|
-| `solo-base` | Correct errors and clean up a personal single-speaker transcript |
 | `solo-enhance` | Improve quality, fix grammar and word choice while honoring the author's style |
 | `solo-restructure` | Restructure a personal dictation into a structured memo with sections |
 | `solo-private` | Like `solo-restructure` but defaults to a local offline model to ensure privacy |
@@ -658,7 +657,6 @@ Examples below; see the full configuration section for all available fields.
 
 | Name | Purpose |
 |------|---------|
-| `group-base` | Correct errors and clean up a group discussion transcript |
 | `group-enhance` | Improve quality of group transcript while honoring each speaker's style |
 | `group-restructure` | Restructure a group discussion into a meeting memo with summary, decisions, action items |
 | `group-private` | Like `group-restructure` but defaults to a local offline model to ensure privacy |
@@ -738,6 +736,8 @@ postprocessors:
     context_path:
       - "~/.asr2clip/context/private-*.md"  # accumulates with parent's context
 ```
+
+Note: The `solo-base` and `group-base` are not intended to be used directly. Instead, they provide definitions that are shared by other single-speaker and group discussion post-processors, respectively, through inheritance.
 
 ### Output templates
 

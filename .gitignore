@@ -178,6 +178,7 @@ docs_zh/
 asr2clip.conf
 WISHLIST.md
 SPEC_0.4.md
+comms.md
 # all audio/video files
 data/
 
