@@ -73,6 +73,7 @@ def process_file_robust(
     postprocessor=None,
     template_str: str = "{result}",
     max_clipboard_chars: int = _DEFAULT_CLIPBOARD_MAX_CHARS,
+    backend: str | None = None,
 ):
     """Transcribe a long audio file in silence-bounded chunks with quality checks.
 
@@ -141,7 +142,8 @@ def process_file_robust(
         for attempt in range(retries):
             try:
                 candidate = transcribe_casual(
-                    tmp_path, config, raise_on_error=True, timeout=timeout, language=language
+                    tmp_path, config, raise_on_error=True, timeout=timeout,
+                    language=language, backend=backend,
                 )
                 if _check_quality(candidate):
                     text = candidate

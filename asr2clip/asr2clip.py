@@ -242,6 +242,7 @@ def process_recording(
     postprocessor=None,
     template_str: str = "{result}",
     max_clipboard_chars: int = _DEFAULT_CLIPBOARD_MAX_CHARS,
+    backend: str | None = None,
 ):
     """Record audio, transcribe, and output the result."""
     import time
@@ -275,7 +276,7 @@ def process_recording(
 
     try:
         t1 = time.time()
-        transcript = transcribe_casual(temp_path, config, language=language)
+        transcript = transcribe_casual(temp_path, config, language=language, backend=backend)
         info(f"Transcription completed in {time.time() - t1:.1f}s")
 
         if not transcript.strip():
@@ -325,6 +326,7 @@ def process_file(
     diarize: bool = False,
     num_speakers: int | None = None,
     max_clipboard_chars: int = _DEFAULT_CLIPBOARD_MAX_CHARS,
+    backend: str | None = None,
 ):
     """Transcribe an existing audio or video file."""
     import time
@@ -410,7 +412,7 @@ def process_file(
                 print(f"Diarization error: {e}", file=sys.stderr)
                 sys.exit(1)
         else:
-            transcript = transcribe_casual(temp_path, config, language=language)
+            transcript = transcribe_casual(temp_path, config, language=language, backend=backend)
         info(f"Transcription completed in {time.time() - t1:.1f}s")
 
         if not transcript.strip():
@@ -870,6 +872,7 @@ def main():
                 postprocessor=postprocessor,
                 template_str=template,
                 max_clipboard_chars=max_clipboard_chars,
+                backend=args.backend,
             )
         else:
             process_file(
@@ -881,6 +884,7 @@ def main():
                 diarize=args.diarize,
                 num_speakers=args.speakers,
                 max_clipboard_chars=max_clipboard_chars,
+                backend=args.backend,
             )
         return
 
@@ -933,6 +937,7 @@ def main():
         postprocessor=postprocessor,
         template_str=template,
         max_clipboard_chars=max_clipboard_chars,
+        backend=args.backend,
     )
 
 
