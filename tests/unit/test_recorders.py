@@ -100,17 +100,25 @@ class TestArecordRecorder:
             pid = ArecordRecorder().start(str(tmp_path / "out.wav"), None)
         assert pid is None
 
-    def test_friendly_name_resolved_to_alsa_flag(self, tmp_path):
+    def test_alsa_name_passed_to_arecord_via_D_flag(self, tmp_path):
+        from asr2clip.audio import DeviceInfo
         from asr2clip.recorders.arecord import ArecordRecorder
+
         proc = MagicMock()
         proc.pid = 7777
         proc.poll.return_value = None
+
+        dev_info = DeviceInfo(
+            index=2, name="Snowball: USB Audio (hw:2,0)",
+            portaudio_name="Snowball: USB Audio (hw:2,0)",
+            alsa_name="2,0", channels=1, sample_rate=44100
+        )
+
         with patch("shutil.which", return_value="/usr/bin/arecord"), \
-             patch("asr2clip.recorders.arecord._friendly_to_alsa", return_value="plughw:2,0"), \
              patch("asr2clip.recorders.arecord.popen_subprocess", return_value=proc) as mock_popen, \
              patch("time.sleep"), \
              patch("asr2clip.recorders.arecord._device_native_rate", return_value=44100):
-            ArecordRecorder().start(str(tmp_path / "out.wav"), "Blue Snowball: USB Audio (hw:2,0)")
+            ArecordRecorder().start(str(tmp_path / "out.wav"), dev_info)
         cmd = mock_popen.call_args.args[0]
         assert "-D" in cmd
         idx = cmd.index("-D")
@@ -155,13 +163,31 @@ class TestSounddeviceRecorder:
              patch("subprocess.Popen") as mock_raw_popen, \
              patch("time.sleep"), \
              patch("asr2clip.recorders.sounddevice_recorder._device_native_rate", return_value=44100):
-            pid = SounddeviceRecorder().start(str(tmp_path / "out.wav"), "pulse")
+            pid = SounddeviceRecorder().start(str(tmp_path / "out.wav"), 0)
         assert pid == 5555
         mock_popen.assert_called_once()
         mock_raw_popen.assert_not_called()
         cmd = mock_popen.call_args.args[0]
         assert "-m" in cmd
         assert "asr2clip.recorders.sounddevice_recorder" in cmd
+
+    def test_sounddevice_device_spec_extraction(self, tmp_path):
+        from asr2clip.audio import DeviceInfo
+        from asr2clip.recorders.sounddevice_recorder import SounddeviceRecorder
+
+        # sounddevice recorder should extract the index from DeviceInfo
+        dev_info = DeviceInfo(
+            index=2, name="Snowball", portaudio_name="Snowball: USB Audio (hw:2,0)",
+            alsa_name="2,0", channels=1, sample_rate=44100
+        )
+        proc = MagicMock()
+        proc.pid = 5555
+        proc.poll.return_value = None
+        with patch("asr2clip.recorders.sounddevice_recorder.popen_subprocess", return_value=proc), \
+             patch("time.sleep"), \
+             patch("asr2clip.recorders.sounddevice_recorder._device_native_rate", return_value=44100):
+            pid = SounddeviceRecorder().start(str(tmp_path / "out.wav"), dev_info)
+            assert pid == 5555
 
     def test_start_returns_none_on_immediate_exit(self, tmp_path):
         from asr2clip.recorders.sounddevice_recorder import SounddeviceRecorder

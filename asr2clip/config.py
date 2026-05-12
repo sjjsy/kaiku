@@ -228,6 +228,39 @@ def resolve_recorder_config(
     return config.get("recorder", "auto")
 
 
+def resolve_clipboard_max_chars(config: dict) -> int:
+    """Return the clipboard character threshold from config.
+
+    Returns:
+        int: Maximum chars to copy as text. 0 = always copy a file path instead.
+    """
+    from .output import _DEFAULT_CLIPBOARD_MAX_CHARS
+    return int(config.get("clipboard_max_chars", _DEFAULT_CLIPBOARD_MAX_CHARS))
+
+
+def resolve_audio_device(config: dict, cli_override: str | None = None):
+    """Resolve audio device from config + CLI override.
+
+    Args:
+        config: Configuration dict.
+        cli_override: CLI --device override (takes priority).
+
+    Returns:
+        DeviceInfo if a device is available, None if none matched or error occurred.
+    """
+    from .audio import resolve_device_preference_order
+
+    spec = cli_override or config.get("audio_device") or "auto"
+    devices = resolve_device_preference_order(spec)
+
+    if devices:
+        return devices[0]
+
+    if cli_override:
+        warning(f"None of the devices in '{cli_override}' are available.")
+    return None
+
+
 def resolve_backend_name(
     config: dict,
     backend_name: str | None = None,

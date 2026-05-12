@@ -22,15 +22,17 @@ from .audio import (
 from .config import (
     generate_config,
     get_api_config,
-    get_audio_device,
     open_in_editor,
     read_config,
+    resolve_audio_device,
     resolve_backend_config,
     resolve_backend_name,
+    resolve_clipboard_max_chars,
     resolve_preprocessor_config,
 )
 from .daemon import continuous_recording
 from .output import (
+    _DEFAULT_CLIPBOARD_MAX_CHARS,
     check_clipboard_support,
     output_transcript,
     print_clipboard_help,
@@ -237,6 +239,7 @@ def process_recording(
     preprocessor=None,
     postprocessor=None,
     template_str: str = "{result}",
+    max_clipboard_chars: int = _DEFAULT_CLIPBOARD_MAX_CHARS,
 ):
     """Record audio, transcribe, and output the result."""
     import time
@@ -300,7 +303,10 @@ def process_recording(
         else:
             final = result
 
-        output_transcript(final, to_clipboard=True, to_stdout=True, to_file=output_file)
+        output_transcript(
+            final, to_clipboard=True, to_stdout=True, to_file=output_file,
+            max_clipboard_chars=max_clipboard_chars,
+        )
 
     finally:
         safe_unlink(temp_path)
@@ -316,6 +322,7 @@ def process_file(
     template_str: str = "{result}",
     diarize: bool = False,
     num_speakers: int | None = None,
+    max_clipboard_chars: int = _DEFAULT_CLIPBOARD_MAX_CHARS,
 ):
     """Transcribe an existing audio or video file."""
     import time
@@ -356,7 +363,10 @@ def process_file(
             )
         else:
             final = result
-        output_transcript(final, to_clipboard=True, to_stdout=True, to_file=output_file)
+        output_transcript(
+            final, to_clipboard=True, to_stdout=True, to_file=output_file,
+            max_clipboard_chars=max_clipboard_chars,
+        )
         return
 
     if not input_file.lower().endswith(".wav"):
@@ -435,7 +445,10 @@ def process_file(
         else:
             final = result
 
-        output_transcript(final, to_clipboard=True, to_stdout=True, to_file=output_file)
+        output_transcript(
+            final, to_clipboard=True, to_stdout=True, to_file=output_file,
+            max_clipboard_chars=max_clipboard_chars,
+        )
 
     finally:
         if cleanup_temp:
@@ -790,7 +803,7 @@ def main():
             info("Some checks failed — see details above.")
         sys.exit(0 if success else 1)
 
-    device = get_audio_device(config, args.device)
+    device_cli = args.device  # Device resolution happens in toggle_recording or per-mode
 
     # Resolve preprocessors
     from .preprocessors import make_preprocessor
@@ -829,10 +842,12 @@ def main():
     if postprocessor_file.name != "none":
         info(f"File post-processor: {postprocessor_file.name}")
 
+    max_clipboard_chars = resolve_clipboard_max_chars(config)
+
     if args.toggle:
         from .toggle import toggle_recording
         toggle_recording(
-            backend_config_live, device, args.output,
+            config, device=device_cli, output_file=args.output,
             language=args.language,
             preprocessor=preprocessor_live,
             postprocessor=postprocessor_live,
@@ -853,6 +868,7 @@ def main():
                 preprocessor=preprocessor_file,
                 postprocessor=postprocessor_file,
                 template_str=template_file,
+                max_clipboard_chars=max_clipboard_chars,
             )
         else:
             process_file(
@@ -863,6 +879,7 @@ def main():
                 template_str=template_file,
                 diarize=args.diarize,
                 num_speakers=args.speakers,
+                max_clipboard_chars=max_clipboard_chars,
             )
         return
 
@@ -889,6 +906,7 @@ def main():
             vad_enabled=args.vad,
             silence_threshold=args.silence_threshold,
             silence_duration=args.silence_duration,
+            max_clipboard_chars=max_clipboard_chars,
         )
         return
 
@@ -898,6 +916,7 @@ def main():
         preprocessor=preprocessor_live,
         postprocessor=postprocessor_live,
         template_str=template_live,
+        max_clipboard_chars=max_clipboard_chars,
     )
 
 

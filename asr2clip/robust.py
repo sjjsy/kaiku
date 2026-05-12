@@ -11,7 +11,7 @@ from pydub import AudioSegment
 from pydub.silence import detect_silence
 
 from .audio import audiosegment_to_float32, float32_to_audiosegment
-from .output import copy_transcript_to_clipboard, append_transcript_to_file
+from .output import _DEFAULT_CLIPBOARD_MAX_CHARS, copy_transcript_to_clipboard, append_transcript_to_file
 from .transcribe import TranscriptionError, transcribe_with_config
 from .utils import info, log, safe_unlink, warning
 
@@ -72,6 +72,7 @@ def process_file_robust(
     preprocessor=None,
     postprocessor=None,
     template_str: str = "{result}",
+    max_clipboard_chars: int = _DEFAULT_CLIPBOARD_MAX_CHARS,
 ):
     """Transcribe a long audio file in silence-bounded chunks with quality checks.
 
@@ -223,7 +224,7 @@ def process_file_robust(
             backend=postprocessor.backend_type,
         )
 
-    copy_transcript_to_clipboard(final, output_file)
+    copy_transcript_to_clipboard(final, output_file, max_clipboard_chars)
     if output_file:
         log(f"Full transcript written to {output_file}")
 

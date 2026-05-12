@@ -4,17 +4,17 @@ from __future__ import annotations
 
 import os
 import shutil
+import tempfile
 from datetime import datetime
 
 from .utils import log, print_success, run_subprocess, warning
 
-# UX threshold: when a transcript exceeds this length *and* -o FILE was given,
-# copy the file path instead of the full text. This is not a system limit —
-# modern clipboards (X11 INCR, Wayland, macOS NSPasteboard, Windows) handle
-# megabytes of text with no OS-imposed cap. The threshold is purely a usability
-# heuristic: a 100 k-char (~75,000-word) transcript is better accessed via file
-# than pasted from clipboard. There is no runtime API to query clipboard capacity.
-_MAX_CLIPBOARD_CHARS = 100_000
+# Default UX threshold for clipboard text vs file-path fallback.
+# Modern clipboards (X11 INCR, Wayland, macOS NSPasteboard, Windows) have no
+# OS-imposed text limit — this constant is a pure usability heuristic. Override
+# via 'clipboard_max_chars' in config. Set to 0 to always copy a file path.
+# The limit of 50k corresponds to ~1 hour at 150 wpm (audiobook rate) at 5 cpw (English)
+_DEFAULT_CLIPBOARD_MAX_CHARS = 50_000
 
 
 def _is_wayland() -> bool:
@@ -130,39 +130,68 @@ def append_transcript_to_file(text: str, filepath: str):
     log(f"Appended transcript to {filepath}")
 
 
-def copy_transcript_to_clipboard(text: str, output_file: str | None = None) -> bool:
-    """Copy transcript to clipboard, using the file path as fallback when text is too long.
+def _write_temp_transcript(text: str) -> str:
+    """Write text to a temp file and return its path.
+
+    The file lives in the system temp directory (/tmp on Linux/macOS,
+    %TEMP% on Windows) and is cleaned up at reboot or by OS policy.
+    """
+    fd, path = tempfile.mkstemp(suffix=".txt", prefix="asr2clip_")
+    os.close(fd)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(text)
+    return path
+
+
+def copy_transcript_to_clipboard(
+    text: str,
+    output_file: str | None = None,
+    max_chars: int = _DEFAULT_CLIPBOARD_MAX_CHARS,
+) -> bool:
+    """Copy transcript to clipboard.
+
+    Behaviour depends on max_chars (configured via 'clipboard_max_chars'):
+      max_chars == 0   — always copy a file path (output_file if given, else a
+                         temp file in the system temp directory).
+      max_chars > 0    — copy the text when len(text) <= max_chars; otherwise
+                         copy the file path (output_file) when one exists, or
+                         copy the full text when no file path is available.
 
     Args:
         text: Transcript text.
         output_file: Path to the output file, if one was written.
+        max_chars: Character threshold; 0 = always use file path.
 
     Returns:
         True if something was copied to clipboard, False otherwise.
     """
-    if len(text) <= _MAX_CLIPBOARD_CHARS:
+    use_path = (max_chars == 0) or (max_chars > 0 and len(text) > max_chars)
+
+    if not use_path:
         if copy_to_clipboard(text):
             print_success("Copied to clipboard")
             return True
         warning("Failed to copy to clipboard")
         return False
 
+    # Resolve the file path to copy
     if output_file:
-        abs_path = os.path.abspath(output_file)
-        if copy_to_clipboard(abs_path):
-            log(
-                f"Transcript too long for clipboard ({len(text):,} chars); "
-                f"file path copied instead: {abs_path}"
-            )
+        path = os.path.abspath(output_file)
+    elif max_chars == 0:
+        path = _write_temp_transcript(text)
+        log(f"Transcript written to temp file (clipboard_max_chars=0): {path}")
+    else:
+        # max_chars > 0 but text too long and no output file — copy full text anyway
+        if copy_to_clipboard(text):
+            print_success("Copied to clipboard")
             return True
-        warning("Failed to copy file path to clipboard")
+        warning("Failed to copy to clipboard")
         return False
 
-    # No output file — copy the full text anyway and let the clipboard handle it
-    if copy_to_clipboard(text):
-        print_success("Copied to clipboard")
+    if copy_to_clipboard(path):
+        log(f"File path copied to clipboard: {path}")
         return True
-    warning("Failed to copy to clipboard")
+    warning("Failed to copy file path to clipboard")
     return False
 
 
@@ -171,6 +200,7 @@ def output_transcript(
     to_clipboard: bool = True,
     to_stdout: bool = True,
     to_file: str | None = None,
+    max_clipboard_chars: int = _DEFAULT_CLIPBOARD_MAX_CHARS,
 ):
     """Output transcript to various destinations.
 
@@ -179,9 +209,10 @@ def output_transcript(
         to_clipboard: Whether to copy to clipboard.
         to_stdout: Whether to print to stdout.
         to_file: Optional file path to append transcript to.
+        max_clipboard_chars: Passed to copy_transcript_to_clipboard.
     """
     if to_clipboard:
-        copy_transcript_to_clipboard(text, to_file if to_file else None)
+        copy_transcript_to_clipboard(text, to_file if to_file else None, max_clipboard_chars)
 
     if to_stdout:
         print(text)

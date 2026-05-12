@@ -97,6 +97,10 @@ Examples:
 
 Use `meta:` for project metadata and infrastructure; `chore:` for build/dependency changes. Prefer semantic commits on feature branches; squash trivial commits before PR.
 
+## Tooling conventions
+
+- **Multi-file string replacement:** Use `sed -i 's/old/new/g' file1 file2 ...` (or `grep -rl pattern . | xargs sed -i ...` for codebase-wide sweeps) instead of the Edit tool. Edit requires the file to be read first and sends the full diff — `sed` is cheaper for mechanical substitutions that don't need surrounding context.
+
 ## Documentation conventions
 
 - **CLI reference in README:** Always run `asr2clip --help` and paste the exact output verbatim — never manually maintain a separate version. Capitalization and wording must match the argparse definition exactly.

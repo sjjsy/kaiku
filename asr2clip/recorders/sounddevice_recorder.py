@@ -17,6 +17,7 @@ import time
 
 from ..audio import _device_native_rate
 from ..utils import popen_subprocess, warning
+from .arecord import _ALSA_PREFIXES
 from .base import AudioRecorder
 
 
@@ -30,7 +31,10 @@ class SounddeviceRecorder(AudioRecorder):
     def is_available(self) -> bool:
         return importlib.util.find_spec("sounddevice") is not None
 
-    def start(self, audio_path: str, device: str | int | None) -> int | None:
+    def start(self, audio_path: str, device_info) -> int | None:
+        device = None
+        if device_info:
+            device = device_info.get_spec("sounddevice")
         rate = _device_native_rate(device) or 44100
         device_arg = "" if device is None else str(device)
         cmd = [

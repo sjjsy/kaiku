@@ -3,40 +3,203 @@
 from __future__ import annotations
 
 import io
+import re
 import shutil
 import tempfile
 import wave
 from collections.abc import Callable
+from dataclasses import dataclass
 
 import numpy as np
 import sounddevice as sd
 
-from .utils import is_stop_requested, log, run_subprocess, warning
+from .utils import info, is_stop_requested, log, run_subprocess, warning
+
+
+@dataclass
+class DeviceInfo:
+    """Resolved audio device with specs for different backends."""
+
+    index: int
+    name: str  # human-readable name from PortAudio
+    portaudio_name: str  # full PortAudio device name
+    alsa_name: str | None  # ALSA name extracted from device info (e.g., "hw:2,0")
+    channels: int
+    sample_rate: int
+    is_default: bool = False
+
+    def get_spec(self, recorder_name: str) -> str | int | None:
+        """Return device spec that the given recorder understands."""
+        if recorder_name == "sounddevice":
+            return self.index
+        elif recorder_name == "arecord":
+            if self.alsa_name:
+                return f"plughw:{self.alsa_name}"
+            return None
+        return None
+
+    def __str__(self) -> str:
+        """User-friendly device description."""
+        desc = self.name
+        if self.is_default:
+            desc += " [DEFAULT]"
+        if self.alsa_name:
+            desc += f" (ALSA: {self.alsa_name})"
+        return desc
+
+
+def query_devices() -> list[DeviceInfo]:
+    """Query all available input devices from sounddevice."""
+    devices: list[DeviceInfo] = []
+    try:
+        default_input = sd.query_devices(kind="input")
+        default_name = default_input.get("name", "")
+    except Exception:
+        default_name = ""
+
+    try:
+        all_devices = sd.query_devices()
+    except Exception:
+        return []
+
+    for i, device in enumerate(all_devices):
+        if device.get("max_input_channels", 0) <= 0:
+            continue
+
+        # Extract ALSA name from device name (e.g., "Snowball: USB Audio (hw:2,0)" → "2,0")
+        alsa_name = None
+        m = re.search(r"\(hw:(\d+,\d+)\)", device.get("name", ""))
+        if m:
+            alsa_name = m.group(1)
+
+        is_default = device.get("name", "") == default_name
+        dev_info = DeviceInfo(
+            index=i,
+            name=device.get("name", f"Device {i}"),
+            portaudio_name=device.get("name", f"Device {i}"),
+            alsa_name=alsa_name,
+            channels=device.get("max_input_channels", 0),
+            sample_rate=int(device.get("default_samplerate", 44100)),
+            is_default=is_default,
+        )
+        devices.append(dev_info)
+
+    return devices
+
+
+def find_device(name: str) -> DeviceInfo | None:
+    """Find a device by name with relevance scoring.
+
+    Supports:
+    - Special names: 'auto', 'default' → system default
+    - Integer index: '0', '12'
+    - Substring match (case-insensitive): 'Snowball' matches 'Snowball: USB Audio'
+    - ALSA name: 'hw:2,0' or 'plughw:2,0'
+
+    Returns first matching device (prioritizing exact/higher-relevance matches).
+    """
+    if not name or name.lower() in ("auto", "default"):
+        # Return system default
+        available = query_devices()
+        for dev in available:
+            if dev.is_default:
+                return dev
+        return available[0] if available else None
+
+    # Try numeric index
+    try:
+        idx = int(name)
+        available = query_devices()
+        if 0 <= idx < len(available):
+            return available[idx]
+    except ValueError:
+        pass
+
+    # Try ALSA name match (hw:X,Y or plughw:X,Y)
+    available = query_devices()
+    for dev in available:
+        if dev.alsa_name and dev.alsa_name == name.replace("hw:", "").replace("plughw:", ""):
+            return dev
+
+    # Try case-insensitive substring match (exact > partial)
+    name_lower = name.lower()
+    exact_matches = [
+        dev for dev in available if dev.name.lower() == name_lower
+    ]
+    if exact_matches:
+        return exact_matches[0]
+
+    partial_matches = [
+        dev for dev in available if name_lower in dev.name.lower()
+    ]
+    if partial_matches:
+        log(f"Device '{name}' not exact; using first match: {partial_matches[0].name}")
+        return partial_matches[0]
+
+    return None
+
+
+def resolve_device_preference_order(spec: str | list | None) -> list[DeviceInfo]:
+    """Parse device preference order and return available devices.
+
+    Args:
+        spec: Comma-separated string ("Snowball,Webcam,auto") or list ["Snowball", "Webcam"].
+              Empty/None defaults to "auto".
+
+    Returns:
+        List of available devices in preference order.
+    """
+    if spec is None or spec == "":
+        spec = "auto"
+
+    # Parse into list of names
+    if isinstance(spec, str):
+        names = [s.strip() for s in spec.split(",") if s.strip()]
+    else:
+        names = [str(s).strip() for s in spec if str(s).strip()]
+
+    if not names:
+        names = ["auto"]
+
+    # Find each device in preference order
+    resolved = []
+    tried = []
+    for name in names:
+        dev = find_device(name)
+        if dev:
+            resolved.append(dev)
+            tried.append(f"{name} (→ {dev.name})")
+        else:
+            tried.append(f"{name} (not available)")
+
+    if tried:
+        log(f"Device preference order: {', '.join(tried)}")
+
+    return resolved
 
 
 def list_audio_devices():
-    """List all available audio input devices."""
+    """List all available audio input devices with human-readable info."""
+    available = query_devices()
+    if not available:
+        print("No audio input devices found.")
+        print("Check microphone permissions or system audio configuration.")
+        return
+
     print("Available audio input devices:")
-    print("-" * 60)
-    devices = sd.query_devices()
-    for i, device in enumerate(devices):
-        if device["max_input_channels"] > 0:
-            default_marker = ""
-            try:
-                default_input = sd.query_devices(kind="input")
-                if device["name"] == default_input["name"]:
-                    default_marker = " [DEFAULT]"
-            except Exception:
-                pass
-            print(f"  {i}: {device['name']}{default_marker}")
-            print(
-                f"      Channels: {device['max_input_channels']}, "
-                f"Sample Rate: {device['default_samplerate']}"
-            )
-    print("-" * 60)
-    print("\nUse --device <name_or_index> to select a device")
-    print("Example: asr2clip --device pulse")
-    print("         asr2clip --device 12")
+    print("-" * 80)
+    for dev in available:
+        print(f"  {dev.index}: {dev}")
+        print(
+            f"      Channels: {dev.channels}, Sample Rate: {dev.sample_rate} Hz"
+        )
+    print("-" * 80)
+    print("\nUse --device to select by:")
+    print("  Index:        asr2clip --device 0")
+    print("  Name:         asr2clip --device Snowball")
+    print("  Preference:   asr2clip --device Snowball,Webcam,auto")
+    print("  Special:      asr2clip --device auto  (system default)")
+    print("  ALSA:         asr2clip --device hw:2,0")
 
 
 def write_wav(audio_data: np.ndarray, sample_rate: int, channels: int = 1) -> bytes:

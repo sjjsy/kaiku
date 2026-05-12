@@ -48,32 +48,20 @@ class ArecordRecorder(AudioRecorder):
     def is_available(self) -> bool:
         return bool(shutil.which("arecord"))
 
-    def start(self, audio_path: str, device: str | int | None) -> int | None:
+    def start(self, audio_path: str, device_info) -> int | None:
         if not self.is_available():
             return None
 
-        alsa_device: str | int | None = device
-        if isinstance(device, str) and not _is_alsa_device(device):
-            resolved = _friendly_to_alsa(device)
-            if resolved:
-                alsa_device = resolved
-            else:
-                warning(
-                    f"Device '{device}' could not be mapped to an ALSA name; "
-                    "arecord will use the default device."
-                )
-                alsa_device = None
+        alsa_device: str | int | None = None
+        if device_info:
+            alsa_device = device_info.get_spec("arecord")
 
         rate = _device_native_rate(
-            alsa_device if _is_alsa_device(alsa_device) else None
+            alsa_device if isinstance(alsa_device, str) and _is_alsa_device(alsa_device) else None
         ) or 44100
         cmd = ["arecord", "-f", "S16_LE", "-r", str(rate), "-c", "1"]
 
-        if isinstance(device, int):
-            warning(
-                "arecord does not support integer device indices; using default device."
-            )
-        elif alsa_device is not None and _is_alsa_device(alsa_device):
+        if alsa_device is not None and _is_alsa_device(alsa_device):
             cmd += ["-D", str(alsa_device)]
 
         cmd.append(audio_path)

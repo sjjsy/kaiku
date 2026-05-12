@@ -13,7 +13,7 @@ import numpy as np
 
 from .audio import calculate_rms, get_audio_duration, save_audio
 from .logging import CYAN, GREEN, RED, RESET, YELLOW
-from .output import output_transcript
+from .output import _DEFAULT_CLIPBOARD_MAX_CHARS, output_transcript
 from .transcribe import TranscriptionError, transcribe_audio
 from .utils import (
     info,
@@ -145,13 +145,12 @@ def _process_transcription(
             pass
 
 
-def _run_output_worker(state: RecorderState, output_file: str | None):
-    """Output transcription results in order.
-
-    Args:
-        state: Recorder state.
-        output_file: Optional file to append transcripts to.
-    """
+def _run_output_worker(
+    state: RecorderState,
+    output_file: str | None,
+    max_clipboard_chars: int = _DEFAULT_CLIPBOARD_MAX_CHARS,
+):
+    """Output transcription results in order."""
     while not is_stop_requested():
         try:
             sequence, text, error = state.result_queue.get(timeout=0.1)
@@ -165,23 +164,25 @@ def _run_output_worker(state: RecorderState, output_file: str | None):
             if is_stop_requested():
                 break
 
-            _output_single_result(text, error, output_file)
+            _output_single_result(text, error, output_file, max_clipboard_chars)
             state.next_output_sequence += 1
 
 
-def _output_single_result(text: str | None, error: str | None, output_file: str | None):
-    """Output a single transcription result.
-
-    Args:
-        text: Transcribed text (if successful).
-        error: Error message (if failed).
-        output_file: Optional file to append transcripts to.
-    """
+def _output_single_result(
+    text: str | None,
+    error: str | None,
+    output_file: str | None,
+    max_clipboard_chars: int = _DEFAULT_CLIPBOARD_MAX_CHARS,
+):
+    """Output a single transcription result."""
     if error:
         print(f"\r{RED}✗{RESET} Failed: {error}" + " " * 20, flush=True)
     elif text and text.strip():
         print(f"\r{GREEN}✓{RESET} Transcribed" + " " * 30, flush=True)
-        output_transcript(text, to_clipboard=True, to_stdout=True, to_file=output_file)
+        output_transcript(
+            text, to_clipboard=True, to_stdout=True, to_file=output_file,
+            max_clipboard_chars=max_clipboard_chars,
+        )
     else:
         print(f"\r{YELLOW}○{RESET} (no speech)" + " " * 30, flush=True)
 
@@ -322,6 +323,7 @@ def continuous_recording(
     silence_duration: float = 1.5,
     min_transcribe_interval: float = 0.5,
     max_concurrent_transcriptions: int = 3,
+    max_clipboard_chars: int = _DEFAULT_CLIPBOARD_MAX_CHARS,
 ):
     """Run continuous recording mode with periodic transcription.
 
@@ -375,7 +377,7 @@ def continuous_recording(
     executor = ThreadPoolExecutor(max_workers=max_concurrent_transcriptions)
 
     output_thread = threading.Thread(
-        target=_run_output_worker, args=(state, output_file), daemon=True
+        target=_run_output_worker, args=(state, output_file, max_clipboard_chars), daemon=True
     )
     output_thread.start()
 

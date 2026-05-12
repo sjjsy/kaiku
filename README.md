@@ -515,17 +515,6 @@ asr2clip -b wcpp --toggle                     # same, using local whisper.cpp
 asr2clip --toggle -P solo-restructure        # toggle → structured personal memo
 ```
 
-Toggle mode requires a POSIX system (Linux or macOS). Windows is not supported: the recorder subprocess relies on `signal.pause()` (POSIX-only) and `SIGTERM` for graceful stop-and-write; the Windows equivalents would require reimplementing IPC with Win32 named pipes or events.
-
-**Recorder backends** — audio is captured in the background by one of:
-
-| Recorder | Platform | Requirement |
-|---|---|---|
-| `sounddevice` (default) | cross-platform | already a dependency |
-| `arecord` | Linux / ALSA only | `alsa-utils` system package |
-
-`sounddevice` is used by default. Set `recorder: arecord` in config for direct ALSA access.
-
 Example awesome WM keybinding:
 
 ```lua
@@ -533,6 +522,20 @@ awful.key({ modkey }, "r", function()
     awful.spawn("asr2clip --toggle")
 end)
 ```
+
+#### Requirements for toggle mode to work
+
+Toggle mode requires a POSIX system (Linux or macOS). Windows is not supported: the recorder subprocess relies on `signal.pause()` (POSIX-only) and `SIGTERM` for graceful stop-and-write; the Windows equivalents would require reimplementing IPC with Win32 named pipes or events.
+
+**Recorder backends** — Toggle mode needs audio to be captured in the background, and currently the alternative recorder backends are:
+
+| Recorder | Platform | Requirement |
+|---|---|---|
+| `sounddevice` (default) | cross-platform | already a dependency |
+| `arecord` | Linux / ALSA only | `alsa-utils` system package |
+
+From these, `sounddevice` is used by default.
+If you want direct ALSA access, set `recorder: arecord` in config.
 
 ## Local ASR server
 

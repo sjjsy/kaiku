@@ -44,8 +44,12 @@ class AudioRecorder(ABC):
         return True
 
     @abstractmethod
-    def start(self, audio_path: str, device: str | int | None) -> int | None:
+    def start(self, audio_path: str, device_info) -> int | None:
         """Spawn a background recording process.
+
+        Args:
+            audio_path: Path to write the WAV file.
+            device_info: DeviceInfo object or None for default device.
 
         Returns the PID on success, or None if the recorder failed to start.
         """

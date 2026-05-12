@@ -2,13 +2,21 @@
 # Test with: asr2clip --test -b <name>   Switch at runtime: asr2clip -b <name>
 
 ## ── Audio input ───────────────────────────────────────────────────────────────
-# "pulse"/"pipewire" uses whichever mic is set as default in system settings.
-# Configure active mic in pavucontrol or your desktop sound panel.
-# To force a specific device, run `asr2clip --list_devices` for names and indices.
-# audio_device: "pulse"                       # PulseAudio (recommended on Linux)
-# audio_device: "pipewire"                    # PipeWire (recommended on modern Linux)
-# audio_device: "plughw:Snowball"             # ALSA device name — bypasses system mixer
-# audio_device: 3                             # device index from --list_devices
+# Specify the input device by human-readable name, device index, or preference order.
+# asr2clip automatically routes to the correct recorder backend (sounddevice or arecord).
+#
+# Single device (uses system default if device is unavailable):
+#   audio_device: "Snowball"                  # Human-readable name (substring match)
+#   audio_device: "auto"                      # System default input device
+#   audio_device: 0                           # Device index from --list_devices output
+#
+# Preference order (tries first available device; falls back if USB device unplugged):
+#   audio_device: "Snowball,Webcam,auto"     # Try Snowball, fall back to Webcam, then default
+#   audio_device: [Snowball, Webcam, auto]   # YAML list syntax (optional alternative)
+#
+# Run `asr2clip --list_devices` to see available device names and indices.
+#
+# audio_device: "auto"                        # Use system default (recommended)
 
 ## ── Toggle-mode recorder ──────────────────────────────────────────────────────
 # Controls which backend captures audio during --toggle mode.
@@ -250,3 +258,11 @@ output_templates:
 ## ── Other parameters ──────────────────────────────────────────────────────────
 # quiet: false                                # true = only output transcription and errors
 # org_id:                                     # OpenAI organization ID (rarely needed)
+#
+# Maximum transcript characters copied as text to clipboard. When the transcript text
+# exceeds this limit, the path to the transcript file is copied to the clipboard instead.
+# 50 000 chars ≈ 1 hour of speech at 150 wpm & 5 chars per word (English audiobook rate).
+# Modern clipboards (X11 INCR, Wayland, macOS NSPasteboard, Windows) have no OS-imposed
+# limit — this is a pure usability heuristic. Set to 0 to always copy a file path instead
+# (uses a temp file in /tmp when no -o FILE was given; wiped at reboot by OS policy).
+# clipboard_max_chars: 50000

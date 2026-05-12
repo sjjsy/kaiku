@@ -13,7 +13,7 @@ import tempfile
 import time
 
 from .audio import load_wav, save_audio
-from .config import resolve_recorder_config
+from .config import resolve_audio_device, resolve_clipboard_max_chars, resolve_recorder_config
 from .output import output_transcript
 from .postprocessors import NonePostProcessor, PostMetadata, PostProcessor, format_output
 from .preprocessors import AudioPreprocessor, NonePreprocessor
@@ -58,16 +58,17 @@ def toggle_recording(
             postprocessor, template_str, diarize, num_speakers,
         )
     else:
-        _start_recording(lock_path, device, config)
+        _start_recording(lock_path, device_cli=device, config=config)
 
 
-def _start_recording(lock_path: str, device: str | int | None, config: dict):
+def _start_recording(lock_path: str, device_cli: str | None, config: dict):
     audio_path = tempfile.NamedTemporaryFile(
         suffix=".wav", prefix="asr2clip_", delete=False
     ).name
 
-    recorder = make_recorder(resolve_recorder_config(config))
-    pid = recorder.start(audio_path, device)
+    device_info = resolve_audio_device(config, cli_override=device_cli)
+    recorder = make_recorder(resolve_recorder_config(config), device_info=device_info)
+    pid = recorder.start(audio_path, device_info)
     if pid is None:
         safe_unlink(audio_path)
         warning("Could not start recorder. Check device availability.")
@@ -78,8 +79,9 @@ def _start_recording(lock_path: str, device: str | int | None, config: dict):
     with open(lock_path, "w") as f:
         json.dump(lock_data, f)
 
-    info(f"Recording started ({recorder.name}, pid {pid}, device: {device or 'default'})")
-    _notify("asr2clip", "Recording… (run asr2clip --toggle to stop)")
+    device_desc = f" with {device_info.name}" if device_info else " (default device)"
+    info(f"Recording started ({recorder.name}, pid {pid}){device_desc}")
+    _notify("asr2clip", f"Recording{device_desc.replace(' with ', ' with ')}… (run asr2clip --toggle to stop)")
 
 
 def _stop_and_transcribe(
@@ -219,5 +221,8 @@ def _transcribe_and_output(
             backend=postprocessor.backend_type,
         )
 
-    output_transcript(final, to_clipboard=True, to_stdout=True, to_file=output_file)
+    output_transcript(
+        final, to_clipboard=True, to_stdout=True, to_file=output_file,
+        max_clipboard_chars=resolve_clipboard_max_chars(config),
+    )
     _notify("asr2clip", final[:100])

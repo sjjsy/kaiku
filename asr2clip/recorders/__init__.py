@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sys
 
-from .arecord import ArecordRecorder
+from .arecord import ArecordRecorder, _ALSA_PREFIXES
 from .base import AudioRecorder, _kill_process, _pid_alive
 from .sounddevice_recorder import SounddeviceRecorder
 
@@ -37,14 +37,21 @@ def probe_available() -> list[str]:
     return [name for name in PREFERENCE_ORDER if _CLASS_MAP[name]().is_available()]
 
 
-def make_recorder(name: str) -> AudioRecorder:
+def make_recorder(name: str, device_info=None) -> AudioRecorder:
     """Instantiate a recorder by name.
 
-    'auto' selects the first available recorder in PREFERENCE_ORDER.
+    'auto' selects sounddevice by default, prefers arecord for ALSA-only devices.
     Exits with an error message for unknown names or when nothing is available.
+
+    Args:
+        name: Recorder name ('auto', 'sounddevice', 'arecord').
+        device_info: Optional DeviceInfo object. If device is ALSA-only, arecord is preferred.
     """
     if name in (None, "auto"):
-        for candidate in PREFERENCE_ORDER:
+        order = PREFERENCE_ORDER
+        if device_info and device_info.alsa_name and device_info.alsa_name and not device_info.portaudio_name:
+            order = ["arecord", "sounddevice"]
+        for candidate in order:
             recorder = _CLASS_MAP[candidate]()
             if recorder.is_available():
                 return recorder
