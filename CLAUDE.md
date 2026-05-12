@@ -7,12 +7,12 @@ Fork lives at github.com/sjjsy/asr2clip. AGPL-3.0 licensed.
 
 | Feature | Module | Status |
 |---|---|---|
-| whisper.cpp backend (`type: whisper_cpp`) | `backends/whisper_cpp.py` | done |
-| Toggle mode (`--toggle`) | `toggle.py` | done |
-| Robust chunked transcription (`-r`) | `robust.py` | done |
-| Audio preprocessors (noisereduce/pyrnnoise/deepfilter) | `preprocessors/` | done |
-| LLM post-processing (`-P NAME`) | `postprocessors/` | implemented, needs testing |
-| Speaker diarization via WhisperX (`-D`) | `diarize.py` | implemented, needs testing |
+| whisper.cpp backend (`-b wcpp`) | `backends/whisper_cpp.py` | ✓ |
+| Toggle mode (`--toggle`) | `toggle.py` | ✓ |
+| Robust chunked transcription (`-r`) | `robust.py` | ✓ |
+| Audio preprocessors (`-p`) | `preprocessors/` | ✓ |
+| AI post-processing (`-P NAME`) | `postprocessors/` | ✓ |
+| Speaker diarization (`-D`) | `diarize.py` | ✓ |
 
 ## Architecture
 
@@ -70,7 +70,32 @@ Lowercase = earlier/basic feature. Uppercase = later/advanced feature.
 - `asr2clip/postprocessors/` — post-processing package
 - `asr2clip/preprocessors/` — existing noise-reduction package (pattern to follow for postprocessors)
 - `asr2clip/diarize.py` — WhisperX diarization
-- `WISHLIST.md` — gitignored design document for Feature 0.5 (local notes only)
+- `todo.md` — gitignored active work (upstream contact, marketing plan, deferred features)
+- `done.md` — gitignored archive (completed specs by date)
+
+## Commit message conventions
+
+Format: `TYPE: Description` (imperative mood, lowercase description, 50 char title max).
+
+| Type | Use for |
+|------|---------|
+| `feat:` | New feature or capability |
+| `fix:` | Bug fix |
+| `refactor:` | Code refactoring (no behavior change) |
+| `perf:` | Performance improvement |
+| `test:` | Add/update tests (not test fixes) |
+| `docs:` | Documentation, README, docstrings |
+| `meta:` | Project structure, `.gitignore`, `CLAUDE.md`, license, tooling |
+| `chore:` | Dependencies, build config, CI/CD (not application code) |
+| `style:` | Code formatting only (no logic change) |
+
+Examples:
+- `feat: add toggle mode with lock-file protocol`
+- `fix: handle stale lock file in toggle mode`
+- `meta: consolidate WISHLIST into todo.md and done.md`
+- `docs: update CLI reference from --help output`
+
+Use `meta:` for project metadata and infrastructure; `chore:` for build/dependency changes. Prefer semantic commits on feature branches; squash trivial commits before PR.
 
 ## Documentation conventions
 
@@ -82,13 +107,23 @@ Lowercase = earlier/basic feature. Uppercase = later/advanced feature.
 
 ## README structure
 
-README sections mirror CLI argument groups in order: Setup → Audio → Transcription → Local ASR server → VAD (continuous recording) → Diarization → LLM post-processing. Within each h2 section: brief definition/motivation paragraph → options table (flags from `--help`) → relevant config template excerpt. Subsections (h3) cover features within the group (e.g., `### ASR backends` and `### Toggle mode` under `## Transcription`). Do not duplicate content already explained clearly in the config template or the `--help` output.
+README sections mirror CLI argument groups in order: Setup → Audio → Transcription → Local ASR server → VAD (continuous recording) → Diarization → AI post-processing. Within each h2 section: brief definition/motivation paragraph → options table (flags from `--help`) → relevant config template excerpt. Subsections (h3) cover features within the group (e.g., `### ASR backends` and `### Toggle mode` under `## Transcription`). Do not duplicate content already explained clearly in the config template or the `--help` output.
 
-## Upstream PR candidates
+## Upstream engagement
 
-1. Toggle mode (most self-contained, useful on all platforms)
-2. Robust transcription (`-r`)
-3. whisper.cpp backend
-4. Preprocessors
+Contact made 2026-05-12 via GitHub Issue #16 (Oaklight/asr2clip). Awaiting response on PR interest.
 
-Post-processing and diarization: publish WISHLIST/ROADMAP first, then contact upstream author for interest before PRing.
+**Best PR candidates** (if accepted, in order):
+1. Toggle mode (`--toggle`) — most self-contained, useful on all platforms
+2. Robust transcription (`-r`) — independent feature
+3. whisper.cpp backend (`-b wcpp`) — self-contained new backend
+4. Preprocessors (`-p`) — independent audio preprocessing
+
+**Timidly proposed also:**
+- AI post-processing (`-P`) — pending upstream feedback
+- Speaker diarization (`-D`) — pending upstream feedback
+- These features expand scope beyond "ASR to clipboard" and may require separate discussion
+
+**Fork naming:** Tool has outgrown the original name. If PRs accepted → stay under upstream; if declined → rename fork as independent project.
+
+The file `todo.md` provides more info on future plans.

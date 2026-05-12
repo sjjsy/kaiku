@@ -176,9 +176,8 @@ docs_zh/
 
 # project specific
 asr2clip.conf
-WISHLIST.md
-SPEC_0.4.md
-comms.md
+todo.md
+done.md
 # all audio/video files
 data/
 
