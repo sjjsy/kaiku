@@ -204,8 +204,11 @@ def transcribe_with_config(
             import sys
             sys.exit(1)
 
-    from .config import get_api_config
-    api_key, api_base_url, model_name, org_id = get_api_config(config)
+    # Extract API config from the resolved backend config (not top-level config)
+    api_key = backend_config.get("api_key")
+    api_base_url = backend_config.get("api_base_url")
+    model_name = backend_config.get("model_name")
+    org_id = backend_config.get("org_id")
     effective_language = language or config.get("language")
     return transcribe_audio(
         audio_file_path,
