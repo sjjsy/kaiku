@@ -774,12 +774,19 @@ def main():
 
     live_name = resolve_backend_name(config, args.backend, "live")
     file_name = resolve_backend_name(config, args.backend, "file")
-    if live_name and live_name == file_name:
-        info(f"Using backend: {live_name}")
-    elif live_name and file_name:
-        info(f"Using backend (live): {live_name}  (file): {file_name}")
-    elif live_name:
-        info(f"Using backend: {live_name}")
+
+    # Skip backend/preprocessor logs on first --toggle (starting recording)
+    is_toggle_start = args.toggle and not os.path.exists(os.path.join(
+        os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "asr2clip.lock"
+    ))
+
+    if not is_toggle_start:
+        if live_name and live_name == file_name:
+            info(f"Using backend: {live_name}")
+        elif live_name and file_name:
+            info(f"Using backend (live): {live_name}  (file): {file_name}")
+        elif live_name:
+            info(f"Using backend: {live_name}")
 
     if args.test:
         if live_name == file_name or file_name is None:
@@ -814,14 +821,15 @@ def main():
         resolve_preprocessor_config(config, args.preprocessor, "file")
     )
 
-    if preprocessor_live.name == preprocessor_file.name:
-        if preprocessor_live.name != "none":
-            info(f"Preprocessor: {preprocessor_live.name}")
-    else:
-        if preprocessor_live.name != "none":
-            info(f"Live preprocessor: {preprocessor_live.name}")
-        if preprocessor_file.name != "none":
-            info(f"File preprocessor: {preprocessor_file.name}")
+    if not is_toggle_start:
+        if preprocessor_live.name == preprocessor_file.name:
+            if preprocessor_live.name != "none":
+                info(f"Preprocessor: {preprocessor_live.name}")
+        else:
+            if preprocessor_live.name != "none":
+                info(f"Live preprocessor: {preprocessor_live.name}")
+            if preprocessor_file.name != "none":
+                info(f"File preprocessor: {preprocessor_file.name}")
 
     # Resolve post-processors and output templates
     from .postprocessors import (
@@ -854,6 +862,7 @@ def main():
             template_str=template_live,
             diarize=args.diarize,
             num_speakers=args.speakers,
+            backend=args.backend,
         )
         return
 

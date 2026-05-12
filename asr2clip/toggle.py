@@ -48,6 +48,7 @@ def toggle_recording(
     template_str: str = "{result}",
     diarize: bool = False,
     num_speakers: int | None = None,
+    backend: str | None = None,
 ):
     """Start or stop toggle-mode recording."""
     lock_path = _lock_path()
@@ -55,7 +56,7 @@ def toggle_recording(
     if os.path.exists(lock_path):
         _stop_and_transcribe(
             lock_path, config, output_file, language, preprocessor,
-            postprocessor, template_str, diarize, num_speakers,
+            postprocessor, template_str, diarize, num_speakers, backend,
         )
     else:
         _start_recording(lock_path, device_cli=device, config=config)
@@ -94,6 +95,7 @@ def _stop_and_transcribe(
     template_str: str = "{result}",
     diarize: bool = False,
     num_speakers: int | None = None,
+    backend: str | None = None,
 ):
     with open(lock_path) as f:
         lock_data = json.load(f)
@@ -107,7 +109,7 @@ def _stop_and_transcribe(
         if audio_path and os.path.exists(audio_path):
             _transcribe_and_output(
                 audio_path, config, output_file, language, preprocessor,
-                postprocessor, template_str, diarize, num_speakers,
+                postprocessor, template_str, diarize, num_speakers, backend,
             )
         return
 
@@ -119,7 +121,7 @@ def _stop_and_transcribe(
 
     _transcribe_and_output(
         audio_path, config, output_file, language, preprocessor,
-        postprocessor, template_str, diarize, num_speakers,
+        postprocessor, template_str, diarize, num_speakers, backend,
     )
 
 
@@ -133,6 +135,7 @@ def _transcribe_and_output(
     template_str: str = "{result}",
     diarize: bool = False,
     num_speakers: int | None = None,
+    backend: str | None = None,
 ):
     if not os.path.exists(audio_path) or os.path.getsize(audio_path) < 100:
         log("Audio file is empty or missing — nothing to transcribe.")
@@ -182,7 +185,7 @@ def _transcribe_and_output(
                 return
         else:
             transcript = transcribe_with_config(
-                transcribe_path, config, raise_on_error=True, language=language
+                transcribe_path, config, raise_on_error=True, language=language, backend=backend
             )
     except Exception as e:
         warning(f"Transcription failed: {e}")

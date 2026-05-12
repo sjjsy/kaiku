@@ -17,12 +17,18 @@ import pytest
 
 @pytest.fixture
 def minimal_config():
-    """Bare-minimum config that satisfies config-reading code paths."""
+    """Bare-minimum config with per-mode backend selection."""
     return {
-        "backend": "api",
-        "api_key": "sk-test",
-        "api_base_url": "http://localhost:11434/v1/",
-        "model": "whisper-1",
+        "asr_backend_live": "api",
+        "asr_backend_file": "api",
+        "asr_backends": {
+            "api": {
+                "type": "api",
+                "api_key": "sk-test",
+                "api_base_url": "http://localhost:11434/v1/",
+                "model_name": "whisper-1",
+            },
+        },
     }
 
 
@@ -70,6 +76,60 @@ def postprocessor_config():
         },
         "postprocessor_live": "none",
         "postprocessor_file": "solo-base",
+    }
+
+
+@pytest.fixture
+def full_backend_config():
+    """Full ASR backend config with multiple backend options."""
+    return {
+        "asr_backend_live": "groq",
+        "asr_backend_file": "wcpp",
+        "asr_backends": {
+            "groq": {
+                "type": "api",
+                "api_base_url": "https://api.groq.com/openai/v1/",
+                "api_key": "gsk_test_key",
+                "model_name": "whisper-large-v3-turbo",
+            },
+            "wcpp": {
+                "type": "whisper_cpp",
+                "binary": "/path/to/whisper.cpp/whisper-cli",
+                "model": "/path/to/models/ggml-large-v3-turbo-q8_0.bin",
+                "threads": 4,
+            },
+            "ollama": {
+                "type": "api",
+                "api_base_url": "http://localhost:11434/v1/",
+                "api_key": "ollama",
+                "model_name": "whisper",
+            },
+        },
+    }
+
+
+@pytest.fixture
+def full_preprocessor_config():
+    """Config with per-mode preprocessor selection."""
+    return {
+        "preprocessor_live": "noisereduce",
+        "preprocessor_file": "deepfilter",
+    }
+
+
+@pytest.fixture
+def device_config():
+    """Config with device preference order."""
+    return {
+        "audio_device": "Snowball,Webcam,auto",
+    }
+
+
+@pytest.fixture
+def clipboard_config():
+    """Config with clipboard settings."""
+    return {
+        "clipboard_max_chars": 100_000,
     }
 
 

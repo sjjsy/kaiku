@@ -169,6 +169,7 @@ def transcribe_with_config(
     raise_on_error: bool = False,
     timeout: float | None = None,
     language: str | None = None,
+    backend: str | None = None,
 ) -> str:
     """Transcribe audio using whichever backend is configured.
 
@@ -177,6 +178,7 @@ def transcribe_with_config(
         config: Full configuration dictionary.
         raise_on_error: If True, raise TranscriptionError on failure.
         timeout: Optional timeout override in seconds.
+        backend: Optional backend override.
 
     Returns:
         Transcribed text.
@@ -184,8 +186,8 @@ def transcribe_with_config(
     from .config import resolve_backend_name, resolve_backend_config
 
     # Determine which backend to use (file transcription mode)
-    backend_name = resolve_backend_name(config, None, "file")
-    backend_config = resolve_backend_config(config, backend_name, "file")
+    backend_name = resolve_backend_name(config, backend, "file")
+    backend_config = resolve_backend_config(config, backend, "file")
     if backend_config.get("backend") == "whisper_cpp":
         from .backends.whisper_cpp import WhisperCppConfig, transcribe as wc_transcribe
         # Create a wrapper config with whisper_cpp at top level for WhisperCppConfig.from_config()
