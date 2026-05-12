@@ -473,5 +473,78 @@ class TestToggleModeBackendOverride:
         assert override_cfg.get("backend") == "api"
 
 
+# ---------------------------------------------------------------------------
+# Integration: transcribe_with_config uses resolved backend config
+# ---------------------------------------------------------------------------
+
+class TestTranscribeBackendIntegration:
+    """Test that transcribe_with_config actually uses the resolved backend config."""
+
+    @pytest.fixture
+    def groq_vs_wcpp_config(self):
+        """Config with groq (API) and wcpp (local) backends."""
+        return {
+            "asr_backend_live": "wcpp",
+            "asr_backend_file": "groq",
+            "asr_backends": {
+                "groq": {
+                    "type": "api",
+                    "api_base_url": "https://api.groq.com/openai/v1/",
+                    "api_key": "gsk_groq_test_key",
+                    "model_name": "whisper-large-v3-turbo",
+                },
+                "wcpp": {
+                    "type": "whisper_cpp",
+                    "binary": "/path/to/whisper-cli",
+                    "model": "/path/to/model.bin",
+                },
+            },
+        }
+
+    @patch("asr2clip.transcribe.transcribe_audio")
+    def test_transcribe_with_config_uses_backend_groq(self, mock_transcribe, groq_vs_wcpp_config, tmp_wav):
+        """transcribe_with_config should use groq's API key/URL, not top-level defaults."""
+        from asr2clip.transcribe import transcribe_with_config
+
+        mock_transcribe.return_value = "test result"
+
+        # Call with file mode (uses groq by default, or with explicit override)
+        result = transcribe_with_config(tmp_wav, groq_vs_wcpp_config, backend="groq")
+
+        # Verify transcribe_audio was called with groq's config, not OpenAI defaults
+        mock_transcribe.assert_called_once()
+        call_args = mock_transcribe.call_args
+
+        # call_args[0] is positional args: (audio_file_path, api_key, api_base_url, model_name, org_id, ...)
+        called_api_key = call_args[0][1]
+        called_api_base_url = call_args[0][2]
+        called_model_name = call_args[0][3]
+
+        # These should be from groq config, NOT openai defaults
+        assert called_api_key == "gsk_groq_test_key", \
+            f"Expected groq key, got {called_api_key} (was top-level config extracted?)"
+        assert called_api_base_url == "https://api.groq.com/openai/v1/", \
+            f"Expected groq URL, got {called_api_base_url} (was openai.com default used?)"
+        assert called_model_name == "whisper-large-v3-turbo"
+
+    @patch("asr2clip.transcribe.transcribe_audio")
+    def test_transcribe_respects_backend_override(self, mock_transcribe, groq_vs_wcpp_config, tmp_wav):
+        """Backend override should force use of that backend's config."""
+        from asr2clip.transcribe import transcribe_with_config
+
+        mock_transcribe.return_value = "test result"
+
+        # File mode defaults to groq, but override to use it explicitly anyway
+        result = transcribe_with_config(tmp_wav, groq_vs_wcpp_config, backend="groq")
+
+        call_args = mock_transcribe.call_args
+        called_api_key = call_args[0][1]
+        called_api_base_url = call_args[0][2]
+
+        # Must use groq's settings
+        assert called_api_key == "gsk_groq_test_key"
+        assert "groq.com" in called_api_base_url
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
