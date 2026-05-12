@@ -21,15 +21,10 @@ from .audio import (
 )
 from .config import (
     generate_config,
-    get_api_config,
     open_in_editor,
     read_config,
-    resolve_audio_device,
-    resolve_backend_config,
-    resolve_backend_name,
-    resolve_clipboard_max_chars,
-    resolve_preprocessor_config,
 )
+from .config_types import CliOverrides, Config
 from .daemon import continuous_recording
 from .output import (
     _DEFAULT_CLIPBOARD_MAX_CHARS,
@@ -37,8 +32,9 @@ from .output import (
     output_transcript,
     print_clipboard_help,
 )
-from .transcribe import test_transcription, transcribe_audio, transcribe_with_config
+from .transcribe import test_transcription, transcribe_audio, transcribe_casual
 from .utils import (
+    error,
     info,
     log,
     print_key_value,
@@ -60,10 +56,10 @@ def test_config(
     """Test the configuration by checking backend connectivity and preprocessor availability.
 
     Args:
-        backend_config: Resolved backend configuration dictionary.
-        full_config: Full (unresolved) configuration dictionary for preprocessor checks.
-        preprocessor_override: Name supplied via -P/--preprocessor flag.
-        mode: Which preprocessor mode(s) to check — "live", "file", or "both".
+        backend_config: Resolved backend configuration dictionary with "backend", "api_key", etc.
+        full_config: Full (unresolved) configuration dictionary (unused).
+        preprocessor_override: Resolved preprocessor name.
+        mode: The mode being tested ("live" or "file").
 
     Returns:
         True if all configured components are accessible.
@@ -79,10 +75,13 @@ def test_config(
         cfg = WhisperCppConfig.from_config(backend_config)
         backend_ok = wc_test(cfg)
     else:
-        api_key, api_base_url, model_name, org_id = get_api_config(backend_config)
+        api_key = backend_config.get("api_key")
+        api_base_url = backend_config.get("api_base_url")
+        model_name = backend_config.get("model_name")
+        org_id = backend_config.get("org_id")
         print_key_value("API Base URL", api_base_url)
         print_key_value("Model", model_name)
-        masked_key = f"{'*' * 8}...{api_key[-4:] if len(api_key) > 4 else '****'}"
+        masked_key = f"{'*' * 8}...{api_key[-4:] if api_key and len(api_key) > 4 else '****'}"
         print_key_value("API Key", masked_key)
         print_separator()
         backend_ok = test_transcription(api_key, api_base_url, model_name, org_id)
@@ -90,27 +89,20 @@ def test_config(
     if full_config is None:
         return backend_ok
 
-    # Check preprocessors — only for the modes relevant to this backend invocation
+    # Check preprocessors
     from .preprocessors import check_preprocessor_available
 
     print_separator()
     info("Checking preprocessors...")
 
-    modes_to_check = (
-        [("live", "live"), ("file", "file")] if mode == "both"
-        else [("live", "live")] if mode == "live"
-        else [("file", "file")]
-    )
-
-    pp_ok = True
-    for label, m in modes_to_check:
-        name = resolve_preprocessor_config(full_config, preprocessor_override, m)
-        avail, hint = check_preprocessor_available(name)
-        if avail:
-            print_success(f"Preprocessor ({label}): {name}")
-        else:
-            print_error(f"Preprocessor ({label}): {name} — NOT AVAILABLE  ({hint})")
-            pp_ok = False
+    name = preprocessor_override or "none"
+    avail, hint = check_preprocessor_available(name)
+    if avail:
+        print_success(f"Preprocessor ({mode}): {name}")
+        pp_ok = True
+    else:
+        print_error(f"Preprocessor ({mode}): {name} — NOT AVAILABLE  ({hint})")
+        pp_ok = False
 
     return backend_ok and pp_ok
 
@@ -118,7 +110,6 @@ def test_config(
 def _test_postprocessors(config: dict, post_override: str | None, model_override: str | None) -> bool:
     """Check that post-processor backends are reachable. Returns True if all OK."""
     import shutil
-    from .postprocessors import resolve_postprocessor_config
     from .postprocessors import _resolve_backend, _resolve_prompt
     from .utils import print_error, print_success
 
@@ -127,18 +118,33 @@ def _test_postprocessors(config: dict, post_override: str | None, model_override
 
     ok = True
     seen: set = set()
+    to_check: list[str] = []
 
-    for mode in ("live", "file"):
-        name = resolve_postprocessor_config(config, post_override, mode)
-        label = f"({mode})"
+    # Collect postprocessors to check from CLI override and/or default preset
+    if post_override:
+        to_check.append(post_override)
 
+    default_preset = config.get("default_preset")
+    if default_preset:
+        presets = config.get("presets", {})
+        if default_preset in presets:
+            preset = presets[default_preset]
+            # Preset format: [preprocessor, asr_backend, postprocessor, description]
+            postprocessor_name = preset[2]  # Index 2 is postprocessor
+            if postprocessor_name and postprocessor_name != "none":
+                to_check.append(postprocessor_name)
+
+    if not to_check:
+        print_success("No post-processors configured to check")
+        return True
+
+    for name in to_check:
         if name in (None, "none"):
-            print_success(f"Post-processor {label}: none")
+            print_success(f"Post-processor: none")
             continue
 
-        # Deduplicate: if live and file use the same named processor, only check once
+        # Deduplicate: if same processor is checked multiple times, only report once
         if name in seen:
-            print_success(f"Post-processor {label}: {name}  (same as above)")
             continue
         seen.add(name)
 
@@ -147,7 +153,7 @@ def _test_postprocessors(config: dict, post_override: str | None, model_override
             resolved = _resolve_prompt(name, config)
             backend_cfg = _resolve_backend(config, resolved["backend_name"], model_override)
         except SystemExit:
-            print_error(f"Post-processor {label}: {name} — config error (see above)")
+            print_error(f"Post-processor '{name}' — config error (see above)")
             ok = False
             continue
 
@@ -157,10 +163,10 @@ def _test_postprocessors(config: dict, post_override: str | None, model_override
 
         if btype == "claude_code":
             if shutil.which("claude"):
-                print_success(f"Post-processor {label}: {name}  (claude_code{model_note})")
+                print_success(f"Post-processor '{name}': claude_code{model_note}")
                 print_success("  claude CLI: found")
             else:
-                print_error(f"Post-processor {label}: {name}  (claude_code{model_note})")
+                print_error(f"Post-processor '{name}': claude_code{model_note}")
                 print_error("  claude CLI: NOT FOUND — install from https://claude.ai/code")
                 ok = False
 
@@ -169,13 +175,17 @@ def _test_postprocessors(config: dict, post_override: str | None, model_override
             api_base = backend_cfg.get("api_base_url", "")
             api_key = backend_cfg.get("api_key", "sk-none")
             org_id = None
-            print_success(f"Post-processor {label}: {name}  (openai_compat{model_note})")
+            print_success(f"Post-processor '{name}': openai_compat{model_note}")
             print_key_value("  Endpoint", api_base)
             reachable = test_transcription(api_key, api_base, model, org_id)
             if not reachable:
                 ok = False
+
+        elif btype == "mock":
+            print_success(f"Post-processor '{name}': mock (no credentials needed)")
+
         else:
-            print_error(f"Post-processor {label}: {name} — unknown backend type '{btype}'")
+            print_error(f"Post-processor '{name}' — unknown backend type '{btype}'")
             ok = False
 
     return ok
@@ -273,7 +283,7 @@ def process_recording(
 
     try:
         t1 = time.time()
-        transcript = transcribe_with_config(temp_path, config, language=language)
+        transcript = transcribe_casual(temp_path, config, language=language)
         info(f"Transcription completed in {time.time() - t1:.1f}s")
 
         if not transcript.strip():
@@ -408,7 +418,7 @@ def process_file(
                 print(f"Diarization error: {e}", file=sys.stderr)
                 sys.exit(1)
         else:
-            transcript = transcribe_with_config(temp_path, config, language=language)
+            transcript = transcribe_casual(temp_path, config, language=language)
         info(f"Transcription completed in {time.time() - t1:.1f}s")
 
         if not transcript.strip():
@@ -494,6 +504,15 @@ See https://github.com/sjjsy/asr2clip for full documentation and configuration e
         default=None,
     )
     setup_group.add_argument(
+        "--preset", metavar="NAME",
+        default=None,
+        help=(
+            "Pipeline preset name (key under 'presets:' in config). "
+            "Presets define complete pipelines: ASR backend, preprocessor, post-processor. "
+            "Optional if 'default_preset' is set in config; CLI overrides still work (-b, -p, -P)."
+        ),
+    )
+    setup_group.add_argument(
         "-e", "--edit", action="store_true",
         help="Open configuration file in editor (creates default config if missing)",
     )
@@ -526,7 +545,7 @@ See https://github.com/sjjsy/asr2clip for full documentation and configuration e
         default=None,
         help=(
             "Audio preprocessor: none, noisereduce, pyrnnoise, deepfilter. "
-            "Overrides preprocessor_live / preprocessor_file in config."
+            "Overrides the preprocessor in the selected preset."
         ),
     )
 
@@ -537,7 +556,7 @@ See https://github.com/sjjsy/asr2clip for full documentation and configuration e
         default=None,
         help=(
             "ASR backend to use (key under 'asr_backends:' in config). "
-            "Overrides asr_backend_live / asr_backend_file."
+            "Overrides the backend in the selected preset."
         ),
     )
     trans_group.add_argument(
@@ -672,7 +691,7 @@ See https://github.com/sjjsy/asr2clip for full documentation and configuration e
             "AI post-processor name (key in 'postprocessors:' config) "
             "or an inline system-prompt string. "
             "Requires 'postprocessor_backends:' in config. "
-            "Overrides postprocessor_live / postprocessor_file for this run."
+            "Overrides the post-processor in the selected preset."
         ),
     )
     post_group.add_argument(
@@ -761,46 +780,68 @@ def main():
         return
 
     # Read configuration
-    config = read_config(args.config)
+    config_dict = read_config(args.config)
 
     # Set up logging
-    quiet = args.quiet or config.get("quiet", False)
+    quiet = args.quiet or config_dict.get("quiet", False)
     setup_logging(verbose=not quiet)
     set_verbose(not quiet)
 
-    # Resolve per-mode backend configs (live vs file, like preprocessor_live/file)
-    backend_config_live = resolve_backend_config(config, args.backend, "live")
-    backend_config_file = resolve_backend_config(config, args.backend, "file")
+    # Create CLI overrides for config resolution
+    cli_overrides = CliOverrides(
+        preset=args.preset,
+        backend=args.backend,
+        preprocessor=args.preprocessor,
+        device=args.device,
+        post=args.post,
+        post_model=args.post_model,
+    )
 
-    live_name = resolve_backend_name(config, args.backend, "live")
-    file_name = resolve_backend_name(config, args.backend, "file")
+    # Resolve preset
+    from .config_types import PresetConfig
+    preset_name = args.preset or config_dict.get("default_preset")
+    if not preset_name:
+        error(
+            "No preset selected. Use --preset NAME or set 'default_preset: NAME' in config.\n"
+            "Available presets: " + ", ".join(config_dict.get("presets", {}).keys())
+        )
+        sys.exit(1)
 
-    # Skip backend/preprocessor logs on first --toggle (starting recording)
+    try:
+        preset_config = PresetConfig.resolve(config_dict, preset_name)
+        preset = preset_config.preset
+    except ValueError as e:
+        error(f"Preset error: {e}")
+        sys.exit(1)
+
+    # Skip config logs on first --toggle (starting recording)
     is_toggle_start = args.toggle and not os.path.exists(os.path.join(
         os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "asr2clip.lock"
     ))
 
-    if not is_toggle_start:
-        if live_name and live_name == file_name:
-            info(f"Using backend: {live_name}")
-        elif live_name and file_name:
-            info(f"Using backend (live): {live_name}  (file): {file_name}")
-        elif live_name:
-            info(f"Using backend: {live_name}")
-
     if args.test:
-        if live_name == file_name or file_name is None:
-            ok_asr = test_config(backend_config_live, config, args.preprocessor, mode="both")
-        else:
-            info("--- live backend ---")
-            ok_live = test_config(backend_config_live, config, args.preprocessor, mode="live")
-            info("--- file backend ---")
-            ok_file = test_config(backend_config_file, config, args.preprocessor, mode="file")
-            ok_asr = ok_live and ok_file
+        # Test preset configuration
+        try:
+            config = Config.resolve(config_dict, preset=preset, cli_overrides=cli_overrides)
+        except ValueError as e:
+            error(f"Config error: {e}")
+            sys.exit(1)
 
-        ok_post = _test_postprocessors(config, args.post, args.post_model)
+        ok_asr = test_config(
+            {
+                "backend": config.asr_backend.type,
+                "api_key": config.asr_backend.api_key,
+                "api_base_url": config.asr_backend.api_base_url,
+                "model_name": config.asr_backend.model_name,
+            },
+            config_dict,
+            config.preprocessor.name,
+            mode="preset",
+        )
+
+        ok_post = _test_postprocessors(config_dict, args.post, args.post_model)
         ok_clip = _test_clipboard()
-        _test_diarization(config)  # informational only; never blocks success
+        _test_diarization(config_dict)  # informational only; never blocks success
 
         print_separator()
         success = ok_asr and ok_post and ok_clip
@@ -810,56 +851,41 @@ def main():
             info("Some checks failed — see details above.")
         sys.exit(0 if success else 1)
 
-    device_cli = args.device  # Device resolution happens in toggle_recording or per-mode
-
-    # Resolve preprocessors
-    from .preprocessors import make_preprocessor
-    preprocessor_live = make_preprocessor(
-        resolve_preprocessor_config(config, args.preprocessor, "live")
-    )
-    preprocessor_file = make_preprocessor(
-        resolve_preprocessor_config(config, args.preprocessor, "file")
-    )
+    # Create config using selected preset
+    try:
+        config = Config.resolve(config_dict, preset=preset, cli_overrides=cli_overrides)
+    except ValueError as e:
+        error(f"Config error: {e}")
+        sys.exit(1)
 
     if not is_toggle_start:
-        if preprocessor_live.name == preprocessor_file.name:
-            if preprocessor_live.name != "none":
-                info(f"Preprocessor: {preprocessor_live.name}")
-        else:
-            if preprocessor_live.name != "none":
-                info(f"Live preprocessor: {preprocessor_live.name}")
-            if preprocessor_file.name != "none":
-                info(f"File preprocessor: {preprocessor_file.name}")
+        # Backend and preprocessor logs already emitted during config resolution
+        pass
 
-    # Resolve post-processors and output templates
+    # Resolve postprocessors
     from .postprocessors import (
         make_postprocessor,
         resolve_output_template,
-        resolve_postprocessor_config,
     )
-    post_name_live = resolve_postprocessor_config(config, args.post, "live")
-    post_name_file = resolve_postprocessor_config(config, args.post, "file")
 
-    postprocessor_live = make_postprocessor(post_name_live, config, args.post_model)
-    postprocessor_file = make_postprocessor(post_name_file, config, args.post_model)
-    template_live = resolve_output_template(config, post_name_live, args.template)
-    template_file = resolve_output_template(config, post_name_file, args.template)
+    postprocessor = make_postprocessor(
+        config.postprocessor.name, config_dict, args.post_model
+    )
+    template = resolve_output_template(config_dict, config.postprocessor.name, args.template)
+    max_clipboard_chars = config.output.clipboard_max_chars
 
-    if postprocessor_live.name != "none":
-        info(f"Live post-processor: {postprocessor_live.name}")
-    if postprocessor_file.name != "none":
-        info(f"File post-processor: {postprocessor_file.name}")
-
-    max_clipboard_chars = resolve_clipboard_max_chars(config)
+    # Create preprocessor for the selected preset (used for all operations)
+    from .preprocessors import make_preprocessor
+    preprocessor = make_preprocessor(config.preprocessor.name)
 
     if args.toggle:
         from .toggle import toggle_recording
         toggle_recording(
-            config, device=device_cli, output_file=args.output,
+            config_dict, device=args.device, output_file=args.output,
             language=args.language,
-            preprocessor=preprocessor_live,
-            postprocessor=postprocessor_live,
-            template_str=template_live,
+            preprocessor=preprocessor,
+            postprocessor=postprocessor,
+            template_str=template,
             diarize=args.diarize,
             num_speakers=args.speakers,
             backend=args.backend,
@@ -871,21 +897,21 @@ def main():
         if args.robust:
             from .robust import process_file_robust
             process_file_robust(
-                backend_config_file, args.input, args.output,
+                config_dict, args.input, args.output,
                 chunk_duration=args.chunk_duration,
                 language=args.language,
-                preprocessor=preprocessor_file,
-                postprocessor=postprocessor_file,
-                template_str=template_file,
+                preprocessor=preprocessor,
+                postprocessor=postprocessor,
+                template_str=template,
                 max_clipboard_chars=max_clipboard_chars,
             )
         else:
             process_file(
-                backend_config_file, args.input, args.output,
+                config_dict, args.input, args.output,
                 language=args.language,
-                preprocessor=preprocessor_file,
-                postprocessor=postprocessor_file,
-                template_str=template_file,
+                preprocessor=preprocessor,
+                postprocessor=postprocessor,
+                template_str=template,
                 diarize=args.diarize,
                 num_speakers=args.speakers,
                 max_clipboard_chars=max_clipboard_chars,
@@ -893,7 +919,17 @@ def main():
         return
 
     if args.vad or args.interval is not None:
-        api_key, api_base_url, model_name, org_id = get_api_config(backend_config_live)
+        asr_cfg = config.asr_backend
+        api_key = asr_cfg.api_key
+        api_base_url = asr_cfg.api_base_url
+        model_name = asr_cfg.model_name
+        org_id = asr_cfg.org_id
+
+        # Get device spec for recorder
+        device_spec = None
+        if config.recorder.device:
+            device_spec = config.recorder.device.get_spec(config.recorder.name)
+
         if args.vad:
             try:
                 __import__("sherpa_onnx")
@@ -909,7 +945,7 @@ def main():
             api_base_url=api_base_url,
             model_name=model_name,
             org_id=org_id,
-            device=device,
+            device=device_spec,
             interval=interval,
             output_file=args.output,
             vad_enabled=args.vad,
@@ -919,12 +955,17 @@ def main():
         )
         return
 
+    # Get device spec for recorder
+    device_spec = None
+    if config.recorder.device:
+        device_spec = config.recorder.device.get_spec(config.recorder.name)
+
     process_recording(
-        backend_config_live, device, args.output,
+        config_dict, device_spec, args.output,
         language=args.language,
-        preprocessor=preprocessor_live,
-        postprocessor=postprocessor_live,
-        template_str=template_live,
+        preprocessor=preprocessor,
+        postprocessor=postprocessor,
+        template_str=template,
         max_clipboard_chars=max_clipboard_chars,
     )
 

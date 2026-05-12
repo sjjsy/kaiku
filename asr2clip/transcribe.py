@@ -163,19 +163,21 @@ def transcribe_audio(
     )
 
 
-def transcribe_with_config(
+def _transcribe_with_config_mode(
     audio_file_path: str,
-    config: dict,
+    config_dict: dict,
+    mode: str,
     raise_on_error: bool = False,
     timeout: float | None = None,
     language: str | None = None,
     backend: str | None = None,
 ) -> str:
-    """Transcribe audio using whichever backend is configured.
+    """Internal: transcribe using specified mode to select backend.
 
     Args:
         audio_file_path: Path to the WAV file.
-        config: Full configuration dictionary.
+        config_dict: Full configuration dictionary.
+        mode: "urgent" or "casual" — determines which backend to use.
         raise_on_error: If True, raise TranscriptionError on failure.
         timeout: Optional timeout override in seconds.
         backend: Optional backend override.
@@ -183,15 +185,47 @@ def transcribe_with_config(
     Returns:
         Transcribed text.
     """
-    from .config import resolve_backend_name, resolve_backend_config
+    from .config_types import Config, CliOverrides, PresetConfig
 
-    # Determine which backend to use (file transcription mode)
-    backend_name = resolve_backend_name(config, backend, "file")
-    backend_config = resolve_backend_config(config, backend, "file")
-    if backend_config.get("backend") == "whisper_cpp":
+    # For backward compatibility in tests, infer a preset from the config
+    # In production, user must specify --preset via CLI
+    preset_name = config_dict.get("_preset_for_testing")
+    if not preset_name:
+        # Try to find a default preset
+        presets = config_dict.get("presets", {})
+        if presets:
+            preset_name = next(iter(presets.keys()))
+        else:
+            raise ValueError(
+                f"Config missing presets. Add 'presets:' section to config or use --preset flag."
+            )
+
+    preset_config = PresetConfig.resolve(config_dict, preset_name)
+    cli_overrides = CliOverrides(preset=preset_name, backend=backend)
+    config = Config.resolve(config_dict, preset=preset_config.preset, cli_overrides=cli_overrides)
+    backend_config = config.asr_backend
+
+    if backend_config.type == "mock":
+        from .backends.mock import MockConfig, transcribe as mock_transcribe
+        mock_wrapper = {
+            "response": backend_config.response if hasattr(backend_config, "response") else None,
+            "latency_ms": backend_config.latency_ms if hasattr(backend_config, "latency_ms") else 0,
+        }
+        # Filter out None values
+        mock_wrapper = {k: v for k, v in mock_wrapper.items() if v is not None}
+        cfg = MockConfig.from_config(mock_wrapper)
+        return mock_transcribe(audio_file_path, cfg, timeout=timeout)
+
+    if backend_config.type == "whisper_cpp":
         from .backends.whisper_cpp import WhisperCppConfig, transcribe as wc_transcribe
         # Create a wrapper config with whisper_cpp at top level for WhisperCppConfig.from_config()
-        wcpp_wrapper = {"whisper_cpp": backend_config.get("whisper_cpp", {})}
+        wcpp_wrapper = {
+            "whisper_cpp": {
+                "binary": backend_config.binary,
+                "model": backend_config.model,
+                "threads": backend_config.threads,
+            }
+        }
         cfg = WhisperCppConfig.from_config(wcpp_wrapper)
         if language:
             cfg.language = language
@@ -204,21 +238,77 @@ def transcribe_with_config(
             import sys
             sys.exit(1)
 
-    # Extract API config from the resolved backend config (not top-level config)
-    api_key = backend_config.get("api_key")
-    api_base_url = backend_config.get("api_base_url")
-    model_name = backend_config.get("model_name")
-    org_id = backend_config.get("org_id")
-    effective_language = language or config.get("language")
+    # Use resolved backend config
+    effective_language = language or config_dict.get("language")
     return transcribe_audio(
         audio_file_path,
-        api_key,
-        api_base_url,
-        model_name,
-        org_id,
+        backend_config.api_key,
+        backend_config.api_base_url,
+        backend_config.model_name,
+        backend_config.org_id,
         raise_on_error=raise_on_error,
         timeout=timeout or DEFAULT_TIMEOUT,
         language=effective_language,
+    )
+
+
+def transcribe_casual(
+    audio_file_path: str,
+    config_dict: dict,
+    raise_on_error: bool = False,
+    timeout: float | None = None,
+    language: str | None = None,
+    backend: str | None = None,
+) -> str:
+    """Transcribe audio using the casual backend.
+
+    For batch/deferred processing (e.g., -i FILE input). Uses asr_backend_casual from config.
+
+    Args:
+        audio_file_path: Path to the WAV file.
+        config_dict: Full configuration dictionary.
+        raise_on_error: If True, raise TranscriptionError on failure.
+        timeout: Optional timeout override in seconds.
+        language: Optional language override.
+        backend: Optional backend override.
+
+    Returns:
+        Transcribed text.
+    """
+    return _transcribe_with_config_mode(
+        audio_file_path, config_dict, mode="casual",
+        raise_on_error=raise_on_error, timeout=timeout,
+        language=language, backend=backend,
+    )
+
+
+def transcribe_urgent(
+    audio_file_path: str,
+    config_dict: dict,
+    raise_on_error: bool = False,
+    timeout: float | None = None,
+    language: str | None = None,
+    backend: str | None = None,
+) -> str:
+    """Transcribe audio using the urgent backend.
+
+    For real-time/interactive modes (toggle recording, VAD). Uses asr_backend_urgent from config.
+
+    Args:
+        audio_file_path: Path to the WAV file.
+        config_dict: Full configuration dictionary.
+        raise_on_error: If True, raise TranscriptionError on failure.
+        timeout: Optional timeout override in seconds.
+        language: Optional language override.
+        backend: Optional backend override.
+
+    Returns:
+        Transcribed text.
+    """
+    return _transcribe_with_config_mode(
+        audio_file_path, config_dict, mode="urgent",
+        raise_on_error=raise_on_error, timeout=timeout,
+        language=language, backend=backend,
     )
 
 

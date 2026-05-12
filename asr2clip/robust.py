@@ -11,9 +11,8 @@ from pydub import AudioSegment
 from pydub.silence import detect_silence
 
 from .audio import audiosegment_to_float32, float32_to_audiosegment
-from .config import resolve_backend_config
 from .output import _DEFAULT_CLIPBOARD_MAX_CHARS, copy_transcript_to_clipboard, append_transcript_to_file
-from .transcribe import TranscriptionError, transcribe_with_config
+from .transcribe import TranscriptionError, transcribe_casual
 from .utils import info, log, safe_unlink, warning
 
 
@@ -59,9 +58,9 @@ def _check_quality(text: str) -> bool:
     return True
 
 
-def _estimate_timeout(chunk_duration_s: float, backend: str) -> float:
-    multiplier = 4.0 if backend == "whisper_cpp" else 2.0
-    return max(30.0, chunk_duration_s * multiplier)
+def _estimate_timeout(chunk_duration_s: float) -> float:
+    """Estimate timeout for chunk transcription. Uses conservative 4x multiplier for safety."""
+    return max(30.0, chunk_duration_s * 4.0)
 
 
 def process_file_robust(
@@ -120,15 +119,13 @@ def process_file_robust(
     max_chunk_ms = chunk_duration * 1000
     boundaries = _find_chunk_boundaries(audio, max_chunk_ms)
     n_chunks = len(boundaries)
-    backend_config = resolve_backend_config(config, None, "file")
-    backend = backend_config.get("backend", "api")
-    log(f"Splitting into {n_chunks} chunk(s), backend: {backend}")
+    log(f"Splitting into {n_chunks} chunk(s)")
 
     all_text_parts: list[str] = []
 
     for idx, (start_ms, end_ms) in enumerate(boundaries, 1):
         chunk_s = (end_ms - start_ms) / 1000.0
-        timeout = _estimate_timeout(chunk_s, backend)
+        timeout = _estimate_timeout(chunk_s)
 
         chunk_audio = audio[start_ms:end_ms]
         tmp = tempfile.NamedTemporaryFile(suffix=".wav", prefix="asr2clip_chunk_", delete=False)
@@ -143,7 +140,7 @@ def process_file_robust(
 
         for attempt in range(retries):
             try:
-                candidate = transcribe_with_config(
+                candidate = transcribe_casual(
                     tmp_path, config, raise_on_error=True, timeout=timeout, language=language
                 )
                 if _check_quality(candidate):

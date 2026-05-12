@@ -41,24 +41,24 @@ def _meta(**kw) -> PostMetadata:
 
 class TestResolvePostprocessorConfig:
     def test_cli_override_wins(self, postprocessor_config):
-        result = resolve_postprocessor_config(postprocessor_config, cli_override="group", mode="live")
+        result = resolve_postprocessor_config(postprocessor_config, cli_override="group", mode="urgent")
         assert result == "group"
 
     def test_live_mode_key(self, postprocessor_config):
-        result = resolve_postprocessor_config(postprocessor_config, mode="live")
-        assert result == "none"  # postprocessor_live is "none" in fixture
+        result = resolve_postprocessor_config(postprocessor_config, mode="urgent")
+        assert result == "none"  # postprocessor_urgent is "none" in fixture
 
     def test_file_mode_key(self, postprocessor_config):
-        result = resolve_postprocessor_config(postprocessor_config, mode="file")
-        assert result == "solo-base"  # postprocessor_file is "solo-base"
+        result = resolve_postprocessor_config(postprocessor_config, mode="casual")
+        assert result == "solo-base"  # postprocessor_casual is "solo-base"
 
     def test_fallback_to_postprocessor_key(self):
         config = {"postprocessor": "group"}
-        assert resolve_postprocessor_config(config, mode="live") == "group"
-        assert resolve_postprocessor_config(config, mode="file") == "group"
+        assert resolve_postprocessor_config(config, mode="urgent") == "group"
+        assert resolve_postprocessor_config(config, mode="casual") == "group"
 
     def test_default_none_when_nothing_set(self):
-        assert resolve_postprocessor_config({}, mode="live") == "none"
+        assert resolve_postprocessor_config({}, mode="urgent") == "none"
 
 
 # ---------------------------------------------------------------------------

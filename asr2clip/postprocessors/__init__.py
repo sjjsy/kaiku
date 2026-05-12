@@ -13,11 +13,13 @@ from datetime import datetime as _datetime
 
 from .base import PostMetadata, PostProcessor
 from .none import NonePostProcessor
+from .mock import MockPostProcessor
 
 __all__ = [
     "PostMetadata",
     "PostProcessor",
     "NonePostProcessor",
+    "MockPostProcessor",
     "resolve_postprocessor_config",
     "make_postprocessor",
     "resolve_output_template",
@@ -34,18 +36,18 @@ _FALLBACK_TEMPLATE = "{result}"
 def resolve_postprocessor_config(
     config: dict,
     cli_override: str | None = None,
-    mode: str = "live",
+    mode: str = "urgent",
 ) -> str:
     """Return the effective post-processor name for the given mode.
 
     Args:
         config: Full configuration dictionary.
         cli_override: Name supplied via -P/--post flag (takes priority).
-        mode: 'live' for microphone/toggle recording, 'file' for -i file input.
+        mode: 'urgent' for real-time recording (toggle/VAD), 'casual' for file input.
     """
     if cli_override:
         return cli_override
-    key = "postprocessor_live" if mode == "live" else "postprocessor_file"
+    key = "postprocessor_urgent" if mode == "urgent" else "postprocessor_casual"
     return config.get(key, config.get("postprocessor", "none"))
 
 
@@ -387,10 +389,16 @@ def make_postprocessor(
             user_template=backend_cfg.get("user_template"),
             context_text=context_text,
         )
+    elif btype == "mock":
+        return MockPostProcessor(
+            prompt_name=name if " " not in name else "mock",
+            model=backend_cfg["model"],
+            system_prompt=resolved["system_prompt"],
+        )
     else:
         print(
             f"Error: unknown postprocessor backend type '{btype}'.\n"
-            "Valid types: openai_compat, claude_code",
+            "Valid types: openai_compat, claude_code, mock",
             file=sys.stderr,
         )
         sys.exit(1)

@@ -18,7 +18,7 @@ from .output import output_transcript
 from .postprocessors import NonePostProcessor, PostMetadata, PostProcessor, format_output
 from .preprocessors import AudioPreprocessor, NonePreprocessor
 from .recorders import _kill_process, _pid_alive, make_recorder
-from .transcribe import transcribe_with_config
+from .transcribe import transcribe_urgent
 from .utils import info, log, run_subprocess, safe_unlink, warning
 
 
@@ -184,7 +184,7 @@ def _transcribe_and_output(
                 _notify("asr2clip", f"Diarization failed: {e}")
                 return
         else:
-            transcript = transcribe_with_config(
+            transcript = transcribe_urgent(
                 transcribe_path, config, raise_on_error=True, language=language, backend=backend
             )
     except Exception as e:

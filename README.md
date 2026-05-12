@@ -42,14 +42,15 @@ asr2clip -b wcpp
 ## CLI reference
 
 ```
-usage: asr2clip [-h] [-v] [-q] [-c FILE] [-e] [--generate_config]
-                [--print_config] [--test] [--list_devices] [-d DEV] [-p NAME]
-                [--toggle] [-b NAME] [-i FILE] [-o FILE] [-l LANG] [-r]
-                [-C SEC] [--serve] [--host HOST] [--port PORT]
-                [--model-dir MODEL_DIR] [--num-threads NUM_THREADS]
-                [--download-model] [--vad] [--interval SEC]
-                [--silence_threshold PROB] [--silence_duration SEC] [-D]
-                [-s N] [-P NAME] [-M MODEL] [-T NAME]
+usage: asr2clip.py [-h] [-v] [-q] [-c FILE] [--preset NAME] [-e]
+                   [--generate_config] [--print_config] [--test]
+                   [--list_devices] [-d DEV] [-p NAME] [-b NAME] [-i FILE]
+                   [-o FILE] [-l LANG] [-r] [-C SEC] [--toggle] [--serve]
+                   [--host HOST] [--port PORT] [--model-dir MODEL_DIR]
+                   [--num-threads NUM_THREADS] [--download-model] [--vad]
+                   [--interval SEC] [--silence_threshold PROB]
+                   [--silence_duration SEC] [-D] [-s N] [-P NAME] [-M MODEL]
+                   [-T NAME]
 
 Record audio and transcribe to clipboard using ASR API
 
@@ -61,6 +62,10 @@ optional arguments:
 Setup:
   -c FILE, --config FILE
                         Path to configuration file
+  --preset NAME         Pipeline preset name (key under 'presets:' in config).
+                        Presets define complete pipelines: ASR backend,
+                        preprocessor, post-processor. Optional if 'default_preset'
+                        is set in config; CLI overrides still work (-b, -p, -P).
   -e, --edit            Open configuration file in editor (creates default
                         config if missing)
   --generate_config     Write config template to
@@ -75,14 +80,13 @@ Audio:
                         Overrides config.
   -p NAME, --preprocessor NAME
                         Audio preprocessor: none, noisereduce, pyrnnoise,
-                        deepfilter. Overrides preprocessor_live /
-                        preprocessor_file in config.
+                        deepfilter. Overrides the preprocessor in the selected
+                        preset.
 
 Transcription:
   -b NAME, --backend NAME
                         ASR backend to use (key under 'asr_backends:' in
-                        config). Overrides asr_backend_live /
-                        asr_backend_file.
+                        config). Overrides the backend in the selected preset.
   -i FILE, --input FILE
                         Transcribe an existing audio or video file instead of
                         recording. Supported: wav, mp3, m4a, ogg, flac, aac,
@@ -134,10 +138,10 @@ Diarization:
                         automatically.
 
 Post-processing:
-  -P NAME, --post NAME  LLM post-processor name (key in 'postprocessors:'
+  -P NAME, --post NAME  AI post-processor name (key in 'postprocessors:'
                         config) or an inline system-prompt string. Requires
-                        'postprocessor_backends:' in config. Overrides
-                        postprocessor_live / postprocessor_file for this run.
+                        'postprocessor_backends:' in config. Overrides the
+                        post-processor in the selected preset.
   -M MODEL, --post-model MODEL
                         LLM model used for the post-processing (f. ex. claude-
                         sonnet-4-6). Overrides the post-processor config for
@@ -149,17 +153,17 @@ Post-processing:
                         definition.
 
 Examples:
-  asr2clip --edit                             # create/open config in editor
-  asr2clip --test                             # verify backend and preprocessors
-  asr2clip                                    # record, transcribe, copy to clipboard
-  asr2clip --toggle                           # toggle recording (for keyboard shortcuts)
-  asr2clip --toggle -P solo-restructure      # toggle, and produce LLM-structured memo
-  asr2clip -i audio.mp3                       # transcribe an existing file
-  asr2clip -i m.mp3 -p deepfilter -r          # neural denoising + chunked transcription
-  asr2clip -i m.m4a -D -s 3                   # speaker diarization, 3 speakers
-  asr2clip --serve                            # start local sherpa-onnx ASR server
-  asr2clip --vad -o meeting.txt               # continuous VAD transcription to file
-  asr2clip --interval 60                      # fixed-interval continuous recording
+  asr2clip --edit                                    # create/open config in editor
+  asr2clip --test                                    # verify backend and preprocessors
+  asr2clip --preset speed                           # record, transcribe, copy to clipboard
+  asr2clip --preset privacy --toggle               # toggle recording, fully offline
+  asr2clip --preset speed --toggle -P solo-restructure  # toggle, and produce LLM-structured memo
+  asr2clip --preset quality -i audio.mp3            # transcribe existing file with quality preset
+  asr2clip --preset quality -i m.mp3 -p deepfilter # override: use deepfilter instead of preset's preprocessor
+  asr2clip --preset quality -i m.m4a -D -s 3       # speaker diarization, 3 speakers
+  asr2clip --serve                                   # start local sherpa-onnx ASR server
+  asr2clip --preset speed --vad -o meeting.txt     # continuous VAD transcription to file
+  asr2clip --preset speed --interval 60            # fixed-interval continuous recording
 
 See https://github.com/sjjsy/asr2clip for full documentation and configuration examples.
 ```
@@ -346,22 +350,28 @@ asr2clip -p deepfilter -i talk.mp4  # denoise video file before transcription
 asr2clip --test                     # also checks that configured preprocessors are available
 ```
 
-### Preprocessor config
+### Selecting preprocessors via presets
 
-Set different preprocessors for live vs. file transcription:
+Preprocessors are selected per pipeline preset. Each preset specifies which preprocessor to use for that processing chain:
 
 ```yaml
-preprocessor_live: noisereduce      # no resampling overhead for live 16 kHz audio
-preprocessor_file: deepfilter       # best quality for longer file transcription
+presets:
+  speed:     [     none,     groq,        none,  "Fast transcription with minimal processing"]
+  quality:   [ deepfilter,   groq,        none,  "High-accuracy with neural denoising"]
+  offline:   [   none,       wcpp,        none,  "Fully offline, local transcription"]
 ```
 
-`asr2clip --generate_config` writes a template config with examples. Set `preprocessor_live` and `preprocessor_file` to your preferred option, or override for a single run with `-p`.
+The first column is the preprocessor. Override for a single run with `-p`:
+
+```bash
+asr2clip --preset speed -p deepfilter  # speed preset, but use deepfilter instead of its preprocessor
+```
 
 ## Transcription
 
 | Flag | Description |
 |------|-------------|
-| `-b NAME / --backend NAME` | ASR backend to use (key under `asr_backends:` in config). Overrides `asr_backend_live` / `asr_backend_file`. |
+| `-b NAME / --backend NAME` | ASR backend to use (key under `asr_backends:` in config). Overrides `asr_backend_urgent` / `asr_backend_casual`. |
 | `-i FILE / --input FILE` | Transcribe an existing audio or video file instead of recording. |
 | `-o FILE / --output FILE` | Append transcripts to file. |
 | `-l LANG / --language LANG` | Language hint (ISO-639-1, e.g. `fi`, `en`). Overrides config. Omit to auto-detect. |
@@ -370,11 +380,11 @@ preprocessor_file: deepfilter       # best quality for longer file transcription
 | `--toggle` | Toggle recording on/off with repeated invocations. Designed for keyboard shortcuts. |
 
 ```bash
-asr2clip                           # record until Ctrl+C, transcribe, copy to clipboard
-asr2clip -l fi -b wcpp             # Finnish, using local whisper.cpp backend
-asr2clip -i audio.mp3              # transcribe an existing audio file
-asr2clip -i meeting.mp4            # transcribe from a video file (audio extracted automatically)
-asr2clip -o transcript.txt         # also append transcript to a file
+asr2clip --preset speed                 # record until Ctrl+C, transcribe, copy to clipboard
+asr2clip --preset privacy -l fi         # Finnish, using local whisper.cpp backend (privacy preset)
+asr2clip --preset quality -i audio.mp3  # transcribe an existing audio file with quality preset
+asr2clip --preset speed -i meeting.mp4  # transcribe from a video file (audio extracted automatically)
+asr2clip --preset speed -o transcript.txt  # also append transcript to a file
 ```
 
 ### Supported input formats
@@ -406,15 +416,13 @@ Continuous and chunked modes integrate with `-o` differently:
 
 Clipboard size limit: when a transcript exceeds ~4 000 characters and `-o FILE` is specified, the file path is copied to clipboard instead of the full text.
 
-### ASR backends
+### ASR backends and presets
 
 ASR (Automatic Speech Recognition) converts spoken audio into text. asr2clip supports several ASR backends, from cloud APIs to fully offline local inference.
 
-All backends are defined under `asr_backends:`. Name them whatever you like and switch at runtime with `-b NAME`. `asr_backend_live` and `asr_backend_file` set the default backend for each mode; `-b` overrides both.
+All backends are defined under `asr_backends:`. Name them whatever you like and select them via **presets**. Each preset is an atomic pipeline that specifies exactly which preprocessor, ASR backend, and post-processor to use. `asr2clip --generate_config` writes a fully annotated config with every supported backend type and example presets.
 
-`asr2clip --generate_config` writes a fully annotated config with every supported backend type — uncomment and fill in the one(s) you want.
-
-A minimal working config (cloud API):
+Presets define your complete processing chain. Here's a minimal example with two presets:
 
 ```yaml
 asr_backends:
@@ -423,38 +431,77 @@ asr_backends:
     api_base_url: "https://api.openai.com/v1/"
     api_key: "YOUR_API_KEY"
     model_name: "whisper-1"
-asr_backend_live: openai
-asr_backend_file: openai
-```
-
-A multi-backend example with per-mode defaults:
-
-```yaml
-asr_backends:
   groq:
     type: api
     api_base_url: "https://api.groq.com/openai/v1/"
     api_key: "YOUR_GROQ_KEY"
     model_name: "whisper-large-v3-turbo"
-  sonnx:
-    type: api
-    api_base_url: "http://127.0.0.1:8000/v1/"
-    model_name: "SenseVoiceSmall"
-  wcpp:
-    type: whisper_cpp
-    binary: ~/path/to/whisper.cpp/build/bin/whisper-cli
-    model:  ~/path/to/whisper.cpp/models/ggml-large-v3-turbo-q8_0.bin
-asr_backend_live: groq    # live/toggle/VAD recording
-asr_backend_file: wcpp    # -i file transcription
+
+presets:
+  speed:    [     none,     groq,        none,  "Fast transcription with minimal processing"]
+  quality:  [ deepfilter,   openai,      none,  "High-quality with neural denoising"]
 ```
 
+Format: `preset_name: [preprocessor, asr_backend, postprocessor, description]`. All four fields are required.
+
 ```bash
-asr2clip                       # live recording → groq (asr_backend_live)
-asr2clip -i audio.wav          # file transcription → wcpp (asr_backend_file)
-asr2clip -b sonnx              # override for this run (both modes)
-asr2clip --test                # tests both live and file backends if they differ
-asr2clip --test -b groq        # test a specific backend
+asr2clip --preset speed                # use groq backend (speed preset)
+asr2clip --preset quality -i audio.wav # use openai with deepfilter (quality preset)
+asr2clip --preset speed -b openai      # override: speed preset but with openai backend
+asr2clip --test --preset speed         # test the backends/preprocessors in speed preset
 ```
+
+### Presets (pipeline definitions)
+
+**Presets are atomic pipeline definitions:** each preset specifies exactly what preprocessor, ASR backend, and post-processor to use. They remove the need to remember which settings work well together; you pick one preset per run, and asr2clip handles the rest.
+
+If you only have one preset or a clear default choice, set `default_preset: preset_name` in your config. Then you can run `asr2clip` without specifying `--preset` every time:
+
+**Preset format:** `preset_name: [preprocessor, asr_backend, postprocessor, description]`
+
+- **Preprocessor** — audio denoising: `none`, `noisereduce`, `pyrnnoise`, or `deepfilter`
+- **ASR backend** — transcription engine: any key from `asr_backends:` section
+- **Postprocessor** — optional LLM rewriting: `none` or any key from `postprocessors:` section
+- **Description** — user-facing label for this preset
+
+All four fields are **required**. This makes it clear which processing steps are active, and prevents accidentally misconfiguring a preset by omitting a field.
+
+**Example presets from config:**
+
+```yaml
+presets:
+  speed:     [     none,     groq,        none,  "Fast transcription with minimal processing"]
+  quality:   [ deepfilter,   groq,        none,  "High-accuracy with neural denoising"]
+  privacy:   [   none,       wcpp,        none,  "Fully offline, local transcription"]
+  balanced:  [ noisereduce,  groq,        none,  "Good balance of speed, quality, and cost"]
+  memo:      [ noisereduce,  groq, solo-enhance,  "Transcription + LLM memo enhancement"]
+```
+
+**Using presets:**
+
+```bash
+asr2clip --preset speed                  # record & transcribe, copied to clipboard
+asr2clip --preset privacy --toggle       # toggle mode with fully offline transcription
+asr2clip --preset quality -i audio.mp3   # transcribe file with best quality settings
+asr2clip --preset speed -b wcpp          # speed preset, but override backend to wcpp
+asr2clip --preset memo -P group-enhance  # memo preset, override post-processor for group discussions
+```
+
+**Default preset:** to avoid specifying `--preset` every time, set a default in your config:
+
+```yaml
+default_preset: speed
+```
+
+Then you can run `asr2clip` without the preset flag:
+
+```bash
+asr2clip                                 # uses speed preset (from default_preset)
+asr2clip --toggle                        # toggle mode, also uses speed preset
+asr2clip --preset quality -i audio.mp3   # override with quality preset for this run
+```
+
+**CLI overrides:** flags like `-b`, `-p`, and `-P` override just that stage of the preset, leaving the rest intact. This lets you reuse a preset's configuration while tweaking one component.
 
 ### Supported backend types
 
@@ -462,10 +509,28 @@ asr2clip --test -b groq        # test a specific backend
 |--------|-------------|---------|
 | `api` | Any OpenAI-compatible HTTP endpoint | API key or local server |
 | `whisper_cpp` | whisper.cpp binary via subprocess | whisper.cpp build + `.bin` model file |
+| `mock` | Mock backend for testing and demos (returns canned transcript) | None — no credentials needed |
 
 Compatible cloud services for `type: api`: [OpenAI](https://platform.openai.com/docs/guides/speech-to-text), [Groq](https://console.groq.com/), [SiliconFlow](https://siliconflow.cn/), [xinference](https://inference.readthedocs.io/en/latest/), and others.
 
-**Speaker diarization as a backend:** `-D/--diarize` activates [WhisperX](https://github.com/m-bain/whisperX) as an alternative transcription path for file processing. It replaces `asr_backend_file` for that run and produces speaker-attributed output — no `type:` entry needed; see [Diarization](#diarization).
+#### Mock backend for testing
+
+The mock backend returns a fixed transcript without making API calls or running external processes. Useful for development, demos, and CI pipelines:
+
+```yaml
+asr_backends:
+  demo:
+    type: mock
+    response: "The quick brown fox jumps over the lazy dog"
+    latency_ms: 100              # Optional: simulate network delay
+```
+
+```bash
+asr2clip --preset demo -i dummy_audio.wav   # Returns mock transcript instantly
+asr2clip --test --preset demo               # No credentials needed
+```
+
+**Speaker diarization as an alternative backend:** `-D/--diarize` activates [WhisperX](https://github.com/m-bain/whisperX) as an alternative transcription path for file processing, replacing the ASR backend configured in your preset for that run. It produces speaker-attributed output (`[HH:MM:SS] SPEAKER_NN: text`) — no `type:` entry needed; see [Diarization](#diarization).
 
 #### Local ASR: whisper.cpp vs. sherpa-onnx
 
@@ -495,11 +560,11 @@ See [whisper.cpp](https://github.com/ggerganov/whisper.cpp) for build instructio
 For long recordings, `-r`/`--robust` splits at silence boundaries, quality-checks each chunk, retries bad chunks, and writes output incrementally:
 
 ```bash
-asr2clip -i meeting.mp3 -r                    # chunked, quality-checked
-asr2clip -i m.mp3 -rC 60                      # 60 s chunks instead of default 180
-asr2clip -i m.mp3 -ro transcript.txt          # write chunks to file as they complete (tail -f)
-asr2clip -i m.mp3 -rb wcpp -l fi -o t.txt     # fully offline, Finnish language
-asr2clip -i m.mp3 -rP group-restructure -T bare -o t.md  # LLM meeting notes + original transcript
+asr2clip --preset speed   -i meeting.mp3 -r                               # chunked, quality-checked
+asr2clip --preset quality -i m.mp3 -rC 60                                 # 60 s chunks instead of default 180
+asr2clip --preset quality -i m.mp3 -ro transcript.txt                     # write chunks to file as they complete (tail -f)
+asr2clip --preset privacy -i m.mp3 -l fi -o t.txt                         # fully offline, Finnish language
+asr2clip --preset quality -i m.mp3 -rP group-restructure -T bare -o t.md  # AI meeting memo without the transcript
 ```
 
 Long transcripts often exceed the clipboard size limit; using `-o FILE` is recommended.
@@ -509,10 +574,10 @@ Long transcripts often exceed the clipboard size limit; using `-o FILE` is recom
 Toggle mode lets you bind a single keyboard shortcut to start and stop recording. The recording runs as a background process; the second invocation stops it, transcribes, and copies to clipboard. A desktop notification is shown on start and finish (requires [`notify-send`](https://man.archlinux.org/man/notify-send.1) on Linux).
 
 ```bash
-asr2clip --toggle                             # first press: start recording in background
-asr2clip --toggle                             # second press: stop, transcribe, copy to clipboard
-asr2clip -b wcpp --toggle                     # same, using local whisper.cpp
-asr2clip --toggle -P solo-restructure        # toggle → structured personal memo
+asr2clip --preset speed --toggle                        # first press: start recording in background
+asr2clip --preset speed --toggle                        # second press: stop, transcribe, copy to clipboard
+asr2clip --preset privacy --toggle                      # toggle with fully offline transcription
+asr2clip --preset speed --toggle -P solo-restructure    # toggle → structured personal memo
 ```
 
 Example awesome WM keybinding:
@@ -646,15 +711,55 @@ The feature is especially valuable for frequent dictators (researchers, journali
 
 | Flag | Description |
 |------|-------------|
-| `-P NAME / --post NAME` | LLM post-processor name (key in `postprocessors:` config) or an inline system-prompt string. Overrides `postprocessor_live` / `postprocessor_file`. |
+| `-P NAME / --post NAME` | LLM post-processor name (key in `postprocessors:` config) or an inline system-prompt string. Overrides `postprocessor_urgent` / `postprocessor_casual`. |
 | `-M MODEL / --post-model MODEL` | LLM model used for post-processing. Overrides the post-processor config for this run. |
 | `-T NAME / --template NAME` | Output template name from `output_templates:` in config. Controls what is written to clipboard / `-o FILE`. |
+
+### Mock post-processor for testing
+
+The mock post-processor analyzes prompts and transcripts without making API calls, returning linguistic statistics. Useful for testing post-processing workflows, demos, and CI pipelines without credentials:
+
+```yaml
+postprocessor_backends:
+  mock:
+    type: mock
+    model: Claude-Opus         # Required; becomes "Claude-Opus" in the signature
+
+postprocessors:
+  analyze:
+    backend: mock
+    prompt: "Enhance this transcript"
+```
+
+The output shows analysis of both the system prompt and the input transcript:
+
+```
+Prompt analyzed: longest=Enhance, shortest=this, most_frequent=enhance, lines=1, words=3, chars=24
+Transcript analyzed: longest=transcription, shortest=a, most_frequent=the, lines=2, words=42, chars=245
+*Yours truly, Claude-Opus
+*
+```
+
+Each analysis includes:
+- **longest**: longest word in the text
+- **shortest**: shortest word in the text
+- **most_frequent**: most common word (case-insensitive)
+- **lines**: number of lines
+- **words**: total word count
+- **chars**: total character count
+
+Usage:
+
+```bash
+asr2clip --preset speed -P analyze -i audio.mp3         # Analyze with mock
+asr2clip --test -P analyze                              # Test without credentials
+```
 
 ### Post-processors (prompt templates)
 
 Six post-processor specs are provided in the config template as examples; each is a starting point that requires configuration:
 - **Setup a `postprocessor_backends:` entry** (Ollama, Groq, Anthropic API, OpenAI, Claude Code, or any OpenAI-compatible endpoint)
-- **Assign that backend to the prompt** (via the `backend:` field) or set a default with `postprocessor_live` / `postprocessor_file`
+- **Assign that backend to the prompt** (via the `backend:` field) or set a default with `postprocessor_urgent` / `postprocessor_casual`
 - **Update the context file list** via `context_path:` to help the LLM understand context if required; Delete it if no extra context neeeded.
 
 Examples below; see the full configuration section for all available fields.
@@ -777,7 +882,7 @@ asr2clip -i m.mp3 -r -P group -T full      # meeting notes + full transcript app
 
 Available placeholders: `{result}` `{transcript}` `{date}` `{datetime}` `{prompt_name}` `{model}` `{backend}` `{duration_s}`
 
-Set `postprocessor_live` / `postprocessor_file` to apply a prompt automatically for every recording without passing `-P`.
+Set `postprocessor_urgent` / `postprocessor_casual` to apply a prompt automatically for every recording without passing `-P`.
 
 ## Troubleshooting
 
@@ -790,7 +895,7 @@ Set `postprocessor_live` / `postprocessor_file` to apply a prompt automatically 
 | Silent audio | Try a different audio device with `--device` |
 | Video/audio format rejected | Ensure `ffmpeg` is installed (`apt install ffmpeg` / `brew install ffmpeg`) |
 | Preprocessor not found | Run `asr2clip --test` to see which are available and their install commands |
-| Preprocessing too slow | Switch `preprocessor_live` to `noisereduce` or `none` in config |
+| Preprocessing too slow | Switch `preprocessor_urgent` to `noisereduce` or `none` in config |
 | Post-processor not found | Check `postprocessors:` in config; name must match exactly |
 | Post-processor backend error | Check `postprocessor_backends:` in config; verify API key and URL |
 | Diarization fails | Ensure `pip install asr2clip[diarize]`, `HF_TOKEN` is set, and pyannote licence is accepted |
@@ -874,7 +979,7 @@ These are end-user tools that combine audio capture, ASR, and transcript output 
 | Project | Type | Platform | License | Live | File | Toggle | VAD | Offline | Diarize | LLM post | Notes |
 |---------|------|----------|---------|------|------|--------|-----|---------|---------|----------|-------|
 | **asr2clip** (this) | CLI | Linux, macOS | AGPL-3 | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | Full pipeline; scriptable; multi-backend; video input |
-| [Turbo Whisper](https://github.com/knowall-ai/turbo-whisper) | GUI | Linux | MIT | ✓ | ✗ | ✓ | ✗ | ✓ | ✗ | ✗ | faster-whisper-large-v3-turbo; global hotkey; no file mode; PPA install |
+| [Turbo Whisper](https://github.com/knowall-ai/turbo-whisper) | GUI | Linux | MIT | ✓ | ✗ | ✓ | ✗ | ✓ | ✗ | ✗ | faster-whisper-large-v3-turbo; global hotkey; no casual mode; PPA install |
 | [Whispering](https://github.com/braden-w/whispering) | GUI/tray | Any | MIT | ✓ | ✗ | ✓ | ✗ | ✓ | ✗ | ✗ | Cross-platform (snap/exe); local or cloud API; minimal UI |
 | [Superwhisper](https://superwhisper.com/) | GUI | macOS, Windows, iOS | Proprietary | ✓ | ✓ | ✓ | ✗ | ✓ | ✗ | Partial | Premium dictation app; polished UX; no Linux |
 | [Meetily](https://github.com/Zackriya-Solutions/meetily) | Desktop app | macOS, Windows | MIT | ✓ | ✓ | ✗ | ✗ | ✓ | ✓ | ✓ | 11.9k★; Rust backend; Ollama summaries; no Linux |

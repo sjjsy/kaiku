@@ -15,7 +15,7 @@ import pytest
 
 from asr2clip.postprocessors import make_postprocessor, resolve_postprocessor_config
 from asr2clip.postprocessors.base import PostMetadata
-from asr2clip.transcribe import transcribe_with_config
+from asr2clip.transcribe import transcribe_casual
 
 from .conftest import skip_no_whisper, skip_no_model, JFK_EXPECTED_FRAGMENT
 
@@ -64,7 +64,7 @@ class TestOpenAICompatE2E:
 
     def test_full_pipeline_transcript_in_user_message(self, jfk_wav, wcpp_config):
         """The LLM user message must contain the real transcript."""
-        transcript = transcribe_with_config(jfk_wav, wcpp_config, raise_on_error=True)
+        transcript = transcribe_casual(jfk_wav, wcpp_config, raise_on_error=True)
         assert JFK_EXPECTED_FRAGMENT in transcript.lower()
 
         captured = {}
@@ -84,7 +84,7 @@ class TestOpenAICompatE2E:
 
     def test_system_prompt_present_in_payload(self, jfk_wav, wcpp_config):
         """System prompt from config must appear in the messages payload."""
-        transcript = transcribe_with_config(jfk_wav, wcpp_config, raise_on_error=True)
+        transcript = transcribe_casual(jfk_wav, wcpp_config, raise_on_error=True)
         captured = {}
         mock_resp = _mock_openai_response("ok")
 
@@ -128,7 +128,7 @@ class TestClaudeCodeE2E:
 
     def test_transcript_passed_to_claude_stdin(self, jfk_wav, wcpp_config):
         """The real transcript must reach claude's stdin input."""
-        transcript = transcribe_with_config(jfk_wav, wcpp_config, raise_on_error=True)
+        transcript = transcribe_casual(jfk_wav, wcpp_config, raise_on_error=True)
         assert JFK_EXPECTED_FRAGMENT in transcript.lower()
 
         captured = {}
@@ -145,7 +145,7 @@ class TestClaudeCodeE2E:
         assert JFK_EXPECTED_FRAGMENT in captured["input"].lower()
 
     def test_model_flag_passed_to_claude(self, jfk_wav, wcpp_config):
-        transcript = transcribe_with_config(jfk_wav, wcpp_config, raise_on_error=True)
+        transcript = transcribe_casual(jfk_wav, wcpp_config, raise_on_error=True)
         captured = {}
 
         def fake_run(cmd, **kwargs):
@@ -156,5 +156,5 @@ class TestClaudeCodeE2E:
         with patch("subprocess.run", side_effect=fake_run):
             pp.process(transcript, metadata=_meta())
 
-        assert "-m" in captured["cmd"]
+        assert "--model" in captured["cmd"]
         assert "claude-haiku-4-5-20251001" in captured["cmd"]

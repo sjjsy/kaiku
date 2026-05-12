@@ -77,13 +77,18 @@ def jfk_wav() -> str:
 def wcpp_config() -> dict:
     """Minimal config dict for whisper.cpp backend E2E tests."""
     return {
-        "backend": "whisper_cpp",
-        "whisper_cpp": {
-            "binary": WHISPER_BINARY,
-            "model": WHISPER_MODEL,
-            "language": "en",
-            "threads": 4,
-            "timestamps": False,
-            "timeout_multiplier": 6.0,
+        "asr_backends": {
+            "wcpp": {
+                "type": "whisper_cpp",
+                "binary": WHISPER_BINARY,
+                "model": WHISPER_MODEL,
+                "threads": 4,
+            },
         },
+        "postprocessor_backends": {},
+        "postprocessors": {},
+        "presets": {
+            "test": ["none", "wcpp", "none", "Test preset"],
+        },
+        "_preset_for_testing": "test",
     }

@@ -1,5 +1,31 @@
-# asr2clip configuration — uncomment and fill in one backend to start.
-# Test with: asr2clip --test -b <name>   Switch at runtime: asr2clip -b <name>
+# asr2clip configuration — select a pipeline preset to start.
+# Presets define complete pipelines: ASR backend, audio processing, post-processing.
+# Use: asr2clip --preset <name>   or set default_preset in config.
+# Override individual stages per run: -b BACKEND -p PREPROCESSOR -P POSTPROCESSOR
+
+## ── Pipeline presets ──────────────────────────────────────────────────────────
+# Define pipeline presets: atomic combinations of all processing stages.
+# Format: preset_name: [preprocessor, asr_backend, postprocessor, description]
+#
+# Each row specifies a complete pipeline. All four cells are required.
+# Order matches pipeline flow: audio → preprocessor → ASR → postprocessor → output.
+# preprocessor: none, noisereduce, pyrnnoise, deepfilter (required)
+# asr_backend: name from asr_backends section (required)
+# postprocessor: "none" or name from postprocessors section (required)
+# description: one-line user-facing description (required, but can be "")
+#
+# Uncomment and configure at least one preset, then set default_preset below. See the
+# content further below to understand the options
+presets:
+  # speed:     [         none,     groq,        none,  "Fast transcription with minimal processing"]
+  # quality:   [   deepfilter,     groq,        none,  "High-accuracy with neural denoising"]
+  # cheap:     [  noisereduce,     groq,        none,  "Cost-optimized for free-tier APIs"]
+  # privacy:   [   deepfilter,     wcpp,        none,  "Fully offline transcription"]
+  # balanced:  [  noisereduce,     groq,        none,  "Good balance of speed, quality, and cost"]
+
+# Select default preset (optional; if set, asr2clip runs without --preset flag)
+# Can be overridden per run with: asr2clip --preset NAME
+# default_preset: speed
 
 ## ── Audio input ───────────────────────────────────────────────────────────────
 # Specify the input device by human-readable name, device index, or preference order.
@@ -26,7 +52,7 @@
 # recorder: auto
 
 ## ── Audio preprocessing (noise reduction) ────────────────────────────────────
-# Options: none, noisereduce, pyrnnoise, deepfilter
+# Preprocessors are selected per preset. Available options:
 #   none        — no preprocessing, zero latency, no extra dependencies
 #   noisereduce — spectral subtraction; best for stationary noise (fan, AC)
 #                 install: pip install asr2clip[noisereduce]
@@ -34,12 +60,14 @@
 #                 install: pip install asr2clip[pyrnnoise]
 #   deepfilter  — DeepFilterNet3, best quality overall, medium CPU
 #                 install: pip install asr2clip[deepfilter]
-# Override at runtime: asr2clip -p deepfilter -i meeting.mp4
-preprocessor_live: none                       # applied to live/toggle; consider noisereduce
-preprocessor_file: none                       # applied to -i FILE; consider deepfilter
+# Override preprocessor at runtime: asr2clip --preset speed -p deepfilter
 
 ## ── ASR backends ──────────────────────────────────────────────────────────────
 asr_backends:
+  mock:                                       # Mock backend for testing (no credentials needed)
+    type: mock
+    response: "The quick brown fox jumps over the lazy dog"  # Optional custom response
+    latency_ms: 100                           # Optional simulated latency
   # openai:                                   # OpenAI Whisper API
   #   type: api
   #   api_base_url: "https://api.openai.com/v1/"
@@ -72,10 +100,6 @@ asr_backends:
   #   # language: auto                        # 'auto' or ISO-639-1 (e.g. fi, en)
   #   # threads: 4
 
-## Default ASR backend selection (override with -b NAME):
-asr_backend_live: sonnx                       # backend for live/toggle/VAD recording
-asr_backend_file: wcpp                        # backend for file transcription (-i FILE)
-
 ## ── Diarization ───────────────────────────────────────────────────────────────
 ## Speaker diarization via WhisperX. Requires: pip install asr2clip[diarize]
 ## Enable per run with -D / --diarize. Replaces the configured ASR backend.
@@ -87,11 +111,14 @@ asr_backend_file: wcpp                        # backend for file transcription (
 
 ## ── Post-processing (with AI models) ──────────────────────────────────────────
 # Post-processors send the transcript to an AI model and return structured output.
-# Enable a post-processor for a mode, or pass -P NAME per run.
+# Select a post-processor in your preset, or override with -P NAME per run.
 # Requires postprocessor_backends and postprocessors sections below.
 
 ## Post-processor backends:
 postprocessor_backends:                       # FIXME: Update this section based on your setup
+  mock:                                       # Mock postprocessor for testing (no credentials needed)
+    type: mock
+    model: mock-model                         # Required; used in mock's signature line
   groq:                                       # Groq — fast, generous free tier
     type: openai_compat
     api_base_url: "https://api.groq.com/openai/v1/"
@@ -112,7 +139,7 @@ postprocessor_backends:                       # FIXME: Update this section based
 #     model: "claude-haiku-4-5-20251001"
 
 ## Prompt library — add as many prompts as you like.
-# Each prompt is available via -P NAME or as the postprocessor_live/file default.
+# Each prompt is available via -P NAME or in your preset's postprocessor setting.
 # Fields per prompt:
 #   prompt:        system prompt text (required unless 'extends' is used)
 #   extends:       inherit system prompt from another named prompt in this config
@@ -121,7 +148,11 @@ postprocessor_backends:                       # FIXME: Update this section based
 #   model:         override the backend's default model for this prompt
 #   template:      output template name from output_templates below (default: "default")
 #   context_path:  list of file glob patterns; contents are injected into the LLM request
-postprocessors:                               # FIXME: These are not commented out but you still need to adapt them for yourself to make them work
+postprocessors:                               # FIXME: Update this section based on your setup
+  mock-demo:                                  # Mock post-processor for testing (analyzes prompt and transcript)
+    backend: mock
+    prompt: "Enhance the transcript with great clarity and rigor"
+
   solo-base:                                  # Note this is a "base" and is not intended to be used as a post-processor directly; The solo-enhance was devised as the minimal post-processor.
     backend: groq
     template: bare
@@ -234,9 +265,9 @@ postprocessors:                               # FIXME: These are not commented o
     extra: |
       This content is strictly private and must not be shared. Write "*Confidential - Do Not Share*" as both the first and last line of the memo.
 
-## Which post-processor to apply automatically (none = disabled):
-postprocessor_live: none                      # toggle / VAD / single live recording
-postprocessor_file: none                      # -i file transcription
+## Post-processors are now selected per preset.
+# See the presets section above to configure post-processing for your pipeline.
+# Override at runtime: asr2clip --preset speed -P solo-enhance
 
 ## ── Output templates ──────────────────────────────────────────────────────────
 ## Named templates controlling what gets copied to clipboard / written to -o FILE.

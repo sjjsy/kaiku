@@ -19,8 +19,8 @@ import pytest
 def minimal_config():
     """Bare-minimum config with per-mode backend selection."""
     return {
-        "asr_backend_live": "api",
-        "asr_backend_file": "api",
+        "asr_backend_urgent": "api",
+        "asr_backend_casual": "api",
         "asr_backends": {
             "api": {
                 "type": "api",
@@ -74,8 +74,8 @@ def postprocessor_config():
             "full": "# Transcript\n\n{transcript}\n\n# Result\n\n{result}",
             "bare": "{result}",
         },
-        "postprocessor_live": "none",
-        "postprocessor_file": "solo-base",
+        "postprocessor_urgent": "none",
+        "postprocessor_casual": "solo-base",
     }
 
 
@@ -83,8 +83,8 @@ def postprocessor_config():
 def full_backend_config():
     """Full ASR backend config with multiple backend options."""
     return {
-        "asr_backend_live": "groq",
-        "asr_backend_file": "wcpp",
+        "asr_backend_urgent": "groq",
+        "asr_backend_casual": "wcpp",
         "asr_backends": {
             "groq": {
                 "type": "api",
@@ -112,8 +112,8 @@ def full_backend_config():
 def full_preprocessor_config():
     """Config with per-mode preprocessor selection."""
     return {
-        "preprocessor_live": "noisereduce",
-        "preprocessor_file": "deepfilter",
+        "preprocessor_urgent": "noisereduce",
+        "preprocessor_casual": "deepfilter",
     }
 
 

@@ -21,6 +21,12 @@ Four-stage pipeline: audio capture → ASR/transcription → optional LLM post-p
 **Scope:** asr2clip = audio → accurate transcript + optional minimal LLM passthrough.
 Output routing, prompt engineering, context injection beyond `context_path`, per-speaker naming, and assistant-layer intelligence belong in the calling assistant (ZeroClaw/OpenClaw), not here.
 
+## Design decisions
+
+- **Preset system:** Presets are atomic combinations of all pipeline stages (ASR backend, preprocessor, postprocessor). All stages must be explicitly specified. One preset per run. No mode-based fallback logic. The codebase is young with a single user, so breaking changes are acceptable and preferred over clutter.
+- **Preset config format (list, not dict):** Presets use compact list format `[asr_backend, preprocessor, postprocessor, description]` to make all fields required and visible as a table. This prevents silent omission of required stages.
+- **Config system:** No config and CLI override argument resolution logic outside of config_types.py. If a function in another file does config.get(...) to make a behavioral decision, move that logic into the appropriate Config class.
+
 ## Post-processing system
 
 - All prompts are **user-defined in config** — no hardcoded prompts. Five prompts are shipped in the config template: `solo-base`, `solo-enhance`, `solo-restructure`, `solo-private`, `group`.
@@ -106,7 +112,7 @@ Use `meta:` for project metadata and infrastructure; `chore:` for build/dependen
 - **CLI reference in README:** Always run `asr2clip --help` and paste the exact output verbatim — never manually maintain a separate version. Capitalization and wording must match the argparse definition exactly.
 - **Inline comments in bash code blocks:** Always pad to 46 characters before `#` so comments start at the same column. Format: `command` + spaces to position 46, then `# comment`. Apply to the epilog in `_build_parser()` and all bash example blocks in the README.
 - **Argument group order in `_build_parser()`:** Setup → Audio → Transcription → Local ASR server → VAD (continuous recording) → Diarization → Post-processing.
-- **Config key names:** ASR backends use `asr_backends:`, `asr_backend_live:`, `asr_backend_file:` (mirrors `postprocessor_backends:` naming). No backward-compat fallbacks.
+- **Config key names:** ASR backends use `asr_backends:`, `asr_backend_urgent:`, `asr_backend_casual:` (mirrors `postprocessor_backends:` naming). No backward-compat fallbacks.
 - **Post-processing prompt names:** Built-in prompts are `solo-base`, `solo-enhance`, `solo-restructure`, `solo-private`, `group`. Output template names are `bare` and `full`. Use these in all examples and documentation.
 
 ## README structure
@@ -131,3 +137,34 @@ Contact made 2026-05-12 via GitHub Issue #16 (Oaklight/asr2clip). Awaiting respo
 **Fork naming:** Tool has outgrown the original name. If PRs accepted → stay under upstream; if declined → rename fork as independent project.
 
 The file `todo.md` provides more info on future plans.
+
+## Core Development Rules (Strict - Follow Always)
+
+- **Fail Fast, No Cleverness**: Prefer explicit errors and simple, short and obvious code over smart fallbacks, auto-detection, or complex logic. Make the code crash close to the real problem. Never add "just in case" handling unless explicitly asked.
+
+- **Zero Tolerance for Dead Code**: Never leave deprecated functions, old config options, compatibility layers, or commented-out code. When changing something, update ALL references in the entire codebase immediately and remove the old version completely.
+
+- **Minimize Complexity**:
+  - Keep functions small and focused (single responsibility).
+  - Prefer clear, readable code over clever or overly abstract code.
+  - Reduce top-level if/else spaghetti — push logic into classes/methods where it belongs.
+  - Avoid creating new small utility functions unless they are reused in ≥3 places.
+
+- **Tests First Mindset**: Before implementing or changing features, ensure or create relevant tests. Run the unit tests frequently, the integration tests whenever you think you completed something, and the E2E tests before committing a significant code change.
+
+- **Atomic Changes**: Make changes in small, verifiable steps. After editing files, summarize exactly what was changed and why.
+
+- **Autonomous Execution**: Do not ask for confirmation on every file edit. If the task is clear from the plan and context, proceed and keep going. Only stop if you hit an error, conflict, or need real clarification.
+
+- **Quality Gates**: After any significant change:
+  1. Run relevant tests (`python -m pytest ...`)
+  2. Check for linting issues
+  3. Verify the feature manually if possible
+  4. Report status clearly before continuing
+
+## Workflow Rules
+
+- Always start with a short plan (bullet points) before writing code, unless I explicitly say "implement directly".
+- Use existing patterns and config system — do not invent new ones.
+- Keep the codebase clean and consistent with current architecture (especially the new config class system).
+- When in doubt, prefer simplicity over extensibility right now.
