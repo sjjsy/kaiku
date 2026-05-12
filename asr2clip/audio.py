@@ -49,8 +49,10 @@ class DeviceInfo:
 
 
 def query_devices() -> list[DeviceInfo]:
-    """Query all available input devices from sounddevice."""
+    """Query all available input devices from sounddevice and ALSA."""
     devices: list[DeviceInfo] = []
+    seen_names: set[str] = set()
+
     try:
         default_input = sd.query_devices(kind="input")
         default_name = default_input.get("name", "")
@@ -60,8 +62,9 @@ def query_devices() -> list[DeviceInfo]:
     try:
         all_devices = sd.query_devices()
     except Exception:
-        return []
+        all_devices = []
 
+    # Add sounddevice devices
     for i, device in enumerate(all_devices):
         if device.get("max_input_channels", 0) <= 0:
             continue
@@ -72,17 +75,70 @@ def query_devices() -> list[DeviceInfo]:
         if m:
             alsa_name = m.group(1)
 
-        is_default = device.get("name", "") == default_name
+        name = device.get("name", f"Device {i}")
+        is_default = name == default_name
         dev_info = DeviceInfo(
             index=i,
-            name=device.get("name", f"Device {i}"),
-            portaudio_name=device.get("name", f"Device {i}"),
+            name=name,
+            portaudio_name=name,
             alsa_name=alsa_name,
             channels=device.get("max_input_channels", 0),
             sample_rate=int(device.get("default_samplerate", 44100)),
             is_default=is_default,
         )
         devices.append(dev_info)
+        seen_names.add(name.lower())
+
+    # Also try to get ALSA devices directly (arecord -L) for hardware not visible to sounddevice
+    try:
+        result = run_subprocess(["arecord", "-L"], capture_output=True, text=True, check=False)
+        if result.returncode == 0:
+            lines = result.stdout.split("\n")
+            i = 0
+            while i < len(lines):
+                line = lines[i].strip()
+                i += 1
+
+                if not line or line.startswith("!"):
+                    continue
+
+                # Look for hw: or plughw: entries (including named format like hw:CARD=Snowball,DEV=0)
+                if line.startswith("hw:") or line.startswith("plughw:"):
+                    # Skip numeric hw:X,Y format (already covered by sounddevice)
+                    if re.match(r"hw:\d+,\d+$", line) or re.match(r"plughw:\d+,\d+$", line):
+                        continue
+
+                    alsa_name = line.replace("plughw:", "").replace("hw:", "")
+
+                    # Get the description from the next line(s)
+                    description = ""
+                    if i < len(lines):
+                        desc_line = lines[i].strip()
+                        if desc_line and not desc_line.startswith(("hw:", "plughw:")):
+                            description = desc_line
+                            i += 1
+
+                    # Avoid duplicates
+                    if alsa_name.lower() not in seen_names:
+                        # Use description if available, else construct from device name
+                        if description:
+                            name = f"{description} ({line})"
+                        else:
+                            name = line
+
+                        dev_info = DeviceInfo(
+                            index=-1,  # No sounddevice index
+                            name=name,
+                            portaudio_name=None,
+                            alsa_name=alsa_name,
+                            channels=2,  # Assume stereo; arecord -L doesn't provide this
+                            sample_rate=44100,
+                            is_default=False,
+                        )
+                        devices.append(dev_info)
+                        seen_names.add(alsa_name.lower())
+    except Exception:
+        pass
 
     return devices
 
