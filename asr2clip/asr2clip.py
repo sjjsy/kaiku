@@ -107,7 +107,7 @@ def test_config(
     return backend_ok and pp_ok
 
 
-def _test_postprocessors(config: dict, post_override: str | None, model_override: str | None) -> bool:
+def _test_postprocessors(config: Config, post_override: str | None, model_override: str | None) -> bool:
     """Check that post-processor backends are reachable. Returns True if all OK."""
     import shutil
     from .postprocessors import _resolve_backend, _resolve_prompt
@@ -120,19 +120,11 @@ def _test_postprocessors(config: dict, post_override: str | None, model_override
     seen: set = set()
     to_check: list[str] = []
 
-    # Collect postprocessors to check from CLI override and/or default preset
+    # Collect postprocessors to check: CLI override takes precedence over preset
     if post_override:
         to_check.append(post_override)
-
-    default_preset = config.get("default_preset")
-    if default_preset:
-        presets = config.get("presets", {})
-        if default_preset in presets:
-            preset = presets[default_preset]
-            # Preset format: [preprocessor, asr_backend, postprocessor, description]
-            postprocessor_name = preset[2]  # Index 2 is postprocessor
-            if postprocessor_name and postprocessor_name != "none":
-                to_check.append(postprocessor_name)
+    elif config.postprocessor.name and config.postprocessor.name != "none":
+        to_check.append(config.postprocessor.name)
 
     if not to_check:
         print_success("No post-processors configured to check")
@@ -150,8 +142,8 @@ def _test_postprocessors(config: dict, post_override: str | None, model_override
 
         # Resolve backend type
         try:
-            resolved = _resolve_prompt(name, config)
-            backend_cfg = _resolve_backend(config, resolved["backend_name"], model_override)
+            resolved = _resolve_prompt(name, config._config_dict)
+            backend_cfg = _resolve_backend(config._config_dict, resolved["backend_name"], model_override)
         except SystemExit:
             print_error(f"Post-processor '{name}' — config error (see above)")
             ok = False
@@ -214,7 +206,7 @@ def _test_clipboard() -> bool:
         return False
 
 
-def _test_diarization(config: dict) -> None:
+def _test_diarization(config: Config) -> None:
     """Check diarization dependencies. Prints warnings; never blocks overall success."""
     import importlib.util
     from .utils import print_success, print_warning
@@ -229,7 +221,7 @@ def _test_diarization(config: dict) -> None:
 
     print_success("whisperx: installed")
 
-    hf_token = config.get("diarize_hf_token") or os.environ.get("HF_TOKEN")
+    hf_token = config.diarization.hf_token
     if hf_token:
         masked = f"{'*' * 8}...{hf_token[-4:]}" if len(hf_token) > 4 else "****"
         print_success(f"HuggingFace token: {masked}")
@@ -779,14 +771,6 @@ def main():
         list_audio_devices()
         return
 
-    # Read configuration
-    config_dict = read_config(args.config)
-
-    # Set up logging
-    quiet = args.quiet or config_dict.get("quiet", False)
-    setup_logging(verbose=not quiet)
-    set_verbose(not quiet)
-
     # Create CLI overrides for config resolution
     cli_overrides = CliOverrides(
         preset=args.preset,
@@ -797,22 +781,17 @@ def main():
         post_model=args.post_model,
     )
 
-    # Resolve preset
-    from .config_types import PresetConfig
-    preset_name = args.preset or config_dict.get("default_preset")
-    if not preset_name:
-        error(
-            "No preset selected. Use --preset NAME or set 'default_preset: NAME' in config.\n"
-            "Available presets: " + ", ".join(config_dict.get("presets", {}).keys())
-        )
+    # Initialize Config from file (Phase 1: moved preset logic into Config.from_file)
+    try:
+        config = Config.from_file(args.config, preset_name=args.preset, cli_overrides=cli_overrides)
+    except ValueError as e:
+        error(f"Config error: {e}")
         sys.exit(1)
 
-    try:
-        preset_config = PresetConfig.resolve(config_dict, preset_name)
-        preset = preset_config.preset
-    except ValueError as e:
-        error(f"Preset error: {e}")
-        sys.exit(1)
+    # Set up logging (use config's quiet setting if not overridden)
+    quiet = args.quiet or config._config_dict.get("quiet", False)
+    setup_logging(verbose=not quiet)
+    set_verbose(not quiet)
 
     # Skip config logs on first --toggle (starting recording)
     is_toggle_start = args.toggle and not os.path.exists(os.path.join(
@@ -821,12 +800,6 @@ def main():
 
     if args.test:
         # Test preset configuration
-        try:
-            config = Config.resolve(config_dict, preset=preset, cli_overrides=cli_overrides)
-        except ValueError as e:
-            error(f"Config error: {e}")
-            sys.exit(1)
-
         ok_asr = test_config(
             {
                 "backend": config.asr_backend.type,
@@ -834,14 +807,14 @@ def main():
                 "api_base_url": config.asr_backend.api_base_url,
                 "model_name": config.asr_backend.model_name,
             },
-            config_dict,
+            config._config_dict,
             config.preprocessor.name,
             mode="preset",
         )
 
-        ok_post = _test_postprocessors(config_dict, args.post, args.post_model)
+        ok_post = _test_postprocessors(config, args.post, args.post_model)
         ok_clip = _test_clipboard()
-        _test_diarization(config_dict)  # informational only; never blocks success
+        _test_diarization(config)  # informational only; never blocks success
 
         print_separator()
         success = ok_asr and ok_post and ok_clip
@@ -850,13 +823,6 @@ def main():
         else:
             info("Some checks failed — see details above.")
         sys.exit(0 if success else 1)
-
-    # Create config using selected preset
-    try:
-        config = Config.resolve(config_dict, preset=preset, cli_overrides=cli_overrides)
-    except ValueError as e:
-        error(f"Config error: {e}")
-        sys.exit(1)
 
     if not is_toggle_start:
         # Backend and preprocessor logs already emitted during config resolution
@@ -869,9 +835,9 @@ def main():
     )
 
     postprocessor = make_postprocessor(
-        config.postprocessor.name, config_dict, args.post_model
+        config.postprocessor.name, config._config_dict, args.post_model
     )
-    template = resolve_output_template(config_dict, config.postprocessor.template, args.template)
+    template = resolve_output_template(config._config_dict, config.postprocessor.template, args.template)
     max_clipboard_chars = config.output.clipboard_max_chars
 
     # Create preprocessor for the selected preset (used for all operations)
@@ -881,7 +847,7 @@ def main():
     if args.toggle:
         from .toggle import toggle_recording
         toggle_recording(
-            config_dict, device=args.device, output_file=args.output,
+            config._config_dict, device=args.device, output_file=args.output,
             language=args.language,
             preprocessor=preprocessor,
             postprocessor=postprocessor,
@@ -897,7 +863,7 @@ def main():
         if args.robust:
             from .robust import process_file_robust
             process_file_robust(
-                config_dict, args.input, args.output,
+                config._config_dict, args.input, args.output,
                 chunk_duration=args.chunk_duration,
                 language=args.language,
                 preprocessor=preprocessor,
@@ -907,7 +873,7 @@ def main():
             )
         else:
             process_file(
-                config_dict, args.input, args.output,
+                config._config_dict, args.input, args.output,
                 language=args.language,
                 preprocessor=preprocessor,
                 postprocessor=postprocessor,
@@ -961,7 +927,7 @@ def main():
         device_spec = config.recorder.device.get_spec(config.recorder.name)
 
     process_recording(
-        config_dict, device_spec, args.output,
+        config._config_dict, device_spec, args.output,
         language=args.language,
         preprocessor=preprocessor,
         postprocessor=postprocessor,

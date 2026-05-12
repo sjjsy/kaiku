@@ -620,6 +620,69 @@ class Config:
         return self._diarization
 
     @classmethod
+    def from_file(
+        cls,
+        config_file: str,
+        preset_name: Optional[str] = None,
+        cli_overrides: Optional[CliOverrides] = None,
+    ) -> Config:
+        """Initialize Config from file with preset resolution (Phase 1 refactoring).
+
+        This is the primary entry point for config initialization at startup.
+        It handles:
+        1. Reading config from file
+        2. Resolving preset (CLI override or config default)
+        3. Creating the master Config coordinator
+
+        Args:
+            config_file: Path to config YAML file.
+            preset_name: Preset to use. If None, uses config's default_preset.
+            cli_overrides: CLI flag overrides (e.g., --backend, --preprocessor).
+
+        Returns:
+            Fully initialized Config instance.
+
+        Raises:
+            ValueError: If preset not found or invalid.
+            SystemExit: If config or preset resolution fails (via PresetConfig.resolve).
+        """
+        import sys
+        from .config import read_config
+        from .utils import error
+
+        # Step 1: Read config dictionary
+        config_dict = read_config(config_file)
+        if not config_dict:
+            error("Config file is empty or contains only comments.")
+            sys.exit(1)
+
+        # Step 2: Resolve preset name (CLI override takes precedence over config default)
+        resolved_preset_name = preset_name or config_dict.get("default_preset")
+        if not resolved_preset_name:
+            available = ", ".join(config_dict.get("presets", {}).keys())
+            error(
+                "No preset selected. Use --preset NAME or set 'default_preset: NAME' in config.\n"
+                f"Available presets: {available}"
+            )
+            sys.exit(1)
+
+        # Step 3: Resolve preset and validate
+        try:
+            preset_config = PresetConfig.resolve(config_dict, resolved_preset_name)
+            preset = preset_config.preset
+        except ValueError as e:
+            error(f"Preset error: {e}")
+            sys.exit(1)
+
+        # Step 4: Create Config instance
+        cli_overrides = cli_overrides or CliOverrides()
+        return cls(
+            _config_dict=config_dict,
+            _preset=preset,
+            _cli_overrides=cli_overrides,
+        )
+
+    @classmethod
     def resolve(
         cls,
         config_dict: dict,
