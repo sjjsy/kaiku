@@ -188,7 +188,9 @@ def transcribe_with_config(
     backend_config = resolve_backend_config(config, backend_name, "file")
     if backend_config.get("backend") == "whisper_cpp":
         from .backends.whisper_cpp import WhisperCppConfig, transcribe as wc_transcribe
-        cfg = WhisperCppConfig.from_config(config)
+        # Create a wrapper config with whisper_cpp at top level for WhisperCppConfig.from_config()
+        wcpp_wrapper = {"whisper_cpp": backend_config.get("whisper_cpp", {})}
+        cfg = WhisperCppConfig.from_config(wcpp_wrapper)
         if language:
             cfg.language = language
         try:
