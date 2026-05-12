@@ -676,14 +676,14 @@ asr2clip -i meeting.m4a -D -P group-restructure  # diarize + meeting memo
 asr2clip --toggle -P "List action items."   # inline system prompt
 ```
 
-### Supported LLM backends
+### Supported AI backends
 
 | Backend type | What it covers |
 |---|---|
 | `openai_compat` | [Ollama](https://ollama.com/) (local), [Groq](https://console.groq.com/), [Anthropic API](https://www.anthropic.com/api), [OpenAI](https://platform.openai.com/), any OpenAI-compatible endpoint |
 | `claude_code` | [Claude Code](https://claude.ai/code) CLI — uses your CC session/subscription, no per-token billing |
 
-### Backend setup
+### Post-processor backend setup
 
 ```yaml
 # ~/.config/asr2clip/config.yaml

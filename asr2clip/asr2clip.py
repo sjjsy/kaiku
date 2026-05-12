@@ -453,7 +453,7 @@ Examples:
   asr2clip --test                             # verify backend and preprocessors
   asr2clip                                    # record, transcribe, copy to clipboard
   asr2clip --toggle                           # toggle recording (for keyboard shortcuts)
-  asr2clip --toggle -P solo-restructure      # toggle, and produce LLM-structured memo
+  asr2clip --toggle -P solo-restructure       # toggle, and produce AI-structured memo
   asr2clip -i audio.mp3                       # transcribe an existing file
   asr2clip -i m.mp3 -p deepfilter -r          # neural denoising + chunked transcription
   asr2clip -i m.m4a -D -s 3                   # speaker diarization, 3 speakers
@@ -656,7 +656,7 @@ See https://github.com/sjjsy/asr2clip for full documentation and configuration e
         "-P", "--post", metavar="NAME",
         default=None,
         help=(
-            "LLM post-processor name (key in 'postprocessors:' config) "
+            "AI post-processor name (key in 'postprocessors:' config) "
             "or an inline system-prompt string. "
             "Requires 'postprocessor_backends:' in config. "
             "Overrides postprocessor_live / postprocessor_file for this run."
@@ -666,7 +666,7 @@ See https://github.com/sjjsy/asr2clip for full documentation and configuration e
         "-M", "--post-model", metavar="MODEL",
         default=None,
         help=(
-            "LLM model used for the post-processing (f. ex. claude-sonnet-4-6). "
+            "AI model used for the post-processing (f. ex. claude-sonnet-4-6). "
             "Overrides the post-processor config for this run."
         ),
     )
