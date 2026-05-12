@@ -13,7 +13,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from asr2clip.postprocessors import make_postprocessor, resolve_postprocessor_config
+from asr2clip.postprocessors import make_postprocessor
 from asr2clip.postprocessors.base import PostMetadata
 from asr2clip.transcribe import transcribe_casual
 
