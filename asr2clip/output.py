@@ -8,7 +8,13 @@ from datetime import datetime
 
 from .utils import log, print_success, run_subprocess, warning
 
-_MAX_CLIPBOARD_CHARS = 4000
+# UX threshold: when a transcript exceeds this length *and* -o FILE was given,
+# copy the file path instead of the full text. This is not a system limit —
+# modern clipboards (X11 INCR, Wayland, macOS NSPasteboard, Windows) handle
+# megabytes of text with no OS-imposed cap. The threshold is purely a usability
+# heuristic: a 100 k-char (~75,000-word) transcript is better accessed via file
+# than pasted from clipboard. There is no runtime API to query clipboard capacity.
+_MAX_CLIPBOARD_CHARS = 100_000
 
 
 def _is_wayland() -> bool:
