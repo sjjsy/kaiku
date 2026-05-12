@@ -245,8 +245,9 @@ Config file is created at `~/.config/asr2clip/config.yaml`. Locations searched i
 3. `~/.config/asr2clip.conf`
 4. `~/.asr2clip.conf`
 
-Note: The created config file embeds mostly commented-out configuration options along with brief explanations for most features.
+Note: The created config file embeds partially commented-out configuration options along with brief explanations for most features.
 See [`asr2clip.conf.example`](asr2clip.conf.example) in the repo for a complete, current example with all backend and feature documentation.
+The config file template is **not usable immediately**: You must update it based on your setup and needs.
 The following sections tackle some of these in more detail where relevant.
 
 ## Audio
@@ -623,7 +624,7 @@ diarize_max_speakers: 6
 
 ## LLM post-processing
 
-LLM post-processing refines transcripts by passing them through a language model with custom instructions. Use this stage to fix errors, improve grammar, restructure notes into action items, or extract key information. It's valuable for users who dictate frequently (researchers, journalists, managers taking meeting notes), want high-quality output from noisy recordings, or need consistent formatting across transcripts. A post-processor can transform raw speech into structured documents — meeting memos with decisions and action items, personal dictations into organized notes, technical discussions into summaries — all specified through user-defined prompts in the config.
+LLM post-processing refines transcripts by passing them through a language model with custom instructions. Use this to fix errors, improve grammar, restructure notes, extract decisions, or produce consistent formatted outputs. It's valuable for frequent dictators (researchers, journalists, managers) and teams with important discussions. For group transcripts, use [diarization](#diarization) first to attribute segments to speakers, then post-process for richer structured output (meeting memos with decisions and action items).
 
 | Flag | Description |
 |------|-------------|
@@ -631,12 +632,12 @@ LLM post-processing refines transcripts by passing them through a language model
 | `-M MODEL / --post-model MODEL` | LLM model used for post-processing. Overrides the post-processor config for this run. |
 | `-T NAME / --template NAME` | Output template name from `output_templates:` in config. Controls what is written to clipboard / `-o FILE`. |
 
-### Template prompts
+### Post-processors (prompt templates)
 
-Five prompts are provided in the config template as examples; each is a starting point that requires configuration. Before using a prompt, you must:
-- **Set a `postprocessor_backends:` entry** (Ollama, Groq, Anthropic API, OpenAI, Claude Code, or any OpenAI-compatible endpoint)
+Five prompts are provided in the config template as examples; each is a starting point that requires configuration:
+- **Setup a `postprocessor_backends:` entry** (Ollama, Groq, Anthropic API, OpenAI, Claude Code, or any OpenAI-compatible endpoint)
 - **Assign that backend to the prompt** (via the `backend:` field) or set a default with `postprocessor_live` / `postprocessor_file`
-- **(Optional) Add context files** via `context_path:` to help the LLM understand context
+- **Update the context file list** via `context_path:` to help the LLM understand context if required; Delete it if no extra context neeeded.
 
 Examples below; see the full configuration section for all available fields.
 
@@ -649,7 +650,7 @@ Examples below; see the full configuration section for all available fields.
 | `solo-restructure` | Restructure a personal dictation into a structured memo with sections |
 | `solo-private` | Like `solo-restructure` but defaults to a local offline model to ensure privacy |
 
-#### Meeting/group discussion prompts
+#### Group discussion prompts
 
 | Name | Purpose |
 |------|---------|
@@ -674,7 +675,7 @@ asr2clip --toggle -P "List action items."   # inline system prompt
 | `openai_compat` | [Ollama](https://ollama.com/) (local), [Groq](https://console.groq.com/), [Anthropic API](https://www.anthropic.com/api), [OpenAI](https://platform.openai.com/), any OpenAI-compatible endpoint |
 | `claude_code` | [Claude Code](https://claude.ai/code) CLI — uses your CC session/subscription, no per-token billing |
 
-### Post-processing setup
+### Post-processor backend setup
 
 ```yaml
 # ~/.config/asr2clip/config.yaml
@@ -728,28 +729,6 @@ postprocessors:
     backend: ollama               # override: use local model for privacy
     context_path:
       - "~/.asr2clip/context/private-*.md"  # accumulates with parent's context
-```
-
-### Prompt inheritance
-
-`extends:` is used by the built-in prompts and is available for your own:
-
-```yaml
-postprocessors:
-  solo-base:
-    prompt: |
-      You are a professional personal transcript scribe.
-      ...
-    template: bare
-
-  solo-restructure:
-    extends: solo-base
-    extra: |
-      Produce a concise, structured memo ...
-
-  solo-private:
-    extends: solo-restructure
-    # backend: ollama    # local model for sensitive content
 ```
 
 ### Output templates
