@@ -8,7 +8,7 @@
 # Single device (uses system default if device is unavailable):
 #   audio_device: "Snowball"                  # Human-readable name (substring match)
 #   audio_device: "auto"                      # System default input device
-#   audio_device: 0                           # Device index from --list_devices output
+#   audio_device: 3                           # Device index from --list_devices output
 #
 # Preference order (tries first available device; falls back if USB device unplugged):
 #   audio_device: "Snowball,Webcam,auto"     # Try Snowball, fall back to Webcam, then default
