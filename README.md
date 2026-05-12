@@ -623,13 +623,49 @@ diarize_max_speakers: 6
 
 ## LLM post-processing
 
-LLM post-processing passes the finished transcript to a language model with user-customizable instructions (prompts) to return refined output output — with simple legibility improvements or significant restructuring (summaries, meeting notes, action items) — to the clipboard (or output file). All post-processing options are defined in the user's config.
+LLM post-processing refines transcripts by passing them through a language model with custom instructions. Use this stage to fix errors, improve grammar, restructure notes into action items, or extract key information. It's valuable for users who dictate frequently (researchers, journalists, managers taking meeting notes), want high-quality output from noisy recordings, or need consistent formatting across transcripts. A post-processor can transform raw speech into structured documents — meeting memos with decisions and action items, personal dictations into organized notes, technical discussions into summaries — all specified through user-defined prompts in the config.
 
 | Flag | Description |
 |------|-------------|
 | `-P NAME / --post NAME` | LLM post-processor name (key in `postprocessors:` config) or an inline system-prompt string. Overrides `postprocessor_live` / `postprocessor_file`. |
 | `-M MODEL / --post-model MODEL` | LLM model used for post-processing. Overrides the post-processor config for this run. |
 | `-T NAME / --template NAME` | Output template name from `output_templates:` in config. Controls what is written to clipboard / `-o FILE`. |
+
+### Template prompts
+
+Five prompts are provided in the config template as examples; each is a starting point that requires configuration. Before using a prompt, you must:
+- **Set a `postprocessor_backends:` entry** (Ollama, Groq, Anthropic API, OpenAI, Claude Code, or any OpenAI-compatible endpoint)
+- **Assign that backend to the prompt** (via the `backend:` field) or set a default with `postprocessor_live` / `postprocessor_file`
+- **(Optional) Add context files** via `context_path:` to help the LLM understand context
+
+Examples below; see the full configuration section for all available fields.
+
+#### Personal dictation prompts
+
+| Name | Purpose |
+|------|---------|
+| `solo-base` | Correct errors and clean up a personal single-speaker transcript |
+| `solo-enhance` | Improve quality, fix grammar and word choice while honoring the author's style |
+| `solo-restructure` | Restructure a personal dictation into a structured memo with sections |
+| `solo-private` | Like `solo-restructure` but defaults to a local offline model to ensure privacy |
+
+#### Meeting/group discussion prompts
+
+| Name | Purpose |
+|------|---------|
+| `group-base` | Correct errors and clean up a group discussion transcript |
+| `group-enhance` | Improve quality of group transcript while honoring each speaker's style |
+| `group-restructure` | Restructure a group discussion into a meeting memo with summary, decisions, action items |
+| `group-private` | Like `group-restructure` but defaults to a local offline model to ensure privacy |
+
+#### Post-processor usage examples
+
+```bash
+asr2clip --toggle -P solo-enhance          # toggle → improved personal transcript
+asr2clip --toggle -P solo-restructure      # toggle → structured personal memo
+asr2clip -i meeting.m4a -D -P group-restructure  # diarize + meeting memo
+asr2clip --toggle -P "List action items."   # inline system prompt
+```
 
 ### Supported LLM backends
 
@@ -653,7 +689,7 @@ postprocessor_backends:
     model: "claude-haiku-4-5-20251001"
 ```
 
-### Postprocessor configuration
+### Post-processor configuration
 
 Each prompt under `postprocessors:` can have the following fields:
 
@@ -692,37 +728,6 @@ postprocessors:
     backend: ollama               # override: use local model for privacy
     context_path:
       - "~/.asr2clip/context/private-*.md"  # accumulates with parent's context
-```
-
-### Built-in prompts
-
-Shipped in the config template, ready to use:
-
-#### Personal dictation prompts
-
-| Name | Purpose |
-|------|---------|
-| `solo-base` | Correct errors and clean up a personal single-speaker transcript |
-| `solo-enhance` | Improve quality, fix grammar and word choice while honoring the author's style |
-| `solo-restructure` | Restructure a personal dictation into a structured memo with sections |
-| `solo-private` | Like `solo-restructure` but defaults to a local offline model to ensure privacy |
-
-#### Meeting/group discussion prompts:
-
-| Name | Purpose |
-|------|---------|
-| `group-base` | Correct errors and clean up a group discussion transcript |
-| `group-enhance` | Improve quality of group transcript while honoring each speaker's style |
-| `group-restructure` | Restructure a group discussion into a meeting memo with summary, decisions, action items |
-| `group-private` | Like `group-restructure` but defaults to a local offline model to ensure privacy |
-
-#### Post-processor usage examples
-
-```bash
-asr2clip --toggle -P solo-enhance          # toggle → improved personal transcript
-asr2clip --toggle -P solo-restructure      # toggle → structured personal memo
-asr2clip -i meeting.m4a -D -P group-restructure  # diarize + meeting memo
-asr2clip --toggle -P "List action items."   # inline system prompt
 ```
 
 ### Prompt inheritance

@@ -32,7 +32,7 @@ def _notify(title: str, body: str):
     if shutil.which("notify-send"):
         try:
             subprocess.run(
-                ["notify-send", "-t", "4000", title, body],
+                ["notify-send", "-t", "6000", title, body],
                 check=False, capture_output=True,
             )
         except Exception:
