@@ -70,23 +70,23 @@ asr_backend_file: wcpp                        # backend for file transcription (
 # diarize_min_speakers: 2                     # optional hint to pyannote; omit for auto
 # diarize_max_speakers: 6
 
-## ── LLM post-processing ───────────────────────────────────────────────────────
-# Post-processors send the transcript to an LLM and return structured output.
+## ── Post-processing (with AI models) ──────────────────────────────────────────
+# Post-processors send the transcript to an AI model and return structured output.
 # Enable a post-processor for a mode, or pass -P NAME per run.
 # Requires postprocessor_backends and postprocessors sections below.
 
-## LLM backends for post-processing:
-# postprocessor_backends:
-#   ollama:                                   # Ollama — free, private, fully offline
-#     type: openai_compat
-#     api_base_url: "http://localhost:11434/v1/"
-#     api_key: "ollama"                       # Ollama ignores the key value
-#     model: "qwen3:14b"
-#   groq:                                     # Groq — fast, generous free tier
-#     type: openai_compat
-#     api_base_url: "https://api.groq.com/openai/v1/"
-#     api_key: "YOUR_GROQ_KEY"
-#     model: "llama-3.3-70b-versatile"
+## Post-processor backends:
+postprocessor_backends:                       # FIXME: Update this section based on your setup
+  groq:                                       # Groq — fast, generous free tier
+    type: openai_compat
+    api_base_url: "https://api.groq.com/openai/v1/"
+    api_key: "YOUR_GROQ_KEY"
+    model: "llama-3.3-70b-versatile"
+  ollama:                                     # Ollama — free, private, fully offline
+    type: openai_compat
+    api_base_url: "http://localhost:11434/v1/"
+    api_key: "ollama"                         # Ollama ignores the key value
+    model: "qwen3:14b"
 #   anthropic:                                # Anthropic API (OpenAI-compatible endpoint)
 #     type: openai_compat
 #     api_base_url: "https://api.anthropic.com/v1/"
