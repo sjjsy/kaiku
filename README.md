@@ -515,6 +515,13 @@ asr2clip -b wcpp --toggle                     # same, using local whisper.cpp
 asr2clip --toggle -P solo-restructure        # toggle → structured personal memo
 ```
 
+**Recorder backends** — audio is captured via `sounddevice` by default (cross-platform, already a dependency). `arecord` is available as an explicit opt-in for direct ALSA access on Linux. Set `recorder: arecord` in config to use it.
+
+| Recorder | Platform | Requirement |
+|---|---|---|
+| `sounddevice` (default) | cross-platform | already a dependency |
+| `arecord` | Linux / ALSA only | `alsa-utils` system package |
+
 Toggle mode requires a POSIX system (Linux, macOS). Example awesome WM keybinding:
 
 ```lua

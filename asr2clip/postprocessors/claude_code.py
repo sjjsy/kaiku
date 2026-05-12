@@ -14,6 +14,7 @@ from __future__ import annotations
 import subprocess
 import sys
 
+from ..utils import run_subprocess
 from .base import PostMetadata, PostProcessor
 
 _DEFAULT_USER_TEMPLATE = "Transcript (recorded {date}, {duration_s:.0f}s):\n\n{transcript}"
@@ -65,7 +66,7 @@ class ClaudeCodePostProcessor(PostProcessor):
         cmd += ["-p", self._system_prompt]
 
         try:
-            result = subprocess.run(
+            result = run_subprocess(
                 cmd,
                 input=user_content,
                 capture_output=True,

@@ -10,6 +10,13 @@
 # audio_device: "plughw:Snowball"             # ALSA device name — bypasses system mixer
 # audio_device: 3                             # device index from --list_devices
 
+## ── Toggle-mode recorder ──────────────────────────────────────────────────────
+# Controls which backend captures audio during --toggle mode.
+#   auto        — sounddevice (cross-platform, always available); arecord as opt-in
+#   sounddevice — Python/PortAudio recorder (works everywhere, already a dependency)
+#   arecord     — direct ALSA recorder (Linux only, requires alsa-utils)
+# recorder: auto
+
 ## ── Audio preprocessing (noise reduction) ────────────────────────────────────
 # Options: none, noisereduce, pyrnnoise, deepfilter
 #   none        — no preprocessing, zero latency, no extra dependencies

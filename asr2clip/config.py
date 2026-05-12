@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import os
-import subprocess
 import sys
 
 from asr2clip._vendor.yaml import yaml
+from asr2clip.utils import run_subprocess
 
 # Default paths to search for config file (in order of priority)
 CONFIG_PATHS = [
@@ -127,7 +127,7 @@ def open_in_editor(config_file: str | None = None):
 
     for editor in editors_to_try:
         try:
-            subprocess.run([editor, config_path], check=True)
+            run_subprocess([editor, config_path], check=True)
             return
         except FileNotFoundError:
             continue
@@ -208,6 +208,24 @@ def resolve_preprocessor_config(
     key = "preprocessor_live" if mode == "live" else "preprocessor_file"
     # Fall back to single 'preprocessor' key, then to 'none'
     return config.get(key, config.get("preprocessor", "none"))
+
+
+def resolve_recorder_config(
+    config: dict,
+    cli_override: str | None = None,
+) -> str:
+    """Return the effective recorder name for toggle mode.
+
+    Args:
+        config: Full configuration dictionary.
+        cli_override: Name supplied via a future --recorder flag (takes priority).
+
+    Returns:
+        Recorder name: 'auto', 'sounddevice', or 'arecord'.
+    """
+    if cli_override:
+        return cli_override
+    return config.get("recorder", "auto")
 
 
 def resolve_backend_name(

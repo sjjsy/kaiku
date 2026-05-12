@@ -27,6 +27,12 @@ def minimal_config():
 
 
 @pytest.fixture
+def recorder_config():
+    """Minimal config for recorder tests."""
+    return {"recorder": "auto"}
+
+
+@pytest.fixture
 def postprocessor_config():
     """Config with a full postprocessors section for unit tests."""
     return {

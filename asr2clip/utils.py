@@ -55,6 +55,7 @@ __all__ = [
     "print_separator",
     "print_key_value",
     "run_subprocess",
+    "popen_subprocess",
     "safe_unlink",
     "setup_signal_handlers",
     "is_stop_requested",
@@ -134,3 +135,12 @@ def run_subprocess(
     """
     log("$ " + " ".join(shlex.quote(str(a)) for a in cmd))
     return subprocess.run(cmd, **kwargs)
+
+
+def popen_subprocess(cmd: list[str], **kwargs) -> "subprocess.Popen":
+    """Spawn a background subprocess, logging the full command first.
+
+    All keyword arguments are forwarded to subprocess.Popen().
+    """
+    log("$ " + " ".join(shlex.quote(str(a)) for a in cmd))
+    return subprocess.Popen(cmd, **kwargs)

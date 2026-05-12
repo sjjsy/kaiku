@@ -1,7 +1,7 @@
 """Toggle-mode recording for asr2clip.
 
-First invocation: start arecord in background, write lock file, exit.
-Second invocation: stop arecord, transcribe, copy to clipboard.
+First invocation: start a background recorder, write lock file, exit.
+Second invocation: stop the recorder, transcribe, copy to clipboard.
 """
 
 from __future__ import annotations
@@ -9,18 +9,17 @@ from __future__ import annotations
 import json
 import os
 import shutil
-import signal
-import subprocess
-import sys
 import tempfile
 import time
 
-from .audio import _device_native_rate, load_wav, save_audio
-from .output import copy_to_clipboard, output_transcript
+from .audio import load_wav, save_audio
+from .config import resolve_recorder_config
+from .output import output_transcript
 from .postprocessors import NonePostProcessor, PostMetadata, PostProcessor, format_output
 from .preprocessors import AudioPreprocessor, NonePreprocessor
+from .recorders import _kill_process, _pid_alive, make_recorder
 from .transcribe import transcribe_with_config
-from .utils import info, log, safe_unlink, warning
+from .utils import info, log, run_subprocess, safe_unlink, warning
 
 
 def _lock_path() -> str:
@@ -31,143 +30,12 @@ def _lock_path() -> str:
 def _notify(title: str, body: str):
     if shutil.which("notify-send"):
         try:
-            subprocess.run(
+            run_subprocess(
                 ["notify-send", "-t", "8000", title, body],
                 check=False, capture_output=True,
             )
         except Exception:
             pass
-
-
-def _pid_alive(pid: int) -> bool:
-    try:
-        os.kill(pid, 0)
-        return True
-    except OSError:
-        return False
-
-
-_ALSA_PREFIXES = ("hw:", "plughw:", "pulse", "pipewire", "default", "sysdefault")
-
-
-def _is_alsa_device(device: str | int | None) -> bool:
-    """Return True if device looks like a valid ALSA device string for arecord."""
-    if device is None or isinstance(device, int):
-        return False
-    return any(device.startswith(p) for p in _ALSA_PREFIXES)
-
-
-def _friendly_to_alsa(device: str) -> str | None:
-    """Resolve a PortAudio friendly name to an ALSA plughw: string for arecord.
-
-    sounddevice device names often embed the ALSA index, e.g.
-    'Blue Snowball: USB Audio (hw:2,0)' → 'plughw:2,0'.
-    Returns None when the index cannot be found.
-    """
-    import re
-    try:
-        import sounddevice as sd
-        info = sd.query_devices(device, "input")
-        m = re.search(r"\(hw:(\d+),(\d+)\)", info["name"])
-        if m:
-            return f"plughw:{m.group(1)},{m.group(2)}"
-    except Exception:
-        pass
-    return None
-
-
-def _start_arecord(audio_path: str, device: str | int | None) -> int | None:
-    """Start arecord in background. Returns PID, or None if arecord is unusable."""
-    if not shutil.which("arecord"):
-        return None
-
-    # Resolve friendly PortAudio name → ALSA string for arecord
-    alsa_device: str | int | None = device
-    if isinstance(device, str) and not _is_alsa_device(device):
-        resolved = _friendly_to_alsa(device)
-        if resolved:
-            alsa_device = resolved
-        else:
-            warning(
-                f"Device '{device}' could not be mapped to an ALSA name; "
-                "arecord will use the default device."
-            )
-            alsa_device = None
-
-    rate = _device_native_rate(alsa_device if _is_alsa_device(alsa_device) else None) or 44100
-    cmd = ["arecord", "-f", "S16_LE", "-r", str(rate), "-c", "1"]
-
-    if isinstance(device, int):
-        warning("Toggle mode uses arecord; integer device indices not supported. Using default device.")
-    elif alsa_device is not None and _is_alsa_device(alsa_device):
-        cmd += ["-D", alsa_device]
-
-    cmd.append(audio_path)
-    proc = subprocess.Popen(
-        cmd,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.PIPE,
-        start_new_session=True,
-    )
-    # Give arecord ~0.3 s to fail on a bad device before declaring success
-    time.sleep(0.3)
-    if proc.poll() is not None:
-        stderr = proc.stderr.read().decode(errors="replace").strip()
-        warning(f"arecord exited immediately: {stderr}")
-        return None
-    return proc.pid
-
-
-def _start_sounddevice(audio_path: str, device: str | int | None) -> int:
-    """Fallback recorder using a detached Python subprocess."""
-    rate = _device_native_rate(device) or 44100
-    script = (
-        "import sounddevice as sd, wave, numpy as np, signal, sys, time\n"
-        "chunks=[]\n"
-        "def cb(d,f,t,s): chunks.append(d.copy())\n"
-        "signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))\n"
-        f"dev={repr(device)}\n"
-        f"rate={rate}\n"
-        "try:\n"
-        "    with sd.InputStream(samplerate=rate,channels=1,dtype='float32',device=dev,callback=cb):\n"
-        "        signal.pause()\n"
-        "except Exception as e:\n"
-        "    sys.stderr.write(f'Sounddevice error: {e}\\n')\n"
-        "    sys.exit(1)\n"
-        "audio=np.concatenate(chunks) if chunks else np.zeros((0,1),dtype='float32')\n"
-        "audio_i16=(audio.flatten()*32767).clip(-32768,32767).astype('int16')\n"
-        f"wf=wave.open({repr(audio_path)},'wb')\n"
-        "wf.setnchannels(1); wf.setsampwidth(2); wf.setframerate(rate)\n"
-        "wf.writeframes(audio_i16.tobytes()); wf.close()\n"
-    )
-    proc = subprocess.Popen(
-        [sys.executable, "-c", script],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.PIPE,
-        start_new_session=True,
-    )
-    # Give sounddevice ~0.5s to initialize (especially if device was just busy)
-    time.sleep(0.5)
-    if proc.poll() is not None:
-        stderr = proc.stderr.read().decode(errors="replace").strip()
-        warning(f"sounddevice exited immediately: {stderr}")
-        return None
-    return proc.pid
-
-
-def _kill_process(pid: int):
-    try:
-        os.kill(pid, signal.SIGTERM)
-    except OSError:
-        return
-    for _ in range(20):
-        time.sleep(0.1)
-        if not _pid_alive(pid):
-            return
-    try:
-        os.kill(pid, signal.SIGKILL)
-    except OSError:
-        pass
 
 
 def toggle_recording(
@@ -190,38 +58,27 @@ def toggle_recording(
             postprocessor, template_str, diarize, num_speakers,
         )
     else:
-        _start_recording(lock_path, device)
+        _start_recording(lock_path, device, config)
 
 
-def _start_recording(lock_path: str, device: str | int | None):
+def _start_recording(lock_path: str, device: str | int | None, config: dict):
     audio_path = tempfile.NamedTemporaryFile(
         suffix=".wav", prefix="asr2clip_", delete=False
     ).name
 
-    pid = None
-    recorder = "sounddevice"
-    if shutil.which("arecord"):
-        pid = _start_arecord(audio_path, device)
-        if pid is not None:
-            recorder = "arecord"
-        else:
-            warning("arecord failed; falling back to sounddevice recorder.")
-    else:
-        warning("arecord not found; falling back to sounddevice recorder.")
-
+    recorder = make_recorder(resolve_recorder_config(config))
+    pid = recorder.start(audio_path, device)
     if pid is None:
-        pid = _start_sounddevice(audio_path, device)
-        if pid is None:
-            safe_unlink(audio_path)
-            warning("Could not start sounddevice recorder. Check device availability.")
-            _notify("asr2clip", "Failed to start recording.")
-            return
+        safe_unlink(audio_path)
+        warning("Could not start recorder. Check device availability.")
+        _notify("asr2clip", "Failed to start recording.")
+        return
 
-    lock_data = {"pid": pid, "audio": audio_path, "recorder": recorder}
+    lock_data = {"pid": pid, "audio": audio_path, "recorder": recorder.name}
     with open(lock_path, "w") as f:
         json.dump(lock_data, f)
 
-    info(f"Recording started (pid {pid}, device: {device or 'default'})")
+    info(f"Recording started ({recorder.name}, pid {pid}, device: {device or 'default'})")
     _notify("asr2clip", "Recording… (run asr2clip --toggle to stop)")
 
 

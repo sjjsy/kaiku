@@ -137,7 +137,7 @@ def test(cfg: WhisperCppConfig) -> bool:
 
     if ok:
         try:
-            result = subprocess.run(
+            result = run_subprocess(
                 [cfg.binary, "--help"], capture_output=True, text=True, timeout=10
             )
             # whisper-cli prints version info in its help header

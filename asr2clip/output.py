@@ -4,10 +4,9 @@ from __future__ import annotations
 
 import os
 import shutil
-import subprocess
 from datetime import datetime
 
-from .utils import log, print_success, warning
+from .utils import log, print_success, run_subprocess, warning
 
 _MAX_CLIPBOARD_CHARS = 4000
 
@@ -32,7 +31,7 @@ def _wl_copy(text: str) -> bool:
         True if successful, False otherwise.
     """
     try:
-        subprocess.run(
+        run_subprocess(
             ["wl-copy"],
             input=text,
             text=True,
