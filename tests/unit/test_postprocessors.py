@@ -13,7 +13,6 @@ from asr2clip.postprocessors import (
     format_output,
     make_postprocessor,
     resolve_output_template,
-    resolve_postprocessor_config,
 )
 from asr2clip.postprocessors.base import PostMetadata
 from asr2clip.postprocessors.none import NonePostProcessor
@@ -36,61 +35,51 @@ def _meta(**kw) -> PostMetadata:
 
 
 # ---------------------------------------------------------------------------
-# resolve_postprocessor_config
-# ---------------------------------------------------------------------------
-
-class TestResolvePostprocessorConfig:
-    def test_cli_override_wins(self, postprocessor_config):
-        result = resolve_postprocessor_config(postprocessor_config, cli_override="group", mode="urgent")
-        assert result == "group"
-
-    def test_live_mode_key(self, postprocessor_config):
-        result = resolve_postprocessor_config(postprocessor_config, mode="urgent")
-        assert result == "none"  # postprocessor_urgent is "none" in fixture
-
-    def test_file_mode_key(self, postprocessor_config):
-        result = resolve_postprocessor_config(postprocessor_config, mode="casual")
-        assert result == "solo-base"  # postprocessor_casual is "solo-base"
-
-    def test_fallback_to_postprocessor_key(self):
-        config = {"postprocessor": "group"}
-        assert resolve_postprocessor_config(config, mode="urgent") == "group"
-        assert resolve_postprocessor_config(config, mode="casual") == "group"
-
-    def test_default_none_when_nothing_set(self):
-        assert resolve_postprocessor_config({}, mode="urgent") == "none"
-
-
-# ---------------------------------------------------------------------------
 # resolve_output_template
 # ---------------------------------------------------------------------------
 
 class TestResolveOutputTemplate:
-    def test_cli_override_found(self, postprocessor_config):
-        t = resolve_output_template(postprocessor_config, cli_override="full")
+    def test_cli_override_takes_precedence(self, postprocessor_config):
+        """CLI override should take priority over postprocessor template."""
+        t = resolve_output_template(
+            postprocessor_config,
+            postprocessor_template="{result}",
+            cli_override="full"
+        )
         assert "{result}" in t and "{transcript}" in t
 
     def test_cli_override_missing_warns_and_falls_through(self, postprocessor_config, capsys):
-        t = resolve_output_template(postprocessor_config, cli_override="nonexistent")
+        """Missing CLI template should warn and fall back to default."""
+        t = resolve_output_template(
+            postprocessor_config,
+            postprocessor_template="{result}",
+            cli_override="nonexistent"
+        )
         captured = capsys.readouterr()
         assert "not found" in captured.err
         assert t == postprocessor_config["output_templates"]["default"]
 
-    def test_prompt_template_field(self, postprocessor_config):
-        # "group" prompt has template: "full"
-        t = resolve_output_template(postprocessor_config, prompt_name="group")
-        assert "{transcript}" in t
+    def test_uses_postprocessor_template_when_provided(self, postprocessor_config):
+        """Should use postprocessor_template if it's not the default."""
+        t = resolve_output_template(
+            postprocessor_config,
+            postprocessor_template="{transcript}",
+            cli_override=None
+        )
+        assert t == "{transcript}"
 
-    def test_default_template(self, postprocessor_config):
-        t = resolve_output_template(postprocessor_config, prompt_name="solo-base")
+    def test_default_template_when_empty(self):
+        """Should use fallback when config has no templates."""
+        t = resolve_output_template({}, postprocessor_template="{result}", cli_override=None)
         assert t == "{result}"
 
-    def test_no_templates_in_config(self):
-        t = resolve_output_template({}, prompt_name="anything")
-        assert t == "{result}"  # built-in fallback
-
-    def test_none_prompt_uses_default(self, postprocessor_config):
-        t = resolve_output_template(postprocessor_config, prompt_name="none")
+    def test_default_from_config_when_no_postprocessor_template(self, postprocessor_config):
+        """Should use config default when postprocessor template is default."""
+        t = resolve_output_template(
+            postprocessor_config,
+            postprocessor_template="{result}",  # default
+            cli_override=None
+        )
         assert t == postprocessor_config["output_templates"]["default"]
 
 

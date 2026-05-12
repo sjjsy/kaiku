@@ -92,11 +92,15 @@ def run_diarization(
         )
 
     import torch
+    from .config_types import DiarizationConfig
+
+    # Resolve diarization config using centralized config resolution
+    diarization_cfg = DiarizationConfig.resolve(config)
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     compute_type = "float16" if device == "cuda" else "int8"
 
-    hf_token = config.get("diarize_hf_token") or os.environ.get("HF_TOKEN")
+    hf_token = diarization_cfg.hf_token
     if not hf_token:
         raise DiarizationError(
             "Diarization requires a HuggingFace token to download the pyannote model.\n"
@@ -107,8 +111,8 @@ def run_diarization(
     if num_speakers is not None:
         min_speakers = max_speakers = num_speakers
     else:
-        min_speakers = config.get("diarize_min_speakers")
-        max_speakers = config.get("diarize_max_speakers")
+        min_speakers = diarization_cfg.min_speakers
+        max_speakers = diarization_cfg.max_speakers
 
     try:
         model = whisperx.load_model(

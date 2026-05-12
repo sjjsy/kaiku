@@ -871,7 +871,7 @@ def main():
     postprocessor = make_postprocessor(
         config.postprocessor.name, config_dict, args.post_model
     )
-    template = resolve_output_template(config_dict, config.postprocessor.name, args.template)
+    template = resolve_output_template(config_dict, config.postprocessor.template, args.template)
     max_clipboard_chars = config.output.clipboard_max_chars
 
     # Create preprocessor for the selected preset (used for all operations)

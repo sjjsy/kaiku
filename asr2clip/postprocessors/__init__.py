@@ -20,7 +20,6 @@ __all__ = [
     "PostProcessor",
     "NonePostProcessor",
     "MockPostProcessor",
-    "resolve_postprocessor_config",
     "make_postprocessor",
     "resolve_output_template",
     "format_output",
@@ -33,38 +32,25 @@ _FALLBACK_TEMPLATE = "{result}"
 # Config resolution helpers
 # ---------------------------------------------------------------------------
 
-def resolve_postprocessor_config(
-    config: dict,
-    cli_override: str | None = None,
-    mode: str = "urgent",
-) -> str:
-    """Return the effective post-processor name for the given mode.
-
-    Args:
-        config: Full configuration dictionary.
-        cli_override: Name supplied via -P/--post flag (takes priority).
-        mode: 'urgent' for real-time recording (toggle/VAD), 'casual' for file input.
-    """
-    if cli_override:
-        return cli_override
-    key = "postprocessor_urgent" if mode == "urgent" else "postprocessor_casual"
-    return config.get(key, config.get("postprocessor", "none"))
-
-
 def resolve_output_template(
-    config: dict,
-    prompt_name: str = "",
+    config_dict: dict,
+    postprocessor_template: str = "{result}",
     cli_override: str | None = None,
 ) -> str:
     """Return the output template string to use for this run.
 
+    Args:
+        config_dict: Full configuration dictionary (for output_templates section).
+        postprocessor_template: Template from PostprocessorConfig (already resolved).
+        cli_override: -T/--template CLI override (highest priority).
+
     Lookup order:
     1. -T/--template CLI override
-    2. The template named in the prompt's 'template:' field
+    2. The template string from PostprocessorConfig (if provided)
     3. The 'default' entry in output_templates
     4. Built-in fallback: '{result}'
     """
-    templates = config.get("output_templates", {})
+    templates = config_dict.get("output_templates", {})
 
     if cli_override:
         t = templates.get(cli_override)
@@ -77,13 +63,9 @@ def resolve_output_template(
         else:
             return t
 
-    if prompt_name and prompt_name != "none":
-        postprocessors = config.get("postprocessors", {})
-        if prompt_name in postprocessors:
-            tmpl_name = postprocessors[prompt_name].get("template", "default")
-            t = templates.get(tmpl_name)
-            if t is not None:
-                return t
+    # Use the already-resolved template from PostprocessorConfig
+    if postprocessor_template and postprocessor_template != "{result}":
+        return postprocessor_template
 
     return templates.get("default", _FALLBACK_TEMPLATE)
 
