@@ -122,14 +122,18 @@ def _start_sounddevice(audio_path: str, device: str | int | None) -> int:
     """Fallback recorder using a detached Python subprocess."""
     rate = _device_native_rate(device) or 44100
     script = (
-        "import sounddevice as sd, wave, numpy as np, signal, sys\n"
+        "import sounddevice as sd, wave, numpy as np, signal, sys, time\n"
         "chunks=[]\n"
         "def cb(d,f,t,s): chunks.append(d.copy())\n"
         "signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))\n"
         f"dev={repr(device)}\n"
         f"rate={rate}\n"
-        "with sd.InputStream(samplerate=rate,channels=1,dtype='float32',device=dev,callback=cb):\n"
-        "    signal.pause()\n"
+        "try:\n"
+        "    with sd.InputStream(samplerate=rate,channels=1,dtype='float32',device=dev,callback=cb):\n"
+        "        signal.pause()\n"
+        "except Exception as e:\n"
+        "    sys.stderr.write(f'Sounddevice error: {e}\\n')\n"
+        "    sys.exit(1)\n"
         "audio=np.concatenate(chunks) if chunks else np.zeros((0,1),dtype='float32')\n"
         "audio_i16=(audio.flatten()*32767).clip(-32768,32767).astype('int16')\n"
         f"wf=wave.open({repr(audio_path)},'wb')\n"
@@ -139,9 +143,15 @@ def _start_sounddevice(audio_path: str, device: str | int | None) -> int:
     proc = subprocess.Popen(
         [sys.executable, "-c", script],
         stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
         start_new_session=True,
     )
+    # Give sounddevice ~0.5s to initialize (especially if device was just busy)
+    time.sleep(0.5)
+    if proc.poll() is not None:
+        stderr = proc.stderr.read().decode(errors="replace").strip()
+        warning(f"sounddevice exited immediately: {stderr}")
+        return None
     return proc.pid
 
 
@@ -201,6 +211,11 @@ def _start_recording(lock_path: str, device: str | int | None):
 
     if pid is None:
         pid = _start_sounddevice(audio_path, device)
+        if pid is None:
+            safe_unlink(audio_path)
+            warning("Could not start sounddevice recorder. Check device availability.")
+            _notify("asr2clip", "Failed to start recording.")
+            return
 
     lock_data = {"pid": pid, "audio": audio_path, "recorder": recorder}
     with open(lock_path, "w") as f:

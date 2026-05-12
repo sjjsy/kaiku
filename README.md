@@ -800,7 +800,7 @@ asr2clip operates within a four-stage pipeline:
      stage 1            stage 2                stage 3                 stage 4
 ```
 
-The tables below cover the ecosystem at each pipeline stage and compare competing end-user tools. asr2clip covers stages 1–3 in a single composable CLI.
+The tables below cover the ecosystem at each pipeline stage and compare competing end-user tools. asr2clip covers the whole pipeline in a single powerful CLI.
 
 ### Audio preprocessing (noise reduction)
 
