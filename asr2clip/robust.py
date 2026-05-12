@@ -11,6 +11,7 @@ from pydub import AudioSegment
 from pydub.silence import detect_silence
 
 from .audio import audiosegment_to_float32, float32_to_audiosegment
+from .config import resolve_backend_config
 from .output import _DEFAULT_CLIPBOARD_MAX_CHARS, copy_transcript_to_clipboard, append_transcript_to_file
 from .transcribe import TranscriptionError, transcribe_with_config
 from .utils import info, log, safe_unlink, warning
@@ -119,7 +120,8 @@ def process_file_robust(
     max_chunk_ms = chunk_duration * 1000
     boundaries = _find_chunk_boundaries(audio, max_chunk_ms)
     n_chunks = len(boundaries)
-    backend = config.get("backend", "api")
+    backend_config = resolve_backend_config(config, None, "file")
+    backend = backend_config.get("backend", "api")
     log(f"Splitting into {n_chunks} chunk(s), backend: {backend}")
 
     all_text_parts: list[str] = []
