@@ -204,6 +204,8 @@ All extras: Noise reduction options + VAD and the local sherpa-onnx ASR server:
 pip install asr2clip[enhance,vad]
 ```
 
+Note: Audio preprocessing (`-p`) is not (yet) applied in VAD/interval continuous mode.
+
 ### From source
 
 ```bash
@@ -211,8 +213,6 @@ git clone https://github.com/Oaklight/asr2clip.git
 cd asr2clip
 pip install -e .
 ```
-
-Note: Audio preprocessing (`-p`) is not yet applied in VAD/interval continuous mode.
 
 ## Setup
 
@@ -290,20 +290,36 @@ audio_device: 3                    # device index from --list_devices
 
 ### Audio preprocessing (noise reduction)
 
-asr2clip can denoise audio before transcription — useful in noisy environments (café, open-plan office) or when the ASR backend produces errors or hallucinations from poor signal quality.
+Audio preprocessing enhances a recording before transcription by filtering unwanted signal content. **Noise reduction** is a key preprocessing technique that removes background sound — café chatter, fan hum, keyboard clicks — while preserving speech intelligibility. Preprocessing is useful in noisy environments or when your [ASR backend](#asr-backends) struggles with poor signal quality, producing errors or hallucinations. asr2clip provides three noise reduction libraries, each with different strengths depending on noise type and available compute resources. All apply loudness normalization (RMS → −20 dBFS) after cleaning to ensure the ASR backend receives a consistently strong signal.
 
 ### Available preprocessors
 
-| Name | Technology | Extra dependencies | Best for | Project |
-|------|-----------|-------------------|----------|---------|
-| `none` | — | none (default) | clean recordings | — |
-| `noisereduce` | Spectral subtraction | scipy | steady hum, fan noise | [GitHub](https://github.com/timsainb/noisereduce) |
-| `pyrnnoise` | Mozilla RNNoise GRU | scipy | babble, non-stationary noise | [GitHub](https://github.com/g-node/pyrnnoise) |
-| `deepfilter` | DeepFilterNet3 neural | torch + Rust wheel | best quality overall | [GitHub](https://github.com/Rikorose/DeepFilterNet) |
+| Name | Technology | Dependencies | Strengths | Weaknesses |
+|------|-----------|------------|-----------|-----------|
+| `none` | — | none (default) | No overhead; baseline for clean recordings | No noise reduction; ASR errors in noisy conditions |
+| [`noisereduce`](https://github.com/timsainb/noisereduce) | Spectral subtraction | scipy only | Low CPU; scipy-only install; excellent for stationary noise (hum, AC, fans); live recording friendly | Ineffective on crowd/babble noise; may remove speech texture; limited to repeating noise patterns |
+| [`pyrnnoise`](https://github.com/g-node/pyrnnoise) | Mozilla RNNoise GRU | scipy only | Handles non-stationary noise (crowd, footsteps, babble) better than spectral; learned noise patterns; no special hardware needed | 16→48→16 kHz resampling overhead on 16 kHz audio; slower than noisereduce |
+| [`deepfilter`](https://github.com/Rikorose/DeepFilterNet) | DeepFilterNet3 neural | torch + Rust wheel | Best overall quality; handles mixed noise types; preserves speech naturalness and dynamics; recommended for important recordings | Highest CPU usage; heaviest dependencies; slowest option; overkill for live dictation |
 
-### `noisereduce` vs `pyrnnoise`
+### Choosing noise reduction by noise type and ASR backend
 
-`noisereduce` (spectral subtraction) handles *stationary* noise — constant hum, fan, electrical interference. `pyrnnoise` (neural GRU) handles *non-stationary* noise — babble, footsteps, intermittent sounds. Both require scipy; neither needs a GPU. `pyrnnoise` internally operates at 48 kHz and performs a 16→48→16 kHz round-trip when used at 16 kHz — `noisereduce` avoids this.
+**ASR backend noise robustness:** Different backends have built-in resilience to noise due to their training data. Whisper models (including [`whisper.cpp`](#local-asr-whisper.cpp-vs-sherpa-onnx) and cloud APIs using `whisper-large-v3-turbo` like Groq) are trained on diverse YouTube videos containing natural background noise, making them inherently robust to non-stationary sounds. SenseVoice (via [`sherpa-onnx`](#local-asr-whisper.cpp-vs-sherpa-onnx)) is also fairly noise-tolerant. However, all backends still benefit from preprocessing in truly noisy settings (café, open office, street noise).
+
+**Preprocessing strategy by scenario:**
+
+1. **Clean or quiet environment** (home office, studio): Skip preprocessing (`none`) and let your backend's training handle any minor noise. Saves CPU and latency.
+
+2. **Steady, repeating background noise** (office AC, ceiling fan, electrical hum): Use [`noisereduce`](https://github.com/timsainb/noisereduce). Spectral subtraction is highly effective on stationary patterns, adds minimal latency, and works well with any [ASR backend](#asr-backends). Ideal for live toggle recording.
+
+3. **Variable, crowd noise** (meetings, café, office chatter): Use [`pyrnnoise`](https://github.com/g-node/pyrnnoise). Its neural GRU approach learns diverse noise patterns better than spectral methods. Note the 16→48→16 kHz resampling overhead on standard 16 kHz recordings — acceptable for file transcription, less ideal for live recording. Pairs well with Whisper-based backends, which are already trained on YouTube's ambient noise.
+
+4. **Highest quality regardless of noise type** (important interviews, archival, transcription service): Use [`deepfilter`](https://github.com/Rikorose/DeepFilterNet). The deepest neural processing delivers the cleanest output, but requires substantial CPU and time. Reserve this for offline file processing where latency and compute cost can be amortized.
+
+**Platform-specific guidance:**
+- **Live toggle recording on CPU-constrained devices** (`--toggle`): Prefer `noisereduce` over `pyrnnoise` or `deepfilter` to minimize latency and system load.
+- **Local [`whisper.cpp`](#local-asr-whisper.cpp-vs-sherpa-onnx) backend**: The backend is fast but already somewhat noise-robust; consider `none` in quiet settings or `noisereduce` for steady background. Avoid `deepfilter` on CPU systems.
+- **Cloud API** (Groq, OpenAI): Optional preprocessing for mildly noisy audio; use preprocessing aggressively for café-grade noise to maximize transcription quality.
+- **Speaker diarization** (`--diarize` via WhisperX): Preprocessing before diarization is recommended in noisy settings — speaker separation depends on clear voice boundaries, which noise obscures.
 
 ### Installing preprocessors
 
@@ -332,7 +348,7 @@ preprocessor_live: noisereduce      # no resampling overhead for live 16 kHz aud
 preprocessor_file: deepfilter       # best quality for longer file transcription
 ```
 
-`asr2clip --generate_config` probes your system and writes these keys automatically with the best available option. Override for a single run with `-p`.
+`asr2clip --generate_config` writes a template config with examples. Set `preprocessor_live` and `preprocessor_file` to your preferred option, or override for a single run with `-p`.
 
 ### Loudness normalisation
 
@@ -682,7 +698,7 @@ postprocessors:
 
 Shipped in the config template, ready to use:
 
-**Personal dictation prompts:**
+#### Personal dictation prompts
 
 | Name | Purpose |
 |------|---------|
@@ -691,7 +707,7 @@ Shipped in the config template, ready to use:
 | `solo-restructure` | Restructure a personal dictation into a structured memo with sections |
 | `solo-private` | Like `solo-restructure` but defaults to a local offline model to ensure privacy |
 
-**Meeting/group discussion prompts:**
+#### Meeting/group discussion prompts:
 
 | Name | Purpose |
 |------|---------|
@@ -699,6 +715,8 @@ Shipped in the config template, ready to use:
 | `group-enhance` | Improve quality of group transcript while honoring each speaker's style |
 | `group-restructure` | Restructure a group discussion into a meeting memo with summary, decisions, action items |
 | `group-private` | Like `group-restructure` but defaults to a local offline model to ensure privacy |
+
+#### Post-processor usage examples
 
 ```bash
 asr2clip --toggle -P solo-enhance          # toggle → improved personal transcript
