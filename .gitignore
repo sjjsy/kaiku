@@ -181,6 +181,12 @@ todo.md
 done.md
 # all audio/video files
 data/
+# test fixtures — downloaded on demand by conftest.py
+test_data/*.wav
 
 # Claude Code related files
 .claude/
+
+# extra test files
+tests-202605131145.tgz
+
