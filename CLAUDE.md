@@ -1,220 +1,140 @@
 # asr2clip — Claude Code context
 
-This is Samuel's fork of [Oaklight/asr2clip](https://github.com/Oaklight/asr2clip), a speech-to-clipboard CLI tool.
-Fork lives at github.com/sjjsy/asr2clip. AGPL-3.0 licensed.
+Samuel's fork of [Oaklight/asr2clip](https://github.com/Oaklight/asr2clip) (AGPL-3.0). This fork: https://github.com/sjjsy/asr2clip
 
-**Scope/Pipeline:** audio capture → optional preprocessor → ASR → optional LLM post-processing → output (clipboard / `-o FILE`).
-- Out of scope: Output routing, prompt engineering, context injection beyond `context_path`, per-speaker naming, and assistant-layer intelligence belong in the calling assistant (ZeroClaw/OpenClaw), not here.
+**Pipeline:** capture → optional preprocessor → ASR → optional post-process → clipboard / `-o FILE`  
+**Out of scope:** output routing, prompt design beyond `context_path`, per-speaker naming, assistant-layer behaviour (ZeroClaw/OpenClaw).
 
-## What this fork adds over upstream
+## Fork vs upstream
 
-| Feature | Module | Status |
-|---|---|---|
-| whisper.cpp backend (`-b wcpp`) | `backends/whisper_cpp.py` | ✓ |
-| Toggle mode (`--toggle`) | `toggle.py` | ✓ |
-| Robust chunked transcription (`-r`) | `robust.py` | ✓ |
-| Audio preprocessors (`-p`) | `preprocessors/` | ✓ |
-| AI post-processing (`-P NAME`) | `postprocessors/` | ✓ |
-| Speaker diarization (`-D`) | `diarize.py` | ✓ |
+| Feature | Where |
+|---------|--------|
+| whisper.cpp (`-b wcpp`) | `backends/whisper_cpp.py` |
+| Toggle (`-g` / `--toggle`) | `toggle.py` |
+| Robust (`-r`) | `robust.py` |
+| Preprocessors (`-p`) | `preprocessors/` |
+| Post-processing (`-P`) | `postprocessors/` |
+| Diarization (WhisperX + `mock-diarize` backends, `-s` hint) | `diarize.py` |
 
 ## Architecture
 
-`Config.from_file()` is the single coordinator: lazy properties (`asr_backend`, `preprocessor`, `recorder`, `postprocessor`, `output`, `diarization`, `local_asr`) each own defaults, env fallbacks, and logging for their domain.
+- **`Config.from_file()`** — one coordinator per run; lazy properties (`asr_backend`, `preprocessor`, `recorder`, `postprocessor`, …) own defaults, env, and logging.
+- **CLI vs preset** — `-b`, `-p`, `-P`, `-M`, `-d`, `-z`, local-ASR flags override the selected preset; top-level YAML (e.g. `default_preset`, `audio_device`) applies when nothing overrides that slice.
+- **Presets** — atomic list `[preprocessor, asr_backend, postprocessor, description]`; one preset per run; no mode-based fallbacks.
+- **Where config is read** — behavioural YAML usage only in `config_types.py` and in `postprocessors/__init__.py` for prompt `extends:` / `extra:`. Call sites take `Config` or the one sub-config they need — not `config._config_dict`, not `config_dict.get()` for decisions, no second `Config` mid-run.
 
-**CLI vs preset:** per-component flags (`-b`, `-p`, `-P`, `-M`, `-d`, and local-ASR flags under “Local ASR server”) override the selected preset; top-level keys in YAML (e.g. `default_preset`, `audio_device`) apply when no flag overrides that slice.
+`main()` in `asr2clip/asr2clip.py` loads `Config` once, then dispatches: record, `-i` file, robust, toggle, VAD/daemon, `--test`, `--serve`, `--download-model`.
 
-`main()` in `asr2clip.py` loads `Config` once, then dispatches to recording, file, robust, toggle, VAD/daemon, `--test`, `--serve`, or `--download-model`. The local sherpa-onnx server reads bind address, model dir, and thread count from `config.local_asr` (optional `local_asr:` in YAML, merged with CLI; same config file and preset are required as for any other subcommand).
+## Files to know
 
-## Design decisions
+`asr2clip.py`, `config_types.py`, `config.py`, `toggle.py`, `robust.py`, `postprocessors/`, `preprocessors/`, `diarize.py`, `AGENTS.md`, **`tests/README.md`** (E2E strategy and scenario index)
 
-- **Preset system:** Presets are atomic combinations of all pipeline stages (ASR backend, preprocessor, postprocessor). All stages must be explicitly specified. One preset per run. No mode-based fallback logic.
-- **Preset config format (list, not dict):** Presets use compact list format `[preprocessor, asr_backend, postprocessor, description]` to make all fields required and visible as a table.
-- **Config resolution lives in `config_types.py` only.** No `config.get()` for behavioral decisions anywhere else in the codebase. If you need a config value in a function, accept `Config` or the appropriate sub-config object as a parameter.
+## Post-processing (brief)
 
-## Key files
+Prompts live in user YAML; `make_postprocessor`, `resolve_output_template`, `format_output`; `extends:` + `extra:` with circular guard in `_resolve_prompt`; backends include `openai_compat`, `claude_code`, `mock`.
 
-- `asr2clip/asr2clip.py` — CLI entry point, `_build_parser()`, `main()`, `process_recording()`, `process_file()`
-- `asr2clip/config_types.py` — all config resolution classes (`Config`, `ASRBackendConfig`, `CliOverrides`, etc.)
-- `asr2clip/config.py` — YAML file reading and `_CONFIG_TEMPLATE` (template shown by `--generate_config`)
-- `asr2clip/toggle.py` — lock-file toggle recording, `_transcribe_and_output()`
-- `asr2clip/robust.py` — chunked transcription, `process_file_robust()`
-- `asr2clip/postprocessors/` — post-processing package
-- `asr2clip/preprocessors/` — noise-reduction package
-- `asr2clip/diarize.py` — WhisperX diarization
-- `AGENTS.md` — short pointer for AI agents (see also this file)
-- `now.md` — active work items and upcoming tasks
-- `todo.md` — gitignored future ideas and deferred features
+## Diarization (brief)
 
-## Post-processing system
+WhisperX optional install; diarization is selected via **backend** (`type: whisperx` or `mock-diarize`) in preset or `-b`, plus `-s` when relevant; HF token for WhisperX.
 
-- All prompts are **user-defined in config** — no hardcoded prompts.
-- `postprocessors/__init__.py`: `make_postprocessor()`, `resolve_output_template()`, `format_output()`
-- Prompt resolution supports `extends:` + `extra:` inheritance (user-defined only, circular guard in `_resolve_prompt`)
-- Per-prompt `backend:`, `model:`, `template:`, `context_path:` fields
-- Two backend types: `openai_compat` (Ollama, Groq, Anthropic, OpenAI) and `claude_code` (subprocess to `claude -p`)
-- Template placeholders: `{result}` `{transcript}` `{date}` `{datetime}` `{prompt_name}` `{model}` `{backend}` `{duration_s}`
+## CLI flags
 
-## Diarization
+**Source of truth:** `asr2clip --help` (paste into README when you refresh a section). Short-flag overview:
 
-- `diarize.py`: `run_diarization(audio_path, config, language, num_speakers) → str`
-- Uses WhisperX. Optional dep: `pip install asr2clip[diarize]`
-- Output: `[HH:MM:SS] SPEAKER_NN: text` — name substitution intentionally left to caller
-- `--diarize` / `-D` replaces the configured ASR backend entirely for that run
-- Requires `HF_TOKEN` env var or `diarize_hf_token:` in config
+| Short | Long | Notes |
+|-------|------|--------|
+| `-c` | `--config` | config path |
+| `-e` | `--edit` | open config |
+| | `--generate_config` `--print_config` `--test` `--list_devices` | setup / verify |
+| `-x` | `--preset` | preset name |
+| `-d` | `--device` | input device |
+| `-i` | `--input` | media or `.txt` transcript |
+| `-p` | `--preprocessor` | `none`, `noisereduce`, … |
+| `-b` | `--backend` | ASR backend key |
+| `-l` | `--language` | hint |
+| `-r` | `--robust` | chunked file mode |
+| `-C` | `--chunk-duration` | robust chunk length |
+| `-g` | `--toggle` | toggle recording |
+| `-s` | `--speakers` | diarization hint |
+| `-P` | `--post` | post-processor |
+| `-M` | `--post-model` | post model override |
+| `-o` | `--output` | append transcript file |
+| `-T` | `--template` | output template |
+| `-z` | `--no-clipboard` | skip clipboard |
+| `-q` | `--quiet` | transcript + errors only |
 
-## Flag conventions
-
-Lowercase = earlier/basic feature. Uppercase = later/advanced feature.
-
-| Short | Long | Since |
-|---|---|---|
-| `-b` | `--backend` | upstream |
-| `-i` | `--input` | upstream |
-| `-o` | `--output` | upstream |
-| `-l` | `--language` | upstream |
-| `-d` | `--device` | upstream |
-| `-q` | `--quiet` | upstream |
-| `-e` | `--edit` | upstream |
-| `-p` | `--preprocessor` | fork (was -P upstream) |
-| `-r` | `--robust` | fork (was -R upstream) |
-| `-x` | `--preset` | fork new |
-| `-C` | `--chunk-duration` | fork |
-| `-P` | `--post` | fork new |
-| `-M` | `--post-model` | fork new |
-| `-T` | `--template` | fork new |
-| `-D` | `--diarize` | fork new |
-| `-s` | `--speakers` | fork new |
+Serve / VAD / `--download-model`: long options only — see `--help`.
 
 ---
 
 ## Development principles
 
-These are strict rules. Follow them always, even under time pressure.
+Strict rules; follow under time pressure.
 
 ### 1. Config contract
 
-`Config` is created once in `main()` via `Config.from_file()`. It is the single authoritative configuration object for a run.
+- One `Config.from_file()` in `main()`.
+- Pass **`Config`** (or the single sub-config a callee needs); do not copy fields into parallel locals and pass those instead of `Config`.
+- No behavioural decisions from raw dicts outside the allowed modules (above).
 
-- **Do** pass `Config` (or its sub-config properties like `ASRBackendConfig`) as function parameters.
-- **Do not** pass `config._config_dict` downstream. Keep YAML-shape knowledge inside `config_types.py` and the postprocessor prompt resolver — not in random call sites.
-- **Do not** call `config_dict.get("some_key")` anywhere outside `config_types.py` to make a behavioral decision. Move that logic into the appropriate Config class.
-- **Do not** create a second `Config` or `PresetConfig` inside a transcription or processing function. Configuration is resolved once at startup.
+### 2. Fail fast; where defaults live
 
-### 2. Fail fast, no cleverness
+Prefer **explicit errors** and **logs that state intent** over silent recovery. **Behavioural** defaults and “why this value” belong in **`config_types.py`** (and the same family of resolvers) — not ad‑hoc `if not x: x = …` in random call sites.
 
-Prefer explicit errors over smart fallbacks. Make the code crash close to the real problem.
+**Signatures:** do not give **required** parameters **fake Python defaults** just to satisfy the type checker — that suggests the caller may omit them when they must not. Third-party library defaults are not “our” policy.
 
-- If a config key is required, raise `ValueError` immediately with the key name and what was expected.
-- Never silently fall back to a default that hides a misconfiguration. Log explicitly when using a default.
-- No magic keys in dicts (like `_preset_for_testing`). Tests use real config fixtures.
-- No `try/except` that catches broad `Exception` and continues as if nothing happened.
+No broad `except Exception:` that swallows and continues.
 
-### 3. Zero tolerance for dead code
+### 3. Dead code
 
-When changing something, update ALL references immediately and delete the old version.
-
-- No deprecated functions with "will remove later" comments.
-- No compatibility shims, fallback branches, or dual-path logic.
-- No commented-out code.
-- Deleted test files must have their imports removed from conftest and other test files too.
+Rewrite all references, delete the old path immediately: no “remove later”, no shims, no commented-out blocks. Removing a test file → remove its imports from `conftest.py` and elsewhere.
 
 ### 4. Minimal complexity
 
-- Centralize behavioral defaults and overrides in `Config` and related typed configs — keep orchestration functions thin.
-- Prefer **fewer** classes and **fewer** functions when a slightly larger unit still reads clearly; do not split purely for ceremony.
-- Minimize parameter lists: pass `Config` (or the one sub-config a callee needs), not parallel CLI/backend strings.
-- No one-off utilities unless used in ≥ 3 places (then consider a method on the owning type instead).
-- The `mode: str` string-dispatch pattern remains a smell — prefer separate entrypoints or explicit dispatch.
+Thin orchestration; prefer fewer types/functions until clarity suffers; avoid stringly `mode` dispatch when separate entrypoints are clearer. Wrap lines only past **130** columns.
 
-### 5. Test quality
+### 5. Tests
 
-Tests must catch real bugs. 220 passing tests are worthless if `asr2clip -b wcpp` uses the wrong backend.
+- **E2E first for the pipeline** — a **small** black-box suite (`tests/test_e2e.py`) hits real subprocess I/O with mock devices/backends; strategy, checklists, and gaps: **`tests/README.md`**.
+- **Why this pairs with §2** — fewer hidden defaults and fewer “smart” catch-all branches mean regressions surface as **failures in those E2E runs** instead of being smeared across many shallow tests.
+- **Do not change E2E tests** unless the **user explicitly asked** to update them. When you are asked, read **`tests/README.md`** first.
 
-**What good tests look like here:**
-- **Unit tests** verify that individual Config classes resolve correctly given a specific config dict + CLI overrides. They do not mock internal resolution logic.
-- **Integration tests** verify the full flow from YAML string → `Config.from_file()` → correct sub-config properties. They use realistic config fixtures (YAML strings or fixture files), not hand-constructed dicts.
-- **E2E tests** run `transcribe_casual(path, config)` with the mock ASR backend and verify the output. They do not mock `transcribe_casual` itself.
+### 6. Logging
 
-**Required test for every non-trivial config behavior:**
-```python
-# Example: CLI backend override
-import argparse
-args = argparse.Namespace(preset="speed", backend="wcpp", post=None, post_model=None, ...)
-config = Config.from_file(fixture_path, args)
-assert config.asr_backend.name == "wcpp"   # NOT "groq" from preset
-assert config.asr_backend.type == "whisper_cpp"
-```
+At INFO, every **resolved config choice** the user cares about should record **why** (preset vs `CLI -b` / `CLI -p`, etc.). Match the patterns already used in the tree (`info` / `success` / `warning`, chunk lines, clipboard skip text, …).
 
-**Anti-patterns to avoid:**
-- Testing that function A calls function B with parameter C — test behavior, not implementation.
-- Mocking `transcribe_casual` in tests that are supposed to test config resolution through transcription.
-- Using `_preset_for_testing` or other magic test-only dict keys.
+### 7. Commits and push
 
-### 6. Logging contract
-
-Every config decision log line must answer: *why* was this chosen?
-
-- ❌ `info(f"Using backend: groq")`
-- ✅ `info(f"Using backend: groq (from preset 'speed')")` or `info(f"Using backend: groq (CLI override -b)")`
-
-Apply this to preprocessor, postprocessor, device, and recorder decisions too.
-
-### 7. Atomic commits
-
-Each commit must:
-- Compile and pass all tests at that exact state.
-- Do one thing completely (fix, refactor, feature, or test — not mixed).
-- Have a message that describes the behavioral change, not the file change.
+- **Commit:** one coherent behavioural change; message describes behaviour, not filenames.
+- **Tests:** not every tiny local commit must run the full suite; batch commits as you like. **Before push**, run what you rely on (at minimum the E2E suite) until green, then push.
 
 ---
 
-## Commit message conventions
+## Commit message types
 
-Format: `TYPE: Description` (imperative mood, lowercase description, ≤50 char title).
+`TYPE: description` — imperative, lowercase description, ≤50-char title.
 
-| Type | Use for |
-|------|---------|
-| `feat:` | New feature or capability |
-| `fix:` | Bug fix |
-| `refactor:` | Code refactoring (no behavior change) |
-| `perf:` | Performance improvement |
-| `test:` | Add/update tests (not test fixes) |
-| `docs:` | Documentation, README, docstrings |
-| `meta:` | Project structure, `.gitignore`, `CLAUDE.md`, license, tooling |
-| `chore:` | Dependencies, build config, CI/CD |
-| `style:` | Code formatting only |
-
-Examples:
-- `feat: add toggle mode with lock-file protocol`
-- `fix: pass backend CLI override to process_file and process_recording`
-- `refactor: accept Config object in process_file instead of config dict`
-- `meta: rewrite CLAUDE.md with strict development principles`
+| Type | Use |
+|------|-----|
+| `feat:` | new capability |
+| `fix:` | bug fix |
+| `refactor:` | no behaviour change |
+| `perf:` | speed |
+| `test:` | add/change tests (not drive-by test edits) |
+| `docs:` | docs / docstrings |
+| `meta:` | `CLAUDE.md`, `.gitignore`, tooling |
+| `chore:` | deps, CI |
+| `style:` | format only |
 
 ---
 
-## Tooling conventions
+## Maintainer conventions
 
-- **Multi-file string replacement:** Use `sed -i 's/old/new/g' file1 file2 ...` (or `grep -rl pattern . | xargs sed -i ...`) instead of the Edit tool for mechanical substitutions that don't need surrounding context.
-- **CLI reference in README:** Always run `asr2clip --help` and paste the exact output verbatim.
-- **Inline comments in bash code blocks:** Pad to column 46 before `#`. Apply to epilog in `_build_parser()` and all bash example blocks in README.
-- **Argument group order in `_build_parser()`:** Setup → Audio → Transcription → Local ASR server → VAD → Diarization → Post-processing.
+These bullets are **part of this repo contract** (there is no separate “tooling README”):
 
----
+- Mechanical multi-file text replace: `sed` / `grep -rl … | xargs sed` when context-free.
+- **User-facing README:** when you refresh a flag section, align tables with **`asr2clip --help`** (paste verbatim per section refresh).
+- Bash examples in README and `_build_parser()` epilog: pad `#` comments to **column 46**.
+- **`_build_parser()`** argument groups: Setup → Audio → Transcription → Local ASR server → VAD → Diarization → Post-processing → Output.
 
-## README structure
-
-Sections mirror CLI argument groups: Setup → Audio → Transcription → Local ASR server → VAD → Diarization → AI post-processing. Within each h2: brief motivation → options table (from `--help`) → relevant config excerpt. Do not duplicate content already in the config template or `--help` output.
-
----
-
-## Upstream engagement
-
-Contact made 2026-05-12 via GitHub Issue #16 (Oaklight/asr2clip). Awaiting response on PR interest.
-
-**Best PR candidates** (if accepted, in order):
-1. Toggle mode (`--toggle`) — most self-contained, useful on all platforms
-2. Robust transcription (`-r`) — independent feature
-3. whisper.cpp backend (`-b wcpp`) — self-contained new backend
-4. Preprocessors (`-p`) — independent audio preprocessing
-
-**Fork naming:** Tool has outgrown the original name. If PRs declined → rename fork as independent project. See `todo.md`.
+**README structure:** mirror CLI groups above; do not duplicate the full config template or full `--help` in prose.

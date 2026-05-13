@@ -231,6 +231,7 @@ Setup commands manage your configuration file and verify that configured backend
 | `--generate_config` | Write the annotated config template to `~/.config/asr2clip/config.yaml` |
 | `--print_config` | Print the config template to stdout |
 | `--test` | Test backend connectivity and preprocessor availability, then exit |
+| `-x NAME / --preset NAME` | Pipeline preset (key under `presets:`). Optional if `default_preset` is set in config. |
 | `-q / --quiet` | Suppress informational output; only print the transcript and errors |
 
 ### Setup commands
@@ -361,20 +362,21 @@ asr2clip --test                     # also checks that configured preprocessors 
 
 | Flag | Description |
 |------|-------------|
-| `-b NAME / --backend NAME` | ASR backend to use (key under `asr_backends:` in config). Overrides `asr_backend_urgent` / `asr_backend_casual`. |
+| `-b NAME / --backend NAME` | ASR backend to use (key under `asr_backends:` in config). Overrides the preset's `asr_backend`. |
 | `-i FILE / --input FILE` | Transcribe an existing audio or video file instead of recording. |
 | `-o FILE / --output FILE` | Append transcripts to file. |
 | `-l LANG / --language LANG` | Language hint (ISO-639-1, e.g. `fi`, `en`). Overrides config. Omit to auto-detect. |
 | `-r / --robust` | Robust mode for `-i` file input: split at silence boundaries, quality-check chunks, retry. |
 | `-C SEC / --chunk-duration SEC` | Max chunk duration in seconds for `-r/--robust` mode (default: 180). |
-| `--toggle` | Toggle recording on/off with repeated invocations. Designed for keyboard shortcuts. |
+| `-g / --toggle` | Toggle recording: first invocation starts, second stops and transcribes. |
+| `-z / --no-clipboard` | Do not copy transcript (or file path) to the system clipboard; stdout and `-o` unchanged. |
 
 ```bash
 asr2clip                  # record until Ctrl+C, transcribe, copy to clipboard
 asr2clip -l fi         # Finnish, using local whisper.cpp backend (privacy preset)
 asr2clip -i audio.mp3  # transcribe an existing audio file
 asr2clip -i meeting.mp4  # transcribe from a video file (audio extracted automatically)
-asr2clip speed -o transcript.txt   # also append transcript to a file
+asr2clip -x speed -o transcript.txt   # preset + append transcript to a file
 ```
 
 ### Supported input formats
@@ -609,8 +611,9 @@ Speaker name substitution (SPEAKER_00 → real names) is intentionally left to t
 
 | Flag | Description |
 |------|-------------|
-| `-b whisperx` | Select the WhisperX diarization backend for this run. |
-| `-s N / --speakers N` | Expected number of speakers (hint to pyannote for better accuracy). If omitted, pyannote infers automatically. |
+| `-b whisperx` | WhisperX diarization backend (`type: whisperx`). |
+| `-b` + `mock-diarize` | Mock diarization backend from your config (testing / CI). |
+| `-s N / --speakers N` | Speaker count hint for `whisperx` and `mock-diarize`. Ignored by other backends. |
 
 ### Diarization setup
 
@@ -652,7 +655,7 @@ The feature is especially valuable for frequent dictators (researchers, journali
 
 | Flag | Description |
 |------|-------------|
-| `-P NAME / --post NAME` | LLM post-processor name (key in `postprocessors:` config) or an inline system-prompt string. Overrides `postprocessor_urgent` / `postprocessor_casual`. |
+| `-P NAME / --post NAME` | LLM post-processor name (key in `postprocessors:` config) or an inline system-prompt string. Overrides the preset's post-processor. |
 | `-M MODEL / --post-model MODEL` | LLM model used for post-processing. Overrides the post-processor config for this run. |
 | `-T NAME / --template NAME` | Output template name from `output_templates:` in config. Controls what is written to clipboard / `-o FILE`. |
 
