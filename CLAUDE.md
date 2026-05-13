@@ -137,7 +137,9 @@ Tests must catch real bugs. 220 passing tests are worthless if `asr2clip -b wcpp
 **Required test for every non-trivial config behavior:**
 ```python
 # Example: CLI backend override
-config = Config.from_file(fixture_path, preset_name="speed", cli_overrides=CliOverrides(backend="wcpp"))
+import argparse
+args = argparse.Namespace(preset="speed", backend="wcpp", post=None, post_model=None, ...)
+config = Config.from_file(fixture_path, args)
 assert config.asr_backend.name == "wcpp"   # NOT "groq" from preset
 assert config.asr_backend.type == "whisper_cpp"
 ```

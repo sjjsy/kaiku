@@ -5,7 +5,7 @@
 
 [中文](README_zh.md)
 
-Record speech, transcribe it, and copy the result to clipboard or a file. Supports cloud and fully-local [ASR backends](#asr-backends), [VAD](#vad-continuous-recording) (for background daemons) and [toggle](#toggle-mode) (for keyboard shortcuts), [noise reduction](#audio-preprocessing-noise-reduction), [speaker diarization](#diarization), and [AI post-processing](#post-processing-with-ai-models).
+Record speech, transcribe it, and copy the result to clipboard or a file. Supports cloud and fully-local [ASR backends](#asr-backends), [VAD](#vad-continuous-recording) (for background daemons) and [toggle](#toggle-mode) (for keyboard shortcuts), [noise reduction](#audio-preprocessing-noise-reduction), [speaker diarization](#diarization) (as an ASR backend), and [AI post-processing](#post-processing-with-ai-models).
 
 Jump to the [Related projects](#related-projects) section at the end to understand the landscape of ASR related tooling and why this project was developed for the open source community.
 
@@ -42,15 +42,14 @@ asr2clip -b wcpp
 ## CLI reference
 
 ```
-usage: asr2clip.py [-h] [-v] [-q] [-c FILE] [--preset NAME] [-e]
-                   [--generate_config] [--print_config] [--test]
-                   [--list_devices] [-d DEV] [-p NAME] [-b NAME] [-i FILE]
-                   [-o FILE] [-l LANG] [-r] [-C SEC] [--toggle] [--serve]
-                   [--host HOST] [--port PORT] [--model-dir MODEL_DIR]
-                   [--num-threads NUM_THREADS] [--download-model] [--vad]
-                   [--interval SEC] [--silence_threshold PROB]
-                   [--silence_duration SEC] [-D] [-s N] [-P NAME] [-M MODEL]
-                   [-T NAME]
+usage: asr2clip [-h] [-v] [-q] [-c FILE] [--preset NAME] [-e]
+                [--generate_config] [--print_config] [--test] [--list_devices]
+                [-d DEV] [-p NAME] [-b NAME] [-i FILE] [-o FILE] [-l LANG]
+                [-r] [-C SEC] [--toggle] [--serve] [--host HOST] [--port PORT]
+                [--model-dir MODEL_DIR] [--num-threads NUM_THREADS]
+                [--download-model] [--vad] [--interval SEC]
+                [--silence_threshold PROB] [--silence_duration SEC] [-s N]
+                [-P NAME] [-M MODEL] [-T NAME]
 
 Record audio and transcribe to clipboard using ASR API
 
@@ -64,8 +63,9 @@ Setup:
                         Path to configuration file
   --preset NAME         Pipeline preset name (key under 'presets:' in config).
                         Presets define complete pipelines: ASR backend,
-                        preprocessor, post-processor. Optional if 'default_preset'
-                        is set in config; CLI overrides still work (-b, -p, -P).
+                        preprocessor, post-processor. Optional if
+                        'default_preset' is set in config; CLI overrides still
+                        work (-b, -p, -P).
   -e, --edit            Open configuration file in editor (creates default
                         config if missing)
   --generate_config     Write config template to
@@ -107,7 +107,8 @@ Transcription:
 
 Local ASR server:
   --serve               Start the local sherpa-onnx ASR API server
-  --host HOST           Server bind address (default: 127.0.0.1)
+  --host HOST           Server bind address (default: 127.0.0.1 or
+                        local_asr.host in config)
   --port PORT           Server bind port (default: 8000)
   --model-dir MODEL_DIR
                         Path to ASR model directory
@@ -129,13 +130,12 @@ VAD (continuous recording):
                         1.5 s)
 
 Diarization:
-  -D, --diarize         Speaker diarization via WhisperX. Replaces the
-                        configured ASR backend for this run. Output:
-                        '[HH:MM:SS] SPEAKER_NN: text'. Requires: pip install
-                        asr2clip[diarize] and HF_TOKEN env var.
-  -s N, --speakers N    Expected number of speakers (hint to pyannote for
-                        better accuracy). If omitted, pyannote infers
-                        automatically.
+  -s N, --speakers N    Speaker count hint for diarization backends (type:
+                        whisperx, type: mock-diarize). Ignored by all other
+                        backends. Selects a diarization backend in your preset
+                        or with -b / --backend; see 'asr_backends:' in config.
+                        If omitted, the backend uses its own default or auto-
+                        detects speaker count.
 
 Post-processing:
   -P NAME, --post NAME  AI post-processor name (key in 'postprocessors:'
@@ -143,7 +143,7 @@ Post-processing:
                         'postprocessor_backends:' in config. Overrides the
                         post-processor in the selected preset.
   -M MODEL, --post-model MODEL
-                        LLM model used for the post-processing (f. ex. claude-
+                        AI model used for the post-processing (f. ex. claude-
                         sonnet-4-6). Overrides the post-processor config for
                         this run.
   -T NAME, --template NAME
@@ -153,17 +153,17 @@ Post-processing:
                         definition.
 
 Examples:
-  asr2clip --edit                                    # create/open config in editor
-  asr2clip --test                                    # verify backend and preprocessors
-  asr2clip --preset speed                           # record, transcribe, copy to clipboard
-  asr2clip --preset privacy --toggle               # toggle recording, fully offline
-  asr2clip --preset speed --toggle -P solo-restructure  # toggle, and produce LLM-structured memo
-  asr2clip --preset quality -i audio.mp3            # transcribe existing file with quality preset
-  asr2clip --preset quality -i m.mp3 -p deepfilter # override: use deepfilter instead of preset's preprocessor
-  asr2clip --preset quality -i m.m4a -D -s 3       # speaker diarization, 3 speakers
-  asr2clip --serve                                   # start local sherpa-onnx ASR server
-  asr2clip --preset speed --vad -o meeting.txt     # continuous VAD transcription to file
-  asr2clip --preset speed --interval 60            # fixed-interval continuous recording
+  asr2clip --edit                             # create/open config in editor
+  asr2clip --test                             # verify backend and preprocessors
+  asr2clip                                    # record, transcribe, copy to clipboard
+  asr2clip --toggle                           # toggle recording (for keyboard shortcuts)
+  asr2clip --toggle -P solo-restructure       # toggle, and produce AI-structured memo
+  asr2clip -i audio.mp3                       # transcribe an existing file
+  asr2clip -i m.mp3 -p deepfilter -r          # neural denoising + chunked transcription
+  asr2clip -i meeting.m4a -b whisperx -s 3    # speaker diarization, 3-speaker hint
+  asr2clip --serve                            # start local sherpa-onnx ASR server
+  asr2clip --vad -o meeting.txt               # continuous VAD transcription to file
+  asr2clip --interval 60                      # fixed-interval continuous recording
 
 See https://github.com/sjjsy/asr2clip for full documentation and configuration examples.
 ```
@@ -297,7 +297,10 @@ audio_device: 3                    # device index from --list_devices
 
 ### Audio preprocessing (noise reduction)
 
-Audio preprocessing enhances a recording before transcription by filtering unwanted signal content. **Noise reduction** is a key preprocessing technique that removes background sound — café chatter, fan hum, keyboard clicks — while preserving speech intelligibility. Preprocessing is useful in noisy environments or when your [ASR backend](#asr-backends) struggles with poor signal quality, producing errors or hallucinations. asr2clip provides three noise reduction libraries, each with different strengths depending on noise type and available compute resources.
+Audio preprocessing enhances a recording before transcription by filtering unwanted signal content.
+**Noise reduction** is a key preprocessing technique that removes background sound — café chatter, fan hum, keyboard clicks — while preserving speech intelligibility.
+Preprocessing is useful in noisy environments or when your [ASR backend](#asr-backends) struggles with poor signal quality, producing errors or hallucinations.
+asr2clip provides three noise reduction libraries, each with different strengths depending on noise type and available compute resources.
 
 ### Available preprocessors
 
@@ -326,7 +329,7 @@ Audio preprocessing enhances a recording before transcription by filtering unwan
 - **Live toggle recording on CPU-constrained devices** (`--toggle`): Prefer `noisereduce` over `pyrnnoise` or `deepfilter` to minimize latency and system load.
 - **Local [`whisper.cpp`](#local-asr-whisper.cpp-vs-sherpa-onnx) backend**: The backend is fast but already somewhat noise-robust; consider `none` in quiet settings or `noisereduce` for steady background. Avoid `deepfilter` on CPU systems.
 - **Cloud API** (Groq, OpenAI): Optional preprocessing for mildly noisy audio; use preprocessing aggressively for café-grade noise to maximize transcription quality.
-- **Speaker diarization** (`--diarize` via WhisperX): Preprocessing before diarization is recommended in noisy settings — speaker separation depends on clear voice boundaries, which noise obscures.
+- **Speaker diarization** (`-b whisperx`): Preprocessing before diarization is recommended in noisy settings — speaker separation depends on clear voice boundaries, which noise obscures.
 
 ### Loudness normalisation
 
@@ -341,6 +344,10 @@ pip install asr2clip[deepfilter]    # DeepFilterNet3
 pip install asr2clip[enhance]       # all three
 ```
 
+### Preprocessor configuration
+
+The preprocessor choice is determined using the first field of each [preset](#presets) spec. Override it for a single run with `-p NAME`.
+
 ### Preprocessor usage
 
 ```bash
@@ -348,23 +355,6 @@ asr2clip -p deepfilter              # denoise live recording with DeepFilterNet
 asr2clip -p noisereduce             # spectral denoising
 asr2clip -p deepfilter -i talk.mp4  # denoise video file before transcription
 asr2clip --test                     # also checks that configured preprocessors are available
-```
-
-### Selecting preprocessors via presets
-
-Preprocessors are selected per pipeline preset. Each preset specifies which preprocessor to use for that processing chain:
-
-```yaml
-presets:
-  speed:     [     none,     groq,        none,  "Fast transcription with minimal processing"]
-  quality:   [ deepfilter,   groq,        none,  "High-accuracy with neural denoising"]
-  offline:   [   none,       wcpp,        none,  "Fully offline, local transcription"]
-```
-
-The first column is the preprocessor. Override for a single run with `-p`:
-
-```bash
-asr2clip --preset speed -p deepfilter  # speed preset, but use deepfilter instead of its preprocessor
 ```
 
 ## Transcription
@@ -380,11 +370,11 @@ asr2clip --preset speed -p deepfilter  # speed preset, but use deepfilter instea
 | `--toggle` | Toggle recording on/off with repeated invocations. Designed for keyboard shortcuts. |
 
 ```bash
-asr2clip --preset speed                 # record until Ctrl+C, transcribe, copy to clipboard
-asr2clip --preset privacy -l fi         # Finnish, using local whisper.cpp backend (privacy preset)
-asr2clip --preset quality -i audio.mp3  # transcribe an existing audio file with quality preset
-asr2clip --preset speed -i meeting.mp4  # transcribe from a video file (audio extracted automatically)
-asr2clip --preset speed -o transcript.txt  # also append transcript to a file
+asr2clip                  # record until Ctrl+C, transcribe, copy to clipboard
+asr2clip -l fi         # Finnish, using local whisper.cpp backend (privacy preset)
+asr2clip -i audio.mp3  # transcribe an existing audio file
+asr2clip -i meeting.mp4  # transcribe from a video file (audio extracted automatically)
+asr2clip speed -o transcript.txt   # also append transcript to a file
 ```
 
 ### Supported input formats
@@ -416,13 +406,13 @@ Continuous and chunked modes integrate with `-o` differently:
 
 Clipboard size limit: when a transcript exceeds ~4 000 characters and `-o FILE` is specified, the file path is copied to clipboard instead of the full text.
 
-### ASR backends and presets
+### ASR backends
 
-ASR (Automatic Speech Recognition) converts spoken audio into text. asr2clip supports several ASR backends, from cloud APIs to fully offline local inference.
+ASR (Automatic Speech Recognition) converts spoken audio into text. asr2clip supports several ASR backends, from cloud APIs to fully offline local inference. Speaker diarization backends (`type: whisperx`) live here too — they replace the regular transcription step and produce speaker-attributed output.
 
-All backends are defined under `asr_backends:`. Name them whatever you like and select them via **presets**. Each preset is an atomic pipeline that specifies exactly which preprocessor, ASR backend, and post-processor to use. `asr2clip --generate_config` writes a fully annotated config with every supported backend type and example presets.
+#### ASR backend configuration
 
-Presets define your complete processing chain. Here's a minimal example with two presets:
+ASR backends are defined under `asr_backends:` and referenced by name from [presets](#presets) or overridden per-run with `-b NAME`. `asr2clip --generate_config` writes a fully annotated config with every supported backend type.
 
 ```yaml
 asr_backends:
@@ -436,86 +426,30 @@ asr_backends:
     api_base_url: "https://api.groq.com/openai/v1/"
     api_key: "YOUR_GROQ_KEY"
     model_name: "whisper-large-v3-turbo"
-
-presets:
-  speed:    [     none,     groq,        none,  "Fast transcription with minimal processing"]
-  quality:  [ deepfilter,   openai,      none,  "High-quality with neural denoising"]
 ```
-
-Format: `preset_name: [preprocessor, asr_backend, postprocessor, description]`. All four fields are required.
 
 ```bash
-asr2clip --preset speed                # use groq backend (speed preset)
-asr2clip --preset quality -i audio.wav # use openai with deepfilter (quality preset)
-asr2clip --preset speed -b openai      # override: speed preset but with openai backend
-asr2clip --test --preset speed         # test the backends/preprocessors in speed preset
+asr2clip -b groq -i audio.wav          # use groq backend for this run
+asr2clip --test -b openai              # test a specific backend
 ```
 
-### Presets (pipeline definitions)
-
-**Presets are atomic pipeline definitions:** each preset specifies exactly what preprocessor, ASR backend, and post-processor to use. They remove the need to remember which settings work well together; you pick one preset per run, and asr2clip handles the rest.
-
-If you only have one preset or a clear default choice, set `default_preset: preset_name` in your config. Then you can run `asr2clip` without specifying `--preset` every time:
-
-**Preset format:** `preset_name: [preprocessor, asr_backend, postprocessor, description]`
-
-- **Preprocessor** — audio denoising: `none`, `noisereduce`, `pyrnnoise`, or `deepfilter`
-- **ASR backend** — transcription engine: any key from `asr_backends:` section
-- **Postprocessor** — optional LLM rewriting: `none` or any key from `postprocessors:` section
-- **Description** — user-facing label for this preset
-
-All four fields are **required**. This makes it clear which processing steps are active, and prevents accidentally misconfiguring a preset by omitting a field.
-
-**Example presets from config:**
-
-```yaml
-presets:
-  speed:     [     none,     groq,        none,  "Fast transcription with minimal processing"]
-  quality:   [ deepfilter,   groq,        none,  "High-accuracy with neural denoising"]
-  privacy:   [   none,       wcpp,        none,  "Fully offline, local transcription"]
-  balanced:  [ noisereduce,  groq,        none,  "Good balance of speed, quality, and cost"]
-  memo:      [ noisereduce,  groq, solo-enhance,  "Transcription + LLM memo enhancement"]
-```
-
-**Using presets:**
-
-```bash
-asr2clip --preset speed                  # record & transcribe, copied to clipboard
-asr2clip --preset privacy --toggle       # toggle mode with fully offline transcription
-asr2clip --preset quality -i audio.mp3   # transcribe file with best quality settings
-asr2clip --preset speed -b wcpp          # speed preset, but override backend to wcpp
-asr2clip --preset memo -P group-enhance  # memo preset, override post-processor for group discussions
-```
-
-**Default preset:** to avoid specifying `--preset` every time, set a default in your config:
-
-```yaml
-default_preset: speed
-```
-
-Then you can run `asr2clip` without the preset flag:
-
-```bash
-asr2clip                                 # uses speed preset (from default_preset)
-asr2clip --toggle                        # toggle mode, also uses speed preset
-asr2clip --preset quality -i audio.mp3   # override with quality preset for this run
-```
-
-**CLI overrides:** flags like `-b`, `-p`, and `-P` override just that stage of the preset, leaving the rest intact. This lets you reuse a preset's configuration while tweaking one component.
-
-### Supported backend types
+#### Supported backend types
 
 | `type` | Description | Requires |
 |--------|-------------|---------|
 | `api` | Any OpenAI-compatible HTTP endpoint | API key or local server |
 | `whisper_cpp` | whisper.cpp binary via subprocess | whisper.cpp build + `.bin` model file |
-| `mock` | Mock backend for testing and demos (returns canned transcript) | None — no credentials needed |
+| `whisperx` | WhisperX speaker diarization — ASR + word alignment + speaker attribution in one pass; output: `[HH:MM:SS] SPEAKER_NN: text` | `pip install asr2clip[diarize]`, HF token |
+| `mock` | Fixed-response mock for testing and demos | None — no credentials needed |
+| `mock-fwd` | Duration-proportional transcript mock (forward word order) | None |
+| `mock-bwd` | Duration-proportional transcript mock (reverse word order) | None |
+| `mock-diarize` | Mock diarization with round-robin speaker assignment | None |
 
 Compatible cloud services for `type: api`: [OpenAI](https://platform.openai.com/docs/guides/speech-to-text), [Groq](https://console.groq.com/), [SiliconFlow](https://siliconflow.cn/), [xinference](https://inference.readthedocs.io/en/latest/), and others.
 
-#### Mock backend for testing
+#### Mock backends for testing
 
-The mock backend returns a fixed transcript without making API calls or running external processes. Useful for development, demos, and CI pipelines:
+The mock backends return transcripts without making API calls or running external processes. Useful for development, demos, and CI pipelines:
 
 ```yaml
 asr_backends:
@@ -523,14 +457,21 @@ asr_backends:
     type: mock
     response: "The quick brown fox jumps over the lazy dog"
     latency_ms: 100              # Optional: simulate network delay
+  mock-fwd:
+    type: mock-fwd
+    transcript_path: "test_data/group-2p-2.txt"   # source for word pool
+  mock-dia-2:
+    type: mock-diarize
+    speaker_count: 2
+    transcript_path: "test_data/group-2p-2.txt"
 ```
 
 ```bash
-asr2clip --preset demo -i dummy_audio.wav   # Returns mock transcript instantly
-asr2clip --test --preset demo               # No credentials needed
+asr2clip -b demo -i dummy_audio.wav         # Returns mock transcript instantly
+asr2clip --test -b demo                     # No credentials needed
+asr2clip -i audio.wav -b mock-fwd           # Duration-proportional words from transcript
+asr2clip -i audio.wav -b mock-dia-2         # Mock diarization, 2 speakers
 ```
-
-**Speaker diarization as an alternative backend:** `-D/--diarize` activates [WhisperX](https://github.com/m-bain/whisperX) as an alternative transcription path for file processing, replacing the ASR backend configured in your preset for that run. It produces speaker-attributed output (`[HH:MM:SS] SPEAKER_NN: text`) — no `type:` entry needed; see [Diarization](#diarization).
 
 #### Local ASR: whisper.cpp vs. sherpa-onnx
 
@@ -560,11 +501,11 @@ See [whisper.cpp](https://github.com/ggerganov/whisper.cpp) for build instructio
 For long recordings, `-r`/`--robust` splits at silence boundaries, quality-checks each chunk, retries bad chunks, and writes output incrementally:
 
 ```bash
-asr2clip --preset speed   -i meeting.mp3 -r                               # chunked, quality-checked
-asr2clip --preset quality -i m.mp3 -rC 60                                 # 60 s chunks instead of default 180
-asr2clip --preset quality -i m.mp3 -ro transcript.txt                     # write chunks to file as they complete (tail -f)
-asr2clip --preset privacy -i m.mp3 -l fi -o t.txt                         # fully offline, Finnish language
-asr2clip --preset quality -i m.mp3 -rP group-restructure -T bare -o t.md  # AI meeting memo without the transcript
+asr2clip -i meeting.mp3 -r                               # chunked, quality-checked
+asr2clip -i m.mp3 -rC 60                                 # 60 s chunks instead of default 180
+asr2clip -i m.mp3 -ro transcript.txt                     # write chunks to file as they complete (tail -f)
+asr2clip -i m.mp3 -l fi -o t.txt                         # fully offline, Finnish language
+asr2clip -i m.mp3 -rP group-restructure -T bare -o t.md  # AI meeting memo without the transcript
 ```
 
 Long transcripts often exceed the clipboard size limit; using `-o FILE` is recommended.
@@ -574,10 +515,10 @@ Long transcripts often exceed the clipboard size limit; using `-o FILE` is recom
 Toggle mode lets you bind a single keyboard shortcut to start and stop recording. The recording runs as a background process; the second invocation stops it, transcribes, and copies to clipboard. A desktop notification is shown on start and finish (requires [`notify-send`](https://man.archlinux.org/man/notify-send.1) on Linux).
 
 ```bash
-asr2clip --preset speed --toggle                        # first press: start recording in background
-asr2clip --preset speed --toggle                        # second press: stop, transcribe, copy to clipboard
-asr2clip --preset privacy --toggle                      # toggle with fully offline transcription
-asr2clip --preset speed --toggle -P solo-restructure    # toggle → structured personal memo
+asr2clip --toggle                        # first press: start recording in background
+asr2clip --toggle                        # second press: stop, transcribe, copy to clipboard
+asr2clip --toggle                      # toggle with fully offline transcription
+asr2clip --toggle -P solo-restructure    # toggle → structured personal memo
 ```
 
 Example awesome WM keybinding:
@@ -663,13 +604,14 @@ VAD uses the [Silero VAD](https://github.com/snakers4/silero-vad) model (~629 KB
 
 ## Diarization
 
-Speaker diarization attributes each spoken segment to a speaker label, producing a transcript where every turn is tagged `[HH:MM:SS] SPEAKER_NN: text`. [WhisperX](https://github.com/m-bain/whisperX) replaces the configured ASR backend for the run — no double transcription.
+Speaker diarization attributes each spoken segment to a speaker label, producing a transcript where every turn is tagged `[HH:MM:SS] SPEAKER_NN: text`.
+Diarization is implemented as an ASR backend (`type: whisperx`) — it replaces the regular transcription step entirely, so there is no double pass.
 
 Speaker name substitution (SPEAKER_00 → real names) is intentionally left to the calling assistant or post-processor.
 
 | Flag | Description |
 |------|-------------|
-| `-D / --diarize` | Speaker diarization via WhisperX. Replaces the configured ASR backend for this run. |
+| `-b whisperx` | Select the WhisperX diarization backend for this run. |
 | `-s N / --speakers N` | Expected number of speakers (hint to pyannote for better accuracy). If omitted, pyannote infers automatically. |
 
 ### Diarization setup
@@ -679,28 +621,29 @@ pip install asr2clip[diarize]
 # Accept the pyannote licence at https://huggingface.co/pyannote/speaker-diarization-3.1
 # then set your HuggingFace token:
 export HF_TOKEN=hf_...
-# or add to config: diarize_hf_token: "hf_..."
 ```
 
 **HF_TOKEN** is your [HuggingFace access token](https://huggingface.co/settings/tokens). You must also accept the license for [`pyannote/speaker-diarization-3.1`](https://huggingface.co/pyannote/speaker-diarization-3.1) on HuggingFace before the model can be downloaded. The token is only needed on first run; the model is cached locally thereafter.
 
+### Diarization config
+
+Define the backend among your [ASR backends](#asr-backends) and reference it in a [preset](#presets) or pass `-b whisperx`:
+
+```yaml
+asr_backends:
+  whisperx:
+    type: whisperx
+    hf_token: "hf_..."       # or set HF_TOKEN env var
+    min_speakers: 2          # optional hint to pyannote
+    max_speakers: 6          # optional hint to pyannote
+```
+
 ### Diarization usage
 
 ```bash
-asr2clip -i meeting.m4a -D              # diarize: SPEAKER_NN-attributed transcript
-asr2clip -i meeting.m4a -D -s 3         # hint: 3 speakers (improves accuracy)
-asr2clip -i meeting.m4a -D -P group     # diarize + LLM meeting notes
-asr2clip --toggle -D                    # live toggle recording with diarization
-```
-
-### Diarization config
-
-Config hints (optional, help [pyannote](https://github.com/pyannote/pyannote-audio)):
-
-```yaml
-diarize_hf_token: "hf_..."
-diarize_min_speakers: 2
-diarize_max_speakers: 6
+asr2clip -i meeting.m4a -b whisperx           # diarize: SPEAKER_NN-attributed transcript
+asr2clip -i meeting.m4a -b whisperx -s 3      # hint: 3 speakers (improves accuracy)
+asr2clip -i meeting.m4a -b whisperx -P group  # diarize + LLM meeting notes
 ```
 
 ## Post-processing (with AI models)
@@ -751,7 +694,7 @@ Each analysis includes:
 Usage:
 
 ```bash
-asr2clip --preset speed -P analyze -i audio.mp3         # Analyze with mock
+asr2clip -P analyze -i audio.mp3         # Analyze with mock
 asr2clip --test -P analyze                              # Test without credentials
 ```
 
@@ -781,7 +724,7 @@ Examples below; see the full configuration section for all available fields.
 | `group-private` | Like `group-restructure` but defaults to a local offline model to ensure privacy |
 
 Tips:
-* To get richer and more accurate memos from meetings and debates, use [diarization](#diarization) first to attribute segments to speakers.
+* To get richer and more accurate memos from meetings and debates, use a [diarization backend](#diarization) (`-b whisperx`) to attribute segments to speakers before post-processing.
 * Add context files (see configuration below) to help the model better connect the dots between each individual participant and the contents discussed.
 
 #### Post-processor usage examples
@@ -789,7 +732,7 @@ Tips:
 ```bash
 asr2clip --toggle -P solo-enhance          # toggle → improved personal transcript
 asr2clip --toggle -P solo-restructure      # toggle → structured personal memo
-asr2clip -i meeting.m4a -D -P group-restructure  # diarize + meeting memo
+asr2clip -i meeting.m4a -b whisperx -P group-restructure  # diarize + meeting memo
 asr2clip --toggle -P "List action items."   # inline system prompt
 ```
 
@@ -803,7 +746,6 @@ asr2clip --toggle -P "List action items."   # inline system prompt
 ### Post-processor backend setup
 
 ```yaml
-# ~/.config/asr2clip/config.yaml
 postprocessor_backends:
   ollama:
     type: openai_compat
@@ -858,14 +800,17 @@ postprocessors:
 
 Note: The `solo-base` and `group-base` are not intended to be used directly. Instead, they provide definitions that are shared by other single-speaker and group discussion post-processors, respectively, through inheritance.
 
-### Output templates
+## Output templates
 
-Output templates control what ends up in clipboard / `-o FILE`. The output format depends on your template and LLM instructions — can be Markdown, [ReStructuredText](https://docutils.sourceforge.io/rst.html), plain text, or any text-based format. Two templates are shipped; select with `-T NAME`:
+Output templates control what ends up in clipboard / `-o FILE`.
+The output format depends on your template and potentially your LLM instructions — can be Markdown, [ReStructuredText](https://docutils.sourceforge.io/rst.html), plain text, or any text-based format.
+Two templates are shipped; select with `-T NAME`:
 
 ```yaml
 output_templates:
-  bare: "{result}"
-  full: |
+  raw: "{transcript}"                         # No post processing
+  bare: "{result}"                            # Only the AI models output
+  full: |                                     # Both the AI output and the transcript on a Markdown template
     {result}
 
     ---
@@ -884,6 +829,53 @@ Available placeholders: `{result}` `{transcript}` `{date}` `{datetime}` `{prompt
 
 Set `postprocessor_urgent` / `postprocessor_casual` to apply a prompt automatically for every recording without passing `-P`.
 
+## Presets
+
+Presets are atomic pipeline definitions — each specifies exactly which preprocessor, ASR backend, and post-processor to use. Pick one preset per run; asr2clip handles the rest.
+
+**Format:** `preset_name: [preprocessor, asr_backend, postprocessor, description]`
+
+- **Preprocessor** — audio denoising: `none`, `noisereduce`, `pyrnnoise`, or `deepfilter`
+- **ASR backend** — any key from `asr_backends:` (including diarization backends like `type: whisperx`)
+- **Postprocessor** — `none` or any key from `postprocessors:`
+- **Description** — user-facing label shown by `--list` / `--test`
+
+All four fields are required; this keeps every processing stage explicit.
+
+```yaml
+asr_backends:
+  groq:
+    type: api
+    api_base_url: "https://api.groq.com/openai/v1/"
+    api_key: "YOUR_GROQ_KEY"
+    model_name: "whisper-large-v3-turbo"
+  wcpp:
+    type: whisper_cpp
+    binary_path: "/usr/local/bin/whisper-cli"
+    model_path: "/models/ggml-large-v3-turbo.bin"
+
+presets:
+  speed:     [     none,       groq,            none,  "Fast transcription with minimal processing"]
+  quality:   [ deepfilter,     groq,            none,  "High-accuracy with neural denoising"]
+  privacy:   [     none,       wcpp,            none,  "Fully offline, local transcription"]
+  balanced:  [ noisereduce,    groq,            none,  "Good balance of speed, quality, and cost"]
+  memo:      [ noisereduce,    groq,    solo-enhance,  "Transcription + LLM memo enhancement"]
+```
+
+```bash
+asr2clip --preset speed                  # record & transcribe, copied to clipboard
+asr2clip --preset privacy --toggle       # toggle mode with fully offline transcription
+asr2clip --preset quality -i audio.mp3   # transcribe file
+asr2clip --preset speed -b wcpp          # override backend for this run
+asr2clip --preset memo -P group-enhance  # override post-processor for this run
+```
+
+**Default preset:** set `default_preset: speed` in config to omit `--preset` on every invocation. Flags `-b`, `-p`, and `-P` still override individual stages.
+
+```yaml
+default_preset: speed
+```
+
 ## Troubleshooting
 
 | Problem | Solution |
@@ -898,7 +890,7 @@ Set `postprocessor_urgent` / `postprocessor_casual` to apply a prompt automatica
 | Preprocessing too slow | Switch `preprocessor_urgent` to `noisereduce` or `none` in config |
 | Post-processor not found | Check `postprocessors:` in config; name must match exactly |
 | Post-processor backend error | Check `postprocessor_backends:` in config; verify API key and URL |
-| Diarization fails | Ensure `pip install asr2clip[diarize]`, `HF_TOKEN` is set, and pyannote licence is accepted |
+| Diarization fails | Ensure `pip install asr2clip[diarize]`, `HF_TOKEN` is set, pyannote licence accepted, and backend `type: whisperx` is in `asr_backends:` |
 
 Run `asr2clip --test` (or `asr2clip --test -b <name>`) to diagnose issues.
 
@@ -941,7 +933,7 @@ VAD classifies audio frames as speech or silence, enabling automatic segment bou
 |---------|---------|-------|-------|-------------|
 | [Silero VAD](https://github.com/snakers4/silero-vad) | MIT | 14k+ | 629 KB model; enterprise-grade; ONNX + PyTorch; auto-downloads | **Yes** — via sherpa-onnx in `--vad` and `--robust` |
 | [WebRTC VAD](https://github.com/wiseman/py-webrtcvad) | BSD | 1k+ | Google's classic GMM-based VAD; very fast, lower accuracy | No — less accurate than Silero; not integrated |
-| [pyannote VAD](https://github.com/pyannote/pyannote-audio) | MIT | 6k+ | Neural VAD embedded in the pyannote diarization pipeline | Indirectly — activated during `--diarize` via WhisperX |
+| [pyannote VAD](https://github.com/pyannote/pyannote-audio) | MIT | 6k+ | Neural VAD embedded in the pyannote diarization pipeline | Indirectly — activated by the `whisperx` ASR backend |
 
 ### ASR engines
 
@@ -953,7 +945,7 @@ ASR engines convert audio to text. asr2clip is a frontend: it delegates transcri
 | [whisper.cpp](https://github.com/ggerganov/whisper.cpp) | MIT | 80k+ | Fully offline; best CPU performance; GGML-quantised models | **Yes** — `type: whisper_cpp` backend; subprocess call |
 | [faster-whisper](https://github.com/SYSTRAN/faster-whisper) | MIT | 15k+ | 4× faster than Whisper; identical accuracy; INT8/FP16 via CTranslate2 | Not directly; used internally by WhisperX and Meetily |
 | [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) | Apache-2 | 4k+ | ONNX inference; multi-model-family; model auto-download; Python-native | **Yes** — `--serve` local server; `type: api` backend |
-| [WhisperX](https://github.com/m-bain/whisperX) | BSD | 13k+ | Whisper + word-level timestamps + speaker diarization in one pipeline | **Yes** — via `--diarize` flag |
+| [WhisperX](https://github.com/m-bain/whisperX) | BSD | 13k+ | Whisper + word-level timestamps + speaker diarization in one pipeline | **Yes** — `type: whisperx` backend (`pip install asr2clip[diarize]`) |
 | [SenseVoice](https://github.com/FunAudioLLM/SenseVoice) | Apache-2 | 6k+ | Emotion + language event detection; excellent CJK | Via sherpa-onnx default model; also SiliconFlow API |
 | [Vosk](https://github.com/alphacep/vosk-api) | Apache-2 | 8k+ | Lightweight; 20+ languages; embedded and low-RAM devices | No — lower accuracy than Whisper family |
 | [NVIDIA Parakeet TDT](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2) | Apache-2 | (NeMo) | 3 380× faster than real-time; English only; GPU | No — English-only; GPU-dependent; no multilingual support |
@@ -963,12 +955,12 @@ ASR engines convert audio to text. asr2clip is a frontend: it delegates transcri
 
 ### Speaker diarization
 
-Speaker diarization labels each segment with a speaker identity ("who said what"). asr2clip's `--diarize` flag activates a complete diarization pipeline through WhisperX; pyannote.audio is used internally by WhisperX for the actual speaker embedding and clustering.
+Speaker diarization labels each segment with a speaker identity ("who said what"). asr2clip treats diarization as an ASR backend (`type: whisperx`); select it with `-b whisperx` or via a preset. WhisperX handles transcription and speaker attribution in one pass; pyannote.audio is used internally for speaker embedding and clustering.
 
 | Project | License | Stars | Notes | In asr2clip |
 |---------|---------|-------|-------|-------------|
-| [pyannote.audio](https://github.com/pyannote/pyannote-audio) | MIT | 6k+ | De-facto OSS standard; speaker embedding + clustering; requires HF token for model download | Via WhisperX (`--diarize`) |
-| [WhisperX](https://github.com/m-bain/whisperX) | BSD | 13k+ | faster-whisper + word alignment + pyannote; all-in-one | **Yes** — `--diarize` (`pip install asr2clip[diarize]`) |
+| [pyannote.audio](https://github.com/pyannote/pyannote-audio) | MIT | 6k+ | De-facto OSS standard; speaker embedding + clustering; requires HF token for model download | Via WhisperX (`type: whisperx`) |
+| [WhisperX](https://github.com/m-bain/whisperX) | BSD | 13k+ | faster-whisper + word alignment + pyannote; all-in-one | **Yes** — `type: whisperx` backend (`pip install asr2clip[diarize]`) |
 | [whisper-diarization](https://github.com/MahmoudAshraf97/whisper-diarization) | MIT | 2k+ | faster-whisper + pyannote script pipeline | No — WhisperX provides equivalent functionality with an active upstream |
 | [NVIDIA NeMo](https://github.com/NVIDIA/NeMo) | Apache-2 | 13k+ | Fastest GPU diarization; English and enterprise focus | No — GPU-heavy; no practical CLI integration path |
 
