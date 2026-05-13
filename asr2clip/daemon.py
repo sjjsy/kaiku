@@ -341,10 +341,7 @@ def continuous_recording(
             f"Continuous recording requires an API backend; got '{asr.type}'. "
             "Use a preset with an openai-compatible ASR backend."
         )
-    device_spec = (
-        config.recorder.device.get_spec(config.recorder.name)
-        if config.recorder.device else None
-    )
+    device_spec = config.recorder.device.get_spec(config.recorder.name)
 
     setup_signal_handlers(daemon_mode=True)
 

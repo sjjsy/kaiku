@@ -38,7 +38,21 @@ class MockRecorder(AudioRecorder):
 
         pid = os.fork()
         if pid == 0:
-            # Child: copy source to audio_path then sleep until killed
+            # Detach from the parent's session and redirect stdio to /dev/null so
+            # any subprocess.run(capture_output=True) in the caller doesn't hang
+            # waiting for the inherited pipe fds to close.
+            try:
+                os.setsid()
+            except Exception:
+                pass
+            try:
+                devnull = os.open(os.devnull, os.O_RDWR)
+                for fd in (0, 1, 2):
+                    os.dup2(devnull, fd)
+                os.close(devnull)
+            except Exception:
+                pass
+            # Copy source to audio_path then sleep until SIGTERM from --toggle stop
             try:
                 shutil.copy2(source_file, audio_path)
             except Exception:

@@ -179,14 +179,11 @@ asr2clip.conf
 now.md
 todo.md
 done.md
-# all audio/video files
+# all audio, video and other files used in manual testing during development
 data/
 # test fixtures — downloaded on demand by conftest.py
 test_data/*.wav
 
 # Claude Code related files
 .claude/
-
-# extra test files
-tests-202605131145.tgz
 

@@ -1,0 +1,5 @@
+Okay, let’s look at the transcript from the client call. Mark, you were supposed to handle the feedback on the UI.
+(Rubbing his eyes) Honestly, Sara, that meeting was a blur. Everyone was talking over each other. I can’t remember who hated the blue gradient.
+Just look at the diarization tags in the doc. See? The 'Speaker 3' tag—that’s the Client Lead—is highlighted in red every time she mentions 'color.'
+Exactly. ASR caught her specific wording: 'vibrant but not neon.'
+Wow, okay. I would have sworn she said 'muted.' This saves me three hours of re-listening to a grainy Zoom recording.

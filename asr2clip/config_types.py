@@ -319,9 +319,11 @@ class RecorderConfig:
     def _resolved(self) -> tuple:
         from .audio import DeviceInfo, resolve_device_preference_order
         from .recorders import PREFERENCE_ORDER, _CLASS_MAP
+        from .utils import error
 
         cli_device = getattr(self._args, "device", None)
         device_spec = cli_device or self._config_dict.get("audio_device") or "auto"
+        device_source = "CLI --device" if cli_device else ("config audio_device" if self._config_dict.get("audio_device") else "auto")
 
         # Check mock_devices before querying real hardware.
         # A mock device spec is any comma-separated token that appears as a key
@@ -333,8 +335,11 @@ class RecorderConfig:
                 mock_cfg = mock_devices[spec]
                 source_file = os.path.expanduser(mock_cfg.get("source_file", ""))
                 if not source_file or not os.path.exists(source_file):
-                    warning(f"Mock device '{spec}' source file not found: {source_file!r}")
-                    continue
+                    error(
+                        f"Mock device '{spec}' source file not found: {source_file!r}. "
+                        "Fix the source_file path in mock_devices config."
+                    )
+                    sys.exit(1)
                 device_info = DeviceInfo(
                     index=-1, name=spec, portaudio_name=None, alsa_name=None,
                     channels=1, sample_rate=16000, mock_source=source_file,
@@ -345,13 +350,20 @@ class RecorderConfig:
         devices = resolve_device_preference_order(device_spec)
 
         if not devices:
-            if cli_device:
-                warning(f"None of the devices in '{cli_device}' are available.")
-            device_info = None
-        else:
-            device_info = devices[0]
-            if device_info:
-                info(f"Using device: {device_info.name}")
+            if device_spec == "auto":
+                error(
+                    "No audio input devices found. "
+                    "Check microphone permissions or system audio configuration."
+                )
+            else:
+                error(
+                    f"None of the requested devices are available ({device_source}: {device_spec!r}). "
+                    "Run 'asr2clip --list-devices' to see what is available."
+                )
+            sys.exit(1)
+
+        device_info = devices[0]
+        info(f"Using device: {device_info.name}")
 
         recorder_name = None
         if device_info and device_info.portaudio_name is None and device_info.alsa_name:
@@ -374,7 +386,7 @@ class RecorderConfig:
         return self._resolved[0]
 
     @property
-    def device(self) -> Optional[DeviceInfo]:
+    def device(self) -> DeviceInfo:
         return self._resolved[1]
 
 

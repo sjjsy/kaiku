@@ -216,7 +216,7 @@ def process_recording(config: Config):
         warning("Clipboard support may not be available.")
         print_clipboard_help()
 
-    mock_source = getattr(config.recorder.device, "mock_source", None) if config.recorder.device else None
+    mock_source = config.recorder.device.mock_source
 
     if mock_source:
         audio_data, _sr = load_wav(mock_source)
@@ -225,7 +225,7 @@ def process_recording(config: Config):
     else:
         setup_signal_handlers(daemon_mode=False)
         log("Recording... Press Ctrl+C to stop (press twice to cancel)")
-        device_spec = config.recorder.device.get_spec(config.recorder.name) if config.recorder.device else None
+        device_spec = config.recorder.device.get_spec(config.recorder.name)
         t0 = time.time()
         audio_data = record_audio(device=device_spec)
         duration = get_audio_duration(audio_data)
@@ -458,7 +458,7 @@ See https://github.com/sjjsy/asr2clip for full documentation and configuration e
         default=None,
     )
     setup_group.add_argument(
-        "--preset", metavar="NAME",
+        "-x", "--preset", metavar="NAME",
         default=None,
         help=(
             "Pipeline preset name (key under 'presets:' in config). "

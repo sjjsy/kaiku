@@ -437,15 +437,13 @@ asr2clip --test -b openai              # test a specific backend
 
 | `type` | Description | Requires |
 |--------|-------------|---------|
-| `api` | Any OpenAI-compatible HTTP endpoint | API key or local server |
+| `api` | Any OpenAI-compatible HTTP endpoint ([OpenAI](https://platform.openai.com/docs/guides/speech-to-text), [Groq](https://console.groq.com/), [SiliconFlow](https://siliconflow.cn/), [xinference](https://inference.readthedocs.io/en/latest/), etc.) | API key or local server |
 | `whisper_cpp` | whisper.cpp binary via subprocess | whisper.cpp build + `.bin` model file |
 | `whisperx` | WhisperX speaker diarization — ASR + word alignment + speaker attribution in one pass; output: `[HH:MM:SS] SPEAKER_NN: text` | `pip install asr2clip[diarize]`, HF token |
 | `mock` | Fixed-response mock for testing and demos | None — no credentials needed |
 | `mock-fwd` | Duration-proportional transcript mock (forward word order) | None |
 | `mock-bwd` | Duration-proportional transcript mock (reverse word order) | None |
 | `mock-diarize` | Mock diarization with round-robin speaker assignment | None |
-
-Compatible cloud services for `type: api`: [OpenAI](https://platform.openai.com/docs/guides/speech-to-text), [Groq](https://console.groq.com/), [SiliconFlow](https://siliconflow.cn/), [xinference](https://inference.readthedocs.io/en/latest/), and others.
 
 #### Mock backends for testing
 

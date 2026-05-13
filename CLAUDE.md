@@ -77,6 +77,7 @@ Lowercase = earlier/basic feature. Uppercase = later/advanced feature.
 | `-e` | `--edit` | upstream |
 | `-p` | `--preprocessor` | fork (was -P upstream) |
 | `-r` | `--robust` | fork (was -R upstream) |
+| `-x` | `--preset` | fork new |
 | `-C` | `--chunk-duration` | fork |
 | `-P` | `--post` | fork new |
 | `-M` | `--post-model` | fork new |
