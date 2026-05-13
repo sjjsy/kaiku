@@ -18,15 +18,15 @@
 # content further below to understand the options
 presets:
   # ── Mock presets (no credentials needed; useful for demos and tests) ──────
-  mock-fwd:     [         none,   mock-fwd,      none,  "Mock: duration-scaled forward transcript"]
-  mock-bwd-pp:  [         none,   mock-bwd,   mock-pp,  "Mock: duration-scaled backward transcript with postprocessing"]
-  mock-dia:     [         none,   mock-dia-2,    none,  "Mock: 2-speaker diarized transcript"]
+  mock-fwd:     [         none,     mock-fwd,           none,  "Mock: duration-scaled forward transcript"]
+  mock-bwd-pp:  [         none,     mock-bwd,        mock-pp,  "Mock: duration-scaled backward transcript with postprocessing"]
+  mock-dia:     [         none,   mock-dia-2,           none,  "Mock: 2-speaker diarized transcript"]
   # ── Real presets (require credentials / external tools) ───────────────────
-  # speed:     [         none,     groq,        none,  "Fast transcription with minimal processing"]
-  # quality:   [   deepfilter,     groq,        none,  "High-accuracy with neural denoising"]
-  # cheap:     [  noisereduce,     groq,        none,  "Cost-optimized for free-tier APIs"]
-  # privacy:   [   deepfilter,     wcpp,        none,  "Fully offline transcription"]
-  # balanced:  [  noisereduce,     groq,        none,  "Good balance of speed, quality, and cost"]
+  # speed:      [         none,         groq,           none,  "Fast transcription with minimal processing"]
+  # quality:    [   deepfilter,         groq,           none,  "High-accuracy with neural denoising"]
+  # cheap:      [  noisereduce,         groq,           none,  "Cost-optimized for free-tier APIs"]
+  # privacy:    [   deepfilter,         wcpp,           none,  "Fully offline transcription"]
+  # balanced:   [  noisereduce,         groq,           none,  "Good balance of speed, quality, and cost"]
 
 # Select default preset (optional; if set, asr2clip runs without --preset flag)
 # Can be overridden per run with: asr2clip --preset NAME
@@ -84,7 +84,7 @@ mock_devices:
 
 ## ── ASR backends ──────────────────────────────────────────────────────────────
 asr_backends:
-  # ── Normal ASR backends ──
+  # ── Mock ASR backends ──
   mock:                                       # Returns a fixed response string (no credentials needed)
     type: mock
     response: "The quick brown fox jumps over the lazy dog"
@@ -97,6 +97,7 @@ asr_backends:
     type: mock-bwd
     transcript_path: "test_data/group-2p-2.txt"
     latency_ms: 50
+  # ── Normal ASR backends ──
   # openai:                                   # OpenAI Whisper API
   #   type: api
   #   api_base_url: "https://api.openai.com/v1/"
@@ -128,7 +129,7 @@ asr_backends:
   #   model:  ~/path/to/whisper.cpp/models/ggml-large-v3-turbo-q8_0.bin
   #   # language: auto                        # 'auto' or ISO-639-1 (e.g. fi, en)
   #   # threads: 4
-  # ── Diarization backends ──
+  # ── ASR backends for diarization ──
   # Presets that reference one of these as their asr_backend automatically trigger
   # Requires: pip install asr2clip[diarize] for whisperx
   # whisperx:                               # Real WhisperX + pyannote diarization
@@ -136,6 +137,7 @@ asr_backends:
   #   hf_token: "hf_..."                    # or set HF_TOKEN env var
   #   speakers_min: 2                       # optional speaker count hints
   #   speakers_max: 6
+  # ── Mock ASR backends for diarization ──
   mock-dia-2:                               # Mock: 2-speaker round-robin from transcript
     type: mock-diarize
     speaker_count: 2
@@ -144,12 +146,6 @@ asr_backends:
     type: mock-diarize
     speaker_count: 3
     transcript_path: "test_data/group-2p-2.txt"
-
-## ── Diarization ───────────────────────────────────────────────────────────────
-## Diarization backends (type: whisperx, type: mock-diarize) live in asr_backends like
-## any other ASR backend. Select one with -b / --backend or in a preset.
-## Output: "[HH:MM:SS] SPEAKER_NN: text" — speaker label substitution left to the caller.
-## Speaker-count hint: -s N is passed to the active backend; ignored by non-diarize backends.
 
 ## ── Post-processing (with AI models) ──────────────────────────────────────────
 # Post-processors send the transcript to an AI model and return structured output.
@@ -161,16 +157,16 @@ postprocessor_backends:                       # FIXME: Update this section based
   mock:                                       # Mock postprocessor for testing (no credentials needed)
     type: mock
     model: mock-model                         # Required; used in mock's signature line
-  groq:                                       # Groq — fast, generous free tier
-    type: openai_compat
-    api_base_url: "https://api.groq.com/openai/v1/"
-    api_key: "YOUR_GROQ_KEY"
-    model: "llama-3.3-70b-versatile"
-  ollama:                                     # Ollama — free, private, fully offline
-    type: openai_compat
-    api_base_url: "http://localhost:11434/v1/"
-    api_key: "ollama"                         # Ollama ignores the key value
-    model: "qwen3:14b"
+#   groq:                                       # Groq — fast, generous free tier
+#     type: openai_compat
+#     api_base_url: "https://api.groq.com/openai/v1/"
+#     api_key: "YOUR_GROQ_KEY"
+#     model: "llama-3.3-70b-versatile"
+#   ollama:                                     # Ollama — free, private, fully offline
+#     type: openai_compat
+#     api_base_url: "http://localhost:11434/v1/"
+#     api_key: "ollama"                         # Ollama ignores the key value
+#     model: "qwen3:14b"
 #   anthropic:                                # Anthropic API (OpenAI-compatible endpoint)
 #     type: openai_compat
 #     api_base_url: "https://api.anthropic.com/v1/"
