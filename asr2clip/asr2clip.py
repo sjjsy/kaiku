@@ -672,6 +672,13 @@ def main():
 
     config = Config.from_file(args.config, args)
 
+    if args.robust and not args.input:
+        error(
+            "-r/--robust requires -i/--input: chunked transcription applies only to "
+            "audio/video files, not live microphone recording, --toggle, or VAD/interval mode."
+        )
+        sys.exit(1)
+
     if args.serve:
         from .local_asr import check_deps
         check_deps()
