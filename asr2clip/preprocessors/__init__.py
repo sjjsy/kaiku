@@ -4,9 +4,13 @@ from __future__ import annotations
 
 import importlib.util
 import sys
+from typing import TYPE_CHECKING
 
 from .base import AudioPreprocessor
 from .none import NonePreprocessor
+
+if TYPE_CHECKING:
+    from ..config_types import Config
 
 __all__ = [
     "AudioPreprocessor",
@@ -51,11 +55,9 @@ def probe_available() -> list[str]:
     ]
 
 
-def check_preprocessor_available(name: str) -> tuple[bool, str]:
-    """Return (is_available, install_hint_or_empty_string).
-
-    Always returns True for 'none'.
-    """
+def check_preprocessor_available(config: "Config") -> tuple[bool, str]:
+    """Return (is_available, install_hint_or_empty_string) for ``config.preprocessor``."""
+    name = config.preprocessor
     if name in (None, "none"):
         return True, ""
     module = _MODULE_MAP.get(name)
@@ -66,11 +68,12 @@ def check_preprocessor_available(name: str) -> tuple[bool, str]:
     return available, hint
 
 
-def make_preprocessor(name: str) -> AudioPreprocessor:
-    """Instantiate a preprocessor by name.
+def make_preprocessor(config: "Config") -> AudioPreprocessor:
+    """Instantiate the preprocessor named in ``config.preprocessor``.
 
     Raises SystemExit with a helpful message for unknown names.
     """
+    name = config.preprocessor
     if name in (None, "none"):
         return NonePreprocessor()
     if name == "noisereduce":

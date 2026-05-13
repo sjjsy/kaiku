@@ -428,8 +428,8 @@ def save_audio(audio_data: np.ndarray, sample_rate: int = 16000) -> str:
         Path to the temporary WAV file.
     """
     wav_bytes = write_wav(audio_data, sample_rate)
-
     temp_file = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+    info(f"Saving the audio to a temp file: {temp_file.name}")
     temp_file.write(wav_bytes)
     temp_file.close()
 

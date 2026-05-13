@@ -56,9 +56,8 @@ def _start_recording(lock_path: str, config: "Config"):
         suffix=".wav", prefix="asr2clip_", delete=False
     ).name
 
-    recorder_cfg = config.recorder
-    recorder = make_recorder(recorder_cfg.name, device_info=recorder_cfg.device)
-    pid = recorder.start(audio_path, recorder_cfg.device)
+    recorder = make_recorder(config.recorder.name, device_info=config.recorder.device)
+    pid = recorder.start(audio_path, config.recorder.device)
     if pid is None:
         safe_unlink(audio_path)
         warning("Could not start recorder. Check device availability.")
@@ -69,7 +68,7 @@ def _start_recording(lock_path: str, config: "Config"):
     with open(lock_path, "w") as f:
         json.dump(lock_data, f)
 
-    device_desc = f" with {recorder_cfg.device.name}" if recorder_cfg.device else " (default device)"
+    device_desc = f" with {config.recorder.device.name}" if config.recorder.device else " (default device)"
     info(f"Recording started ({recorder.name}, pid {pid}){device_desc}")
     _notify("asr2clip", f"Recording{device_desc}… (run asr2clip --toggle to stop)")
 
@@ -112,7 +111,7 @@ def _transcribe_and_output(audio_path: str, config: "Config"):
         info("Transcribing recorded audio…")
 
     preprocessed_path: str | None = None
-    preprocessor = make_preprocessor(config.preprocessor)
+    preprocessor = make_preprocessor(config)
     if not isinstance(preprocessor, NonePreprocessor):
         try:
             audio_data, sr = load_wav(audio_path)
@@ -131,12 +130,7 @@ def _transcribe_and_output(audio_path: str, config: "Config"):
     t0 = time.time()
     transcript: str = ""
     try:
-        transcript = transcribe(
-            transcribe_path, config,
-            raise_on_error=True,
-            language=config.language,
-            num_speakers=config.num_speakers,
-        )
+        transcript = transcribe(transcribe_path, config, raise_on_error=True)
     except Exception as e:
         warning(f"Transcription failed: {e}")
         _notify("asr2clip", f"Transcription failed: {e}")
@@ -178,9 +172,5 @@ def _transcribe_and_output(audio_path: str, config: "Config"):
         backend=postprocessor.backend_type,
     )
 
-    output_transcript(
-        final, to_clipboard=True, to_stdout=True, to_file=config.output_file,
-        max_clipboard_chars=config.clipboard_max_chars,
-        no_clipboard=config.no_clipboard,
-    )
+    output_transcript(final, config)
     _notify("asr2clip", final[:100])

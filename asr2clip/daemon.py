@@ -14,7 +14,7 @@ import numpy as np
 
 from .audio import calculate_rms, get_audio_duration, save_audio
 from .logging import CYAN, GREEN, RED, RESET, YELLOW
-from .output import _DEFAULT_CLIPBOARD_MAX_CHARS, output_transcript
+from .output import output_transcript
 from .transcribe import TranscriptionError, transcribe_audio
 from .utils import (
     info,
@@ -44,12 +44,8 @@ class TranscriptionTask:
 
 @dataclass
 class RecorderConfig:
-    """Configuration for the continuous recorder."""
+    """Configuration for the continuous recorder (device/timing; ASR comes from ``Config``)."""
 
-    api_key: str
-    api_base_url: str
-    model_name: str
-    org_id: str | None = None
     device: str | int | None = None
     interval: float = 30.0
     output_file: str | None = None
@@ -118,26 +114,11 @@ def _make_audio_callback(state: RecorderState):
 
 def _process_transcription(
     task: TranscriptionTask,
-    cfg: RecorderConfig,
+    config: "Config",
 ) -> tuple[int, str | None, str | None]:
-    """Process a transcription task.
-
-    Args:
-        task: The transcription task to process.
-        cfg: Recorder configuration.
-
-    Returns:
-        Tuple of (sequence, text, error_message).
-    """
+    """Process a transcription task using ``config`` for API ASR."""
     try:
-        text = transcribe_audio(
-            task.audio_path,
-            cfg.api_key,
-            cfg.api_base_url,
-            cfg.model_name,
-            cfg.org_id,
-            raise_on_error=True,
-        )
+        text = transcribe_audio(task.audio_path, config, raise_on_error=True)
         return (task.sequence, text, None)
     except TranscriptionError as e:
         return (task.sequence, None, str(e))
@@ -148,12 +129,7 @@ def _process_transcription(
             pass
 
 
-def _run_output_worker(
-    state: RecorderState,
-    output_file: str | None,
-    max_clipboard_chars: int = _DEFAULT_CLIPBOARD_MAX_CHARS,
-    no_clipboard: bool = False,
-):
+def _run_output_worker(state: RecorderState, config: "Config"):
     """Output transcription results in order."""
     while not is_stop_requested():
         try:
@@ -168,29 +144,21 @@ def _run_output_worker(
             if is_stop_requested():
                 break
 
-            _output_single_result(
-                text, error, output_file, max_clipboard_chars, no_clipboard
-            )
+            _output_single_result(text, error, config)
             state.next_output_sequence += 1
 
 
 def _output_single_result(
     text: str | None,
     error: str | None,
-    output_file: str | None,
-    max_clipboard_chars: int = _DEFAULT_CLIPBOARD_MAX_CHARS,
-    no_clipboard: bool = False,
+    config: "Config",
 ):
     """Output a single transcription result."""
     if error:
         print(f"\r{RED}✗{RESET} Failed: {error}" + " " * 20, flush=True)
     elif text and text.strip():
         print(f"\r{GREEN}✓{RESET} Transcribed" + " " * 30, flush=True)
-        output_transcript(
-            text, to_clipboard=True, to_stdout=True, to_file=output_file,
-            max_clipboard_chars=max_clipboard_chars,
-            no_clipboard=no_clipboard,
-        )
+        output_transcript(text, config)
     else:
         print(f"\r{YELLOW}○{RESET} (no speech)" + " " * 30, flush=True)
 
@@ -199,14 +167,16 @@ def _transcribe_chunks(
     cfg: RecorderConfig,
     state: RecorderState,
     executor: ThreadPoolExecutor,
+    config: "Config",
     skip_silence_check: bool = False,
 ):
     """Transcribe accumulated audio chunks asynchronously.
 
     Args:
-        cfg: Recorder configuration.
+        cfg: Recorder configuration (device, timing, sample rate).
         state: Recorder state.
         executor: Thread pool executor for async transcription.
+        config: Full run config (ASR API + language).
         skip_silence_check: If True, skip the silence check.
     """
     if time.time() - state.last_transcribe_time < cfg.min_transcribe_interval:
@@ -257,7 +227,7 @@ def _transcribe_chunks(
             with state.task_sequence_lock:
                 state.pending_tasks.pop(task.sequence, None)
 
-    future = executor.submit(_process_transcription, task, cfg)
+    future = executor.submit(_process_transcription, task, config)
     future.add_done_callback(task_callback)
 
     with state.task_sequence_lock:
@@ -266,14 +236,8 @@ def _transcribe_chunks(
     state.last_transcribe_time = time.time()
 
 
-def _run_recording_loop(cfg: RecorderConfig, state: RecorderState, executor):
-    """Run the main recording loop.
-
-    Args:
-        cfg: Recorder configuration.
-        state: Recorder state.
-        executor: Thread pool executor.
-    """
+def _run_recording_loop(cfg: RecorderConfig, state: RecorderState, executor, config: "Config"):
+    """Run the main recording loop."""
     import sounddevice as sd
 
     audio_callback = _make_audio_callback(state)
@@ -288,33 +252,25 @@ def _run_recording_loop(cfg: RecorderConfig, state: RecorderState, executor):
         ):
             while not is_stop_requested():
                 if cfg.vad_enabled:
-                    _handle_vad_iteration(cfg, state, executor)
+                    _handle_vad_iteration(cfg, state, executor, config)
                 else:
                     sd.sleep(100)
                     if time.time() - state.last_transcribe_time >= cfg.interval:
-                        _transcribe_chunks(
-                            cfg, state, executor, skip_silence_check=False
-                        )
+                        _transcribe_chunks(cfg, state, executor, config, skip_silence_check=False)
     except KeyboardInterrupt:
         pass
 
 
 def _handle_vad_iteration(
-    cfg: RecorderConfig, state: RecorderState, executor: ThreadPoolExecutor
+    cfg: RecorderConfig, state: RecorderState, executor: ThreadPoolExecutor, config: "Config"
 ):
-    """Handle a single VAD-mode iteration.
-
-    Args:
-        cfg: Recorder configuration.
-        state: Recorder state.
-        executor: Thread pool executor.
-    """
+    """Handle a single VAD-mode iteration."""
     triggered = state.should_transcribe.wait(timeout=0.1)
     if triggered:
         state.should_transcribe.clear()
-        _transcribe_chunks(cfg, state, executor, skip_silence_check=True)
+        _transcribe_chunks(cfg, state, executor, config, skip_silence_check=True)
     elif time.time() - state.last_transcribe_time >= cfg.interval:
-        _transcribe_chunks(cfg, state, executor, skip_silence_check=False)
+        _transcribe_chunks(cfg, state, executor, config, skip_silence_check=False)
 
 
 def continuous_recording(
@@ -339,24 +295,17 @@ def continuous_recording(
         min_transcribe_interval: Minimum interval between transcription triggers (seconds).
         max_concurrent_transcriptions: Maximum number of concurrent transcription requests.
     """
-    asr = config.asr_backend
-    if asr.type not in ("api", "mock"):
+    if config.asr_backend.type not in ("api", "mock"):
         raise ValueError(
-            f"Continuous recording requires an API backend; got '{asr.type}'. "
+            f"Continuous recording requires an API backend; got '{config.asr_backend.type}'. "
             "Use a preset with an openai-compatible ASR backend."
         )
-    device_spec = config.recorder.device.get_spec(config.recorder.name)
 
     setup_signal_handlers(daemon_mode=True)
 
-    interval = config.interval if config.interval is not None else 30.0
     cfg = RecorderConfig(
-        api_key=asr.api_key or "",
-        api_base_url=asr.api_base_url or "",
-        model_name=asr.model_name or "",
-        org_id=asr.org_id,
-        device=device_spec,
-        interval=interval,
+        device=config.recorder.device.get_spec(config.recorder.name),
+        interval=config.interval if config.interval is not None else 30.0,
         output_file=config.output_file,
         sample_rate=sample_rate,
         vad_enabled=config.vad,
@@ -365,12 +314,11 @@ def continuous_recording(
         min_transcribe_interval=min_transcribe_interval,
         max_concurrent_transcriptions=max_concurrent_transcriptions,
     )
-    max_clipboard_chars = config.clipboard_max_chars
 
     _log_startup(cfg)
 
     state = RecorderState()
-    if vad_enabled:
+    if cfg.vad_enabled:
         state.vad = VoiceActivityDetector(
             sample_rate=sample_rate,
             threshold=cfg.silence_threshold,
@@ -381,15 +329,15 @@ def continuous_recording(
 
     output_thread = threading.Thread(
         target=_run_output_worker,
-        args=(state, cfg.output_file, max_clipboard_chars, config.no_clipboard),
+        args=(state, config),
         daemon=True,
     )
     output_thread.start()
 
-    _run_recording_loop(cfg, state, executor)
+    _run_recording_loop(cfg, state, executor, config)
 
     info("\nProcessing remaining audio...")
-    _transcribe_chunks(cfg, state, executor, skip_silence_check=False)
+    _transcribe_chunks(cfg, state, executor, config, skip_silence_check=False)
 
     if state.pending_tasks:
         info("Waiting for pending transcriptions...")

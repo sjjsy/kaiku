@@ -346,7 +346,7 @@ class TestRobustMode:
         assert r20.returncode == 0
         assert "Chunk 1/" in r20.stderr
         assert "Chunk 2/" in r20.stderr
-        assert "Full transcript written to" in r20.stderr or "appended to" in r20.stderr.lower()
+        assert "appended transcript to file" in r20.stderr.lower()
         assert out20.exists()
         paras20 = _chunk_paragraphs(out20.read_text())
         assert len(paras20) >= 5, out20.read_text()[:800]

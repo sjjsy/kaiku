@@ -7,6 +7,7 @@ import shutil
 import tempfile
 from datetime import datetime
 
+from .config_types import Config
 from .utils import info, run_subprocess, success, warning
 
 # Default UX threshold for clipboard text vs file-path fallback.
@@ -127,7 +128,7 @@ def append_transcript_to_file(text: str, filepath: str):
     with open(filepath, "a", encoding="utf-8") as f:
         f.write(f"\n[{timestamp}]\n{text}\n")
 
-    info(f"Appended transcript to {filepath}")
+    info(f"Appended transcript to file: {filepath}")
 
 
 def _write_temp_transcript(text: str) -> str:
@@ -145,37 +146,29 @@ def _write_temp_transcript(text: str) -> str:
 
 def copy_transcript_to_clipboard(
     text: str,
-    output_file: str | None = None,
-    max_chars: int = _DEFAULT_CLIPBOARD_MAX_CHARS,
-    *,
-    no_clipboard: bool = False,
+    config: Config,
 ) -> bool:
-    """Copy transcript to clipboard.
+    """Copy transcript to clipboard using ``config`` (limits, ``--no-clipboard``).
 
-    Behaviour depends on max_chars (configured via 'clipboard_max_chars'):
-      max_chars == 0   — always copy a file path (output_file if given, else a
-                         temp file in the system temp directory).
-      max_chars > 0    — copy the text when len(text) <= max_chars; otherwise
-                         copy the file path (output_file) when one exists, or
-                         copy the full text when no file path is available.
+    When a path is copied (``clipboard_max_chars`` / length rules), it is
+    ``config.output_file`` if set, otherwise a temp file holding ``text``.
 
-    Args:
-        text: Transcript text.
-        output_file: Path to the output file, if one was written.
-        max_chars: Character threshold; 0 = always use file path.
-        no_clipboard: When True (``--no-clipboard``), skip all clipboard writes.
+    Behaviour depends on ``config.clipboard_max_chars``:
+      value == 0   — always copy a file path (``config.output_file`` if set,
+                     else a temp file).
+      value > 0    — copy plain text when len(text) <= limit; otherwise copy a
+                     path (same resolution as for value == 0).
 
     Returns:
         True if something was copied to clipboard, False otherwise.
     """
-    if no_clipboard:
-        info(
-            "Clipboard: skipped (--no-clipboard); nothing was placed on the system clipboard "
-            "(stdout and -o file output are unchanged)"
-        )
+    if config.no_clipboard:
+        info("Clipboard: skipped (--no-clipboard)")
         return False
 
-    use_path = (max_chars == 0) or (max_chars > 0 and len(text) > max_chars)
+    use_path = (config.clipboard_max_chars == 0) or (
+        config.clipboard_max_chars > 0 and len(text) > config.clipboard_max_chars
+    )
 
     if not use_path:
         if copy_to_clipboard(text):
@@ -185,58 +178,35 @@ def copy_transcript_to_clipboard(
         return False
 
     # Resolve the file path to copy
-    if output_file:
-        path = os.path.abspath(output_file)
-    elif max_chars == 0:
-        path = _write_temp_transcript(text)
-        info(f"Transcript written to temp file (clipboard_max_chars=0): {path}")
+    if config.output_file:
+        # Note when `config.output_file` is set the transcript is already written to it
+        path = os.path.abspath(config.output_file)
     else:
-        # max_chars > 0 but text too long and no output file — copy full text anyway
-        if copy_to_clipboard(text):
-            success("Transcript text copied to clipboard (long text, no -o path)")
-            return True
-        warning("Failed to copy transcript text to clipboard")
-        return False
+        # ... But here we need to write it to the temp file
+        path = os.path.abspath(_write_temp_transcript(text))
+        if config.clipboard_max_chars == 0:
+            info(f"Transcript written to temp file (clipboard_max_chars=0): {path}")
+        else:
+            info(
+                "Transcript written to temp file "
+                f"(len(transcript) > clipboard_max_chars({config.clipboard_max_chars}); No -o FILE): {path}"
+            )
 
     if copy_to_clipboard(path):
         success(f"Transcript file path copied to clipboard ({path})")
         return True
+
     warning("Failed to copy transcript file path to clipboard")
     return False
 
 
-def output_transcript(
-    text: str,
-    to_clipboard: bool = True,
-    to_stdout: bool = True,
-    to_file: str | None = None,
-    max_clipboard_chars: int = _DEFAULT_CLIPBOARD_MAX_CHARS,
-    *,
-    no_clipboard: bool = False,
-):
-    """Output transcript to various destinations.
-
-    Args:
-        text: Transcript text to output.
-        to_clipboard: Whether to copy to clipboard.
-        to_stdout: Whether to print to stdout.
-        to_file: Optional file path to append transcript to.
-        max_clipboard_chars: Passed to copy_transcript_to_clipboard.
-        no_clipboard: When True, skip clipboard (same as CLI ``--no-clipboard``).
-    """
-    if to_clipboard:
-        copy_transcript_to_clipboard(
-            text,
-            to_file if to_file else None,
-            max_clipboard_chars,
-            no_clipboard=no_clipboard,
-        )
-
+def output_transcript(text: str, config: Config, *, to_stdout: bool = True) -> None:
+    """Copy to clipboard (unless ``config.no_clipboard``), print stdout, append ``-o`` file."""
+    copy_transcript_to_clipboard(text, config)
     if to_stdout:
         print(text)
-
-    if to_file:
-        append_transcript_to_file(text, to_file)
+    if out := config.output_file:
+        append_transcript_to_file(text, out)
 
 
 def print_clipboard_help():

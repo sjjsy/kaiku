@@ -72,28 +72,29 @@ def _attempt_transcription(
 
 def transcribe_audio(
     audio_file_path: str,
-    api_key: str,
-    api_base_url: str,
-    model_name: str,
-    org_id: str | None = None,
+    config: "Config",
+    *,
     raise_on_error: bool = False,
     max_retries: int = DEFAULT_MAX_RETRIES,
     retry_delay: float = DEFAULT_RETRY_DELAY,
     timeout: float = DEFAULT_TIMEOUT,
-    language: str | None = None,
 ) -> str:
-    """Transcribe audio via OpenAI-compatible API with automatic retry on timeout."""
+    """Transcribe audio via OpenAI-compatible API using ``config.asr_backend`` and ``config.language``."""
+    asr = config.asr_backend
+    api_key = asr.api_key or ""
+    api_base_url = asr.api_base_url or ""
     if not api_base_url.endswith("/"):
         api_base_url += "/"
     url = f"{api_base_url}audio/transcriptions"
-    headers = _build_api_headers(api_key, org_id)
+    headers = _build_api_headers(api_key, asr.org_id)
+    language = config.language
 
     last_error: Exception | None = None
 
     for attempt in range(max_retries + 1):
         try:
             return _attempt_transcription(
-                audio_file_path, url, headers, model_name, timeout, language=language
+                audio_file_path, url, headers, asr.model_name or "", timeout, language=language
             )
         except (httpclient.HttpTimeoutError, httpclient.HttpClientError) as e:
             last_error = e
@@ -123,53 +124,37 @@ def transcribe(
     config: "Config",
     raise_on_error: bool = False,
     timeout: float | None = None,
-    language: str | None = None,
-    num_speakers: int | None = None,
 ) -> str:
-    """Transcribe audio using the backend resolved in config.asr_backend.
-
-    Args:
-        audio_file_path: Path to the WAV file.
-        config: Fully resolved Config instance. config.asr_backend determines
-                which backend (API, whisper.cpp, mock) is used.
-        raise_on_error: If True, raise TranscriptionError on failure; else sys.exit.
-        timeout: Optional timeout override in seconds.
-        language: ISO-639-1 language hint, or None for auto-detect.
-
-    Returns:
-        Transcribed text string.
-    """
-    backend = config.asr_backend
-
-    if backend.type == "mock":
+    """Transcribe audio using the backend resolved in ``config.asr_backend``."""
+    if config.asr_backend.type == "mock":
         from .backends.mock import MockConfig, transcribe as mock_transcribe
         cfg = MockConfig(
-            response=backend.response,
-            latency_ms=backend.latency_ms or 0,
+            response=config.asr_backend.response,
+            latency_ms=config.asr_backend.latency_ms or 0,
         )
         return mock_transcribe(audio_file_path, cfg, timeout=timeout)
 
-    if backend.type in ("mock-fwd", "mock-bwd"):
+    if config.asr_backend.type in ("mock-fwd", "mock-bwd"):
         from .backends.mock import MockTranscriptConfig, transcribe_from_transcript
-        direction = "forward" if backend.type == "mock-fwd" else "backward"
+        direction = "forward" if config.asr_backend.type == "mock-fwd" else "backward"
         cfg = MockTranscriptConfig(
-            transcript_path=backend.transcript_path or "",
+            transcript_path=config.asr_backend.transcript_path or "",
             direction=direction,
-            latency_ms=backend.latency_ms or 0,
+            latency_ms=config.asr_backend.latency_ms or 0,
         )
         return transcribe_from_transcript(audio_file_path, cfg, timeout=timeout)
 
-    if backend.type == "mock-diarize":
+    if config.asr_backend.type == "mock-diarize":
         from .backends.mock import MockDiarizeConfig, transcribe_mock_diarize
         cfg = MockDiarizeConfig(
-            transcript_path=backend.transcript_path or "",
-            speaker_count=backend.speaker_count or 2,
+            transcript_path=config.asr_backend.transcript_path or "",
+            speaker_count=config.asr_backend.speaker_count or 2,
         )
-        return transcribe_mock_diarize(audio_file_path, cfg, num_speakers=num_speakers)
+        return transcribe_mock_diarize(audio_file_path, cfg, num_speakers=config.num_speakers)
 
-    if backend.type == "whisperx":
+    if config.asr_backend.type == "whisperx":
         from .backends.whisperx import WhisperXConfig, transcribe as wx_transcribe
-        hf_token = backend.hf_token
+        hf_token = config.asr_backend.hf_token
         if not hf_token:
             error(
                 "WhisperX requires a HuggingFace token.\n"
@@ -177,28 +162,29 @@ def transcribe(
                 "entry in asr_backends."
             )
             sys.exit(1)
+        ns = config.num_speakers
         cfg = WhisperXConfig(
             hf_token=hf_token,
-            min_speakers=num_speakers or backend.min_speakers,
-            max_speakers=num_speakers or backend.max_speakers,
+            min_speakers=ns or config.asr_backend.min_speakers,
+            max_speakers=ns or config.asr_backend.max_speakers,
         )
         try:
-            return wx_transcribe(audio_file_path, cfg, language=language, timeout=timeout)
+            return wx_transcribe(audio_file_path, cfg, language=config.language, timeout=timeout)
         except TranscriptionError as e:
             if raise_on_error:
                 raise
             error(f"WhisperX diarization failed: {e}")
             sys.exit(1)
 
-    if backend.type == "whisper_cpp":
+    if config.asr_backend.type == "whisper_cpp":
         from .backends.whisper_cpp import WhisperCppConfig, transcribe as wc_transcribe
         cfg = WhisperCppConfig(
-            binary=backend.binary,
-            model=backend.model,
-            threads=backend.threads or 4,
+            binary=config.asr_backend.binary,
+            model=config.asr_backend.model,
+            threads=config.asr_backend.threads or 4,
         )
-        if language:
-            cfg.language = language
+        if config.language:
+            cfg.language = config.language
         try:
             return wc_transcribe(audio_file_path, cfg, timeout=timeout)
         except TranscriptionError as e:
@@ -207,26 +193,21 @@ def transcribe(
             error(f"whisper.cpp transcription failed: {e}")
             sys.exit(1)
 
-    # API backend (openai-compatible)
     return transcribe_audio(
         audio_file_path,
-        backend.api_key,
-        backend.api_base_url,
-        backend.model_name,
-        backend.org_id,
+        config,
         raise_on_error=raise_on_error,
         timeout=timeout or DEFAULT_TIMEOUT,
-        language=language,
     )
 
 
-def test_transcription(
+def test_openai_compat_connection(
     api_key: str,
     api_base_url: str,
     model_name: str,
     org_id: str | None = None,
 ) -> bool:
-    """Test the transcription API connection. Returns True if reachable."""
+    """Probe ``GET …/models`` on an OpenAI-compatible server (credentials from any source)."""
     if not api_base_url.endswith("/"):
         api_base_url += "/"
     url = f"{api_base_url}models"
@@ -254,3 +235,14 @@ def test_transcription(
     except httpclient.HttpClientError as e:
         error(f"Connection failed: {e}")
         return False
+
+
+def test_transcription(config: "Config") -> bool:
+    """Test ASR OpenAI-compatible API connectivity using ``config.asr_backend``."""
+    asr = config.asr_backend
+    return test_openai_compat_connection(
+        asr.api_key or "",
+        asr.api_base_url or "",
+        asr.model_name or "",
+        asr.org_id,
+    )

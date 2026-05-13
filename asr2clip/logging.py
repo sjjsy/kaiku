@@ -365,9 +365,8 @@ def print_separator(char: str = "─", width: int = 40):
 def print_key_value(key: str, value: str):
     """Print a dim ``key:`` label and value to stderr (not a ``logging`` record).
 
-    Used in ``asr2clip.py`` (``--test`` success output), ``transcribe.py``
-    (``test_transcription``), ``backends/whisper_cpp.py`` (stderr passthrough
-    lines), and ``backends/mock.py`` (mock backend details).
+    Used in ``asr2clip.py`` (``--test``), ``transcribe.py`` (API connectivity checks),
+    ``backends/whisper_cpp.py`` (stderr passthrough lines), and ``backends/mock.py`` (mock backend details).
 
     Args:
         key: The key/label.

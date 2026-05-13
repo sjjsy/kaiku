@@ -27,12 +27,11 @@ from .config import (
 from .config_types import Config
 from .daemon import continuous_recording
 from .output import (
-    _DEFAULT_CLIPBOARD_MAX_CHARS,
     check_clipboard_support,
     output_transcript,
     print_clipboard_help,
 )
-from .transcribe import test_transcription, transcribe_audio, transcribe
+from .transcribe import test_openai_compat_connection, test_transcription, transcribe
 from .utils import (
     error,
     info,
@@ -57,34 +56,30 @@ def test_config(config: Config) -> bool:
     """
     from .utils import error, success
 
-    backend = config.asr_backend
-    info(f"Testing configuration (backend: {backend.name})...")
+    info(f"Testing configuration (backend: {config.asr_backend.name})...")
     print_separator()
 
-    if backend.type == "whisper_cpp":
+    if config.asr_backend.type == "whisper_cpp":
         from .backends.whisper_cpp import WhisperCppConfig, test as wc_test
         cfg = WhisperCppConfig(
-            binary=backend.binary,
-            model=backend.model,
-            threads=backend.threads or 4,
+            binary=config.asr_backend.binary,
+            model=config.asr_backend.model,
+            threads=config.asr_backend.threads or 4,
         )
         backend_ok = wc_test(cfg)
-    elif backend.type in ("mock", "mock-fwd", "mock-bwd", "mock-diarize"):
+    elif config.asr_backend.type in ("mock", "mock-fwd", "mock-bwd", "mock-diarize"):
         success(
-            f"Backend '{backend.name}' ({backend.type}) — no API connectivity check"
+            f"Backend '{config.asr_backend.name}' ({config.asr_backend.type}) — no API connectivity check"
         )
         backend_ok = True
     else:
-        api_key = backend.api_key
-        api_base_url = backend.api_base_url
-        model_name = backend.model_name
-        org_id = backend.org_id
-        print_key_value("API Base URL", api_base_url)
-        print_key_value("Model", model_name)
-        masked_key = f"{'*' * 8}...{api_key[-4:] if api_key and len(api_key) > 4 else '****'}"
+        print_key_value("API Base URL", config.asr_backend.api_base_url or "")
+        print_key_value("Model", config.asr_backend.model_name or "")
+        ak = config.asr_backend.api_key or ""
+        masked_key = f"{'*' * 8}...{ak[-4:] if ak and len(ak) > 4 else '****'}"
         print_key_value("API Key", masked_key)
         print_separator()
-        backend_ok = test_transcription(api_key, api_base_url, model_name, org_id)
+        backend_ok = test_transcription(config)
 
     # Check preprocessor
     from .preprocessors import check_preprocessor_available
@@ -92,13 +87,12 @@ def test_config(config: Config) -> bool:
     print_separator()
     info("Checking preprocessors...")
 
-    preprocessor_name = config.preprocessor
-    avail, hint = check_preprocessor_available(preprocessor_name)
+    avail, hint = check_preprocessor_available(config)
     if avail:
-        success(f"Preprocessor: {preprocessor_name}")
+        success(f"Preprocessor: {config.preprocessor}")
         pp_ok = True
     else:
-        error(f"Preprocessor: {preprocessor_name} — NOT AVAILABLE  ({hint})")
+        error(f"Preprocessor: {config.preprocessor} — NOT AVAILABLE  ({hint})")
         pp_ok = False
 
     return backend_ok and pp_ok
@@ -113,18 +107,17 @@ def _test_postprocessors(config: Config) -> bool:
     print_separator()
     info("Checking post-processors...")
 
-    name = config.postprocessor.name
-    model_override = config.postprocessor.model_override
-
-    if not name or name == "none":
+    if not config.postprocessor.name or config.postprocessor.name == "none":
         success("No post-processors configured to check")
         return True
 
     try:
-        resolved = _resolve_prompt(name, config._config_dict)
-        backend_cfg = _resolve_backend(config._config_dict, resolved["backend_name"], model_override)
+        resolved = _resolve_prompt(config.postprocessor.name, config._config_dict)
+        backend_cfg = _resolve_backend(
+            config._config_dict, resolved["backend_name"], config.postprocessor.model_override
+        )
     except SystemExit:
-        error(f"Post-processor '{name}' — config error (see above)")
+        error(f"Post-processor '{config.postprocessor.name}' — config error (see above)")
         return False
 
     ok = True
@@ -134,27 +127,26 @@ def _test_postprocessors(config: Config) -> bool:
 
     if btype == "claude_code":
         if shutil.which("claude"):
-            success(f"Post-processor '{name}': claude_code{model_note}")
+            success(f"Post-processor '{config.postprocessor.name}': claude_code{model_note}")
             success("  claude CLI: found")
         else:
-            error(f"Post-processor '{name}': claude_code{model_note}")
+            error(f"Post-processor '{config.postprocessor.name}': claude_code{model_note}")
             error("  claude CLI: NOT FOUND — install from https://claude.ai/code")
             ok = False
 
     elif btype == "openai_compat":
-        from .transcribe import test_transcription
         api_base = backend_cfg.get("api_base_url", "")
         api_key = backend_cfg.get("api_key", "sk-none")
-        success(f"Post-processor '{name}': openai_compat{model_note}")
+        success(f"Post-processor '{config.postprocessor.name}': openai_compat{model_note}")
         print_key_value("  Endpoint", api_base)
-        if not test_transcription(api_key, api_base, model, None):
+        if not test_openai_compat_connection(api_key, api_base, model, None):
             ok = False
 
     elif btype == "mock":
-        success(f"Post-processor '{name}': mock (no credentials needed)")
+        success(f"Post-processor '{config.postprocessor.name}': mock (no credentials needed)")
 
     else:
-        error(f"Post-processor '{name}' — unknown backend type '{btype}'")
+        error(f"Post-processor '{config.postprocessor.name}' — unknown backend type '{btype}'")
         ok = False
 
     return ok
@@ -219,25 +211,22 @@ def process_recording(config: Config):
         warning("Clipboard support may not be available.")
         print_clipboard_help()
 
-    mock_source = config.recorder.device.mock_source
-
-    if mock_source:
-        audio_data, _sr = load_wav(mock_source)
+    if config.recorder.device.mock_source:
+        audio_data, _sr = load_wav(config.recorder.device.mock_source)
         duration = get_audio_duration(audio_data)
-        info(f"Mock device: loaded {duration:.1f}s from {mock_source}")
+        info(f"Mock device: loaded {duration:.1f}s from {config.recorder.device.mock_source}")
     else:
         setup_signal_handlers(daemon_mode=False)
         info("Recording... Press Ctrl+C to stop (press twice to cancel)")
-        device_spec = config.recorder.device.get_spec(config.recorder.name)
         t0 = time.time()
-        audio_data = record_audio(device=device_spec)
+        audio_data = record_audio(device=config.recorder.device.get_spec(config.recorder.name))
         duration = get_audio_duration(audio_data)
         if duration < 0.1:
             error("Recording too short or empty. Exiting.")
             sys.exit(0)
         info(f"Recorded {duration:.1f}s of audio ({time.time() - t0:.1f}s elapsed)")
 
-    preprocessor = make_preprocessor(config.preprocessor)
+    preprocessor = make_preprocessor(config)
     if not isinstance(preprocessor, NonePreprocessor):
         info(f"Preprocessing audio with {preprocessor.name}...")
         t_pre = time.time()
@@ -248,18 +237,13 @@ def process_recording(config: Config):
 
     try:
         t1 = time.time()
-        transcript = transcribe(
-            temp_path, config,
-            language=config.language,
-            num_speakers=config.num_speakers,
-        )
+        transcript = transcribe(temp_path, config)
         info(f"Transcription completed in {time.time() - t1:.1f}s")
 
         if not transcript.strip():
             info("No speech detected in the recording.")
             return
 
-        is_diarized = config.asr_backend.type in ("whisperx", "mock-diarize")
         from datetime import date
         postprocessor = make_postprocessor(config)
         template = resolve_output_template(config)
@@ -268,7 +252,7 @@ def process_recording(config: Config):
             duration_s=duration,
             language=config.language or "auto",
             prompt_name=postprocessor.name,
-            diarized=is_diarized,
+            diarized=config.asr_backend.type in ("whisperx", "mock-diarize"),
             source="recording",
         )
         if not isinstance(postprocessor, NonePostProcessor):
@@ -284,11 +268,7 @@ def process_recording(config: Config):
             backend=postprocessor.backend_type,
         )
 
-        output_transcript(
-            final, to_clipboard=True, to_stdout=True, to_file=config.output_file,
-            max_clipboard_chars=config.clipboard_max_chars,
-            no_clipboard=config.no_clipboard,
-        )
+        output_transcript(final, config)
 
     finally:
         safe_unlink(temp_path)
@@ -300,15 +280,14 @@ def process_file(config: Config):
     from .postprocessors import NonePostProcessor, PostMetadata, format_output, make_postprocessor, resolve_output_template
     from .preprocessors import NonePreprocessor, make_preprocessor
 
-    input_file = config.input_file
-    if not input_file or not os.path.exists(input_file):
-        print(f"File not found: {input_file}")
+    if not config.input_file or not os.path.exists(config.input_file):
+        print(f"File not found: {config.input_file}")
         sys.exit(1)
 
-    info(f"Processing file: {input_file}")
+    info(f"Processing file: {config.input_file}")
 
-    if input_file.lower().endswith(".txt"):
-        with open(input_file, encoding="utf-8") as fh:
+    if config.input_file.lower().endswith(".txt"):
+        with open(config.input_file, encoding="utf-8") as fh:
             transcript = fh.read()
         if not transcript.strip():
             info("Transcript file is empty.")
@@ -336,24 +315,20 @@ def process_file(config: Config):
             metadata=metadata, model=postprocessor.model,
             backend=postprocessor.backend_type,
         )
-        output_transcript(
-            final, to_clipboard=True, to_stdout=True, to_file=config.output_file,
-            max_clipboard_chars=config.clipboard_max_chars,
-            no_clipboard=config.no_clipboard,
-        )
+        output_transcript(final, config)
         return
 
-    if not input_file.lower().endswith(".wav"):
+    if not config.input_file.lower().endswith(".wav"):
         t0 = time.time()
         info("Converting to WAV format...")
-        temp_path = convert_audio_to_wav(input_file)
+        temp_path = convert_audio_to_wav(config.input_file)
         info(f"Conversion completed in {time.time() - t0:.1f}s")
         cleanup_temp = True
     else:
-        temp_path = input_file
+        temp_path = config.input_file
         cleanup_temp = False
 
-    preprocessor = make_preprocessor(config.preprocessor)
+    preprocessor = make_preprocessor(config)
     if not isinstance(preprocessor, NonePreprocessor):
         try:
             audio_data, sr = load_wav(temp_path)
@@ -370,12 +345,7 @@ def process_file(config: Config):
 
     try:
         t1 = time.time()
-        transcript = transcribe(
-            temp_path, config,
-            language=config.language,
-            num_speakers=config.num_speakers,
-        )
-        is_diarized = config.asr_backend.type in ("whisperx", "mock-diarize")
+        transcript = transcribe(temp_path, config)
         info(f"Transcription completed in {time.time() - t1:.1f}s")
 
         if not transcript.strip():
@@ -397,7 +367,7 @@ def process_file(config: Config):
             duration_s=duration_s,
             language=config.language or "auto",
             prompt_name=postprocessor.name,
-            diarized=is_diarized,
+            diarized=config.asr_backend.type in ("whisperx", "mock-diarize"),
             source="file",
         )
         if not isinstance(postprocessor, NonePostProcessor):
@@ -413,11 +383,7 @@ def process_file(config: Config):
             backend=postprocessor.backend_type,
         )
 
-        output_transcript(
-            final, to_clipboard=True, to_stdout=True, to_file=config.output_file,
-            max_clipboard_chars=config.clipboard_max_chars,
-            no_clipboard=config.no_clipboard,
-        )
+        output_transcript(final, config)
 
     finally:
         if cleanup_temp:
@@ -717,8 +683,9 @@ def main():
         from .local_asr import check_deps
         check_deps()
         from .local_asr.model_registry import create_registry
-        la = config.local_asr
-        registry = create_registry(config_path=la.models_config_path, model_dir=la.model_dir)
+        registry = create_registry(
+            config_path=config.local_asr.models_config_path, model_dir=config.local_asr.model_dir
+        )
         registry.download_model(registry.get_default_model())
         return
 

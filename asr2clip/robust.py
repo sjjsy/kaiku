@@ -12,7 +12,7 @@ from pydub import AudioSegment
 from pydub.silence import detect_silence
 
 from .audio import audiosegment_to_float32, float32_to_audiosegment
-from .output import copy_transcript_to_clipboard, append_transcript_to_file
+from .output import append_transcript_to_file, copy_transcript_to_clipboard
 from .transcribe import TranscriptionError, transcribe
 from .utils import info, safe_unlink, warning
 
@@ -70,35 +70,30 @@ def _estimate_timeout(chunk_duration_s: float) -> float:
 def process_file_robust(config: "Config"):
     """Transcribe a long audio file in silence-bounded chunks with quality checks.
 
-    Each chunk is written to output_file immediately (tail-f friendly). After all
-    chunks complete, the full assembled transcript is post-processed and the output
-    template is applied.
+    With ``-o``, each chunk's raw ASR text is appended during the run (tail-friendly).
+    After post-processing and the output template, the same file receives one more
+    append: a timestamped block containing ``final`` (what goes to the clipboard).
 
     Args:
-        config: Resolved Config instance. Reads input_file, output_file,
-                chunk_duration, language, and template from config.
+        config: Resolved run config (``input_file``, ``output_file``, ``chunk_duration``, …).
     """
-    input_file = config.input_file
-    output_file = config.output_file
-    chunk_duration = config.chunk_duration
-    language = config.language
     import sys
     from .postprocessors import NonePostProcessor, PostMetadata, format_output, make_postprocessor, resolve_output_template
     from .preprocessors import NonePreprocessor, make_preprocessor
 
-    if not os.path.exists(input_file):
-        print(f"File not found: {input_file}")
+    if not config.input_file or not os.path.exists(config.input_file):
+        print(f"File not found: {config.input_file}")
         sys.exit(1)
 
-    info(f"Loading audio: {input_file}")
+    info(f"Loading audio: {config.input_file}")
     t0 = time.time()
-    audio = AudioSegment.from_file(input_file)
+    audio = AudioSegment.from_file(config.input_file)
     # Normalise to 16 kHz mono for consistent transcription
     audio = audio.set_frame_rate(16000).set_channels(1)
     total_s = len(audio) / 1000.0
     info(f"Audio loaded: {total_s:.1f}s total ({time.time() - t0:.1f}s to load)")
 
-    preprocessor = make_preprocessor(config.preprocessor)
+    preprocessor = make_preprocessor(config)
     if not isinstance(preprocessor, NonePreprocessor):
         info(f"Preprocessing audio with {preprocessor.name}...")
         t_pre = time.time()
@@ -110,7 +105,7 @@ def process_file_robust(config: "Config"):
         except Exception as e:
             warning(f"Preprocessing failed ({e}), using audio as-is.")
 
-    max_chunk_ms = chunk_duration * 1000
+    max_chunk_ms = config.chunk_duration * 1000
     boundaries = _find_chunk_boundaries(audio, max_chunk_ms)
     n_chunks = len(boundaries)
     info(f"Splitting into {n_chunks} chunk(s)")
@@ -134,11 +129,7 @@ def process_file_robust(config: "Config"):
 
         for attempt in range(retries):
             try:
-                candidate = transcribe(
-                    tmp_path, config, raise_on_error=True, timeout=timeout,
-                    language=language,
-                    num_speakers=config.num_speakers,
-                )
+                candidate = transcribe(tmp_path, config, raise_on_error=True, timeout=timeout)
                 if _check_quality(candidate):
                     text = candidate
                     quality_ok = True
@@ -166,8 +157,8 @@ def process_file_robust(config: "Config"):
 
         if text is None:
             warning(f"Chunk {idx}/{n_chunks} could not be transcribed; skipping.")
-            if output_file:
-                with open(output_file, "a", encoding="utf-8") as f:
+            if config.output_file:
+                with open(config.output_file, "a", encoding="utf-8") as f:
                     f.write(f"\n# [ERROR: chunk {idx}/{n_chunks} — transcription failed]\n")
             continue
 
@@ -179,13 +170,13 @@ def process_file_robust(config: "Config"):
 
         all_text_parts.append(text)
 
-        if output_file:
-            with open(output_file, "a", encoding="utf-8") as f:
+        if config.output_file:
+            with open(config.output_file, "a", encoding="utf-8") as f:
                 if warning_line:
                     f.write(warning_line)
                 f.write(text)
                 f.write("\n\n")
-            info(f"Chunk {idx}/{n_chunks} appended to {output_file}")
+            info(f"Chunk {idx}/{n_chunks} appended to {config.output_file}")
         else:
             print(text)
             print()
@@ -204,7 +195,7 @@ def process_file_robust(config: "Config"):
     metadata = PostMetadata(
         date=date.today().isoformat(),
         duration_s=total_s,
-        language=language or "auto",
+        language=config.language or "auto",
         prompt_name=postprocessor.name,
         diarized=config.asr_backend.type in ("whisperx", "mock-diarize"),
         source="file",
@@ -222,13 +213,8 @@ def process_file_robust(config: "Config"):
         backend=postprocessor.backend_type,
     )
 
-    copy_transcript_to_clipboard(
-        final,
-        output_file,
-        config.clipboard_max_chars,
-        no_clipboard=config.no_clipboard,
-    )
-    if output_file:
-        info(f"Full transcript written to {output_file}")
+    if config.output_file:
+        append_transcript_to_file(final, config.output_file)
+    copy_transcript_to_clipboard(final, config)
 
     info(f"Done. {n_chunks} chunk(s), {total_s:.0f}s audio transcribed.")
