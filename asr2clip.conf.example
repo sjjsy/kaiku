@@ -17,6 +17,11 @@
 # Uncomment and configure at least one preset, then set default_preset below. See the
 # content further below to understand the options
 presets:
+  # ── Mock presets (no credentials needed; useful for demos and tests) ──────
+  mock-fwd:     [         none,   mock-fwd,      none,  "Mock: duration-scaled forward transcript"]
+  mock-bwd-pp:  [         none,   mock-bwd,   mock-pp,  "Mock: duration-scaled backward transcript with postprocessing"]
+  mock-dia:     [         none,   mock-dia-2,    none,  "Mock: 2-speaker diarized transcript"]
+  # ── Real presets (require credentials / external tools) ───────────────────
   # speed:     [         none,     groq,        none,  "Fast transcription with minimal processing"]
   # quality:   [   deepfilter,     groq,        none,  "High-accuracy with neural denoising"]
   # cheap:     [  noisereduce,     groq,        none,  "Cost-optimized for free-tier APIs"]
@@ -40,9 +45,24 @@ presets:
 #   audio_device: "Snowball,Webcam,auto"     # Try Snowball, fall back to Webcam, then default
 #   audio_device: [Snowball, Webcam, auto]   # YAML list syntax (optional alternative)
 #
+# Mock devices (resolved before real hardware; point to a pre-recorded WAV):
+#   audio_device: "mock-jfk"                 # Serve test_data/jfk.wav as if recorded live
+#   audio_device: "mock-group"               # Serve test_data/group-4s.wav
+#
 # Run `asr2clip --list_devices` to see available device names and indices.
 #
 # audio_device: "auto"                        # Use system default (recommended)
+
+## ── Mock audio devices ────────────────────────────────────────────────────────
+# Mock devices simulate microphone recording by serving a pre-recorded WAV file.
+# Any name defined here can be used as audio_device or via --device on the CLI.
+# Useful for testing the full pipeline (recording → ASR → post-processing) with
+# reproducible audio without needing a microphone.
+mock_devices:
+  mock-jfk:                                  # 11s solo speech (test_data/jfk-11s-1p.wav)
+    source_file: "test_data/jfk-11s-1p.wav"
+  mock-group:                                # 30s group discussion (test_data/group-30s-4p.wav)
+    source_file: "test_data/group-30s-4p.wav"
 
 ## ── Toggle-mode recorder ──────────────────────────────────────────────────────
 # Controls which backend captures audio during --toggle mode.
@@ -64,10 +84,19 @@ presets:
 
 ## ── ASR backends ──────────────────────────────────────────────────────────────
 asr_backends:
-  mock:                                       # Mock backend for testing (no credentials needed)
+  # ── Normal ASR backends ──
+  mock:                                       # Returns a fixed response string (no credentials needed)
     type: mock
-    response: "The quick brown fox jumps over the lazy dog"  # Optional custom response
-    latency_ms: 100                           # Optional simulated latency
+    response: "The quick brown fox jumps over the lazy dog"
+    latency_ms: 100
+  mock-fwd:                               # Returns N words from transcript (N = audio_s / 2, forward)
+    type: mock-fwd
+    transcript_path: "test_data/group-2p-2.txt"
+    latency_ms: 50
+  mock-bwd:                               # Same as mock-fwd, words in reverse
+    type: mock-bwd
+    transcript_path: "test_data/group-2p-2.txt"
+    latency_ms: 50
   # openai:                                   # OpenAI Whisper API
   #   type: api
   #   api_base_url: "https://api.openai.com/v1/"
@@ -99,15 +128,28 @@ asr_backends:
   #   model:  ~/path/to/whisper.cpp/models/ggml-large-v3-turbo-q8_0.bin
   #   # language: auto                        # 'auto' or ISO-639-1 (e.g. fi, en)
   #   # threads: 4
+  # ── Diarization backends ──
+  # Presets that reference one of these as their asr_backend automatically trigger
+  # Requires: pip install asr2clip[diarize] for whisperx
+  # whisperx:                               # Real WhisperX + pyannote diarization
+  #   type: whisperx
+  #   hf_token: "hf_..."                    # or set HF_TOKEN env var
+  #   speakers_min: 2                       # optional speaker count hints
+  #   speakers_max: 6
+  mock-dia-2:                               # Mock: 2-speaker round-robin from transcript
+    type: mock-diarize
+    speaker_count: 2
+    transcript_path: "test_data/group-2p-2.txt"
+  mock-dia-3:                               # Mock: 3-speaker round-robin from transcript
+    type: mock-diarize
+    speaker_count: 3
+    transcript_path: "test_data/group-2p-2.txt"
 
 ## ── Diarization ───────────────────────────────────────────────────────────────
-## Speaker diarization via WhisperX. Requires: pip install asr2clip[diarize]
-## Enable per run with -D / --diarize. Replaces the configured ASR backend.
-## Output: "[HH:MM:SS] SPEAKER_NN: text" — name substitution is left to the caller.
-# diarize_hf_token: "hf_..."                  # HuggingFace token for pyannote model download
-#                                             # or set HF_TOKEN env var
-# diarize_min_speakers: 2                     # optional hint to pyannote; omit for auto
-# diarize_max_speakers: 6
+## Diarization backends (type: whisperx, type: mock-diarize) live in asr_backends like
+## any other ASR backend. Select one with -b / --backend or in a preset.
+## Output: "[HH:MM:SS] SPEAKER_NN: text" — speaker label substitution left to the caller.
+## Speaker-count hint: -s N is passed to the active backend; ignored by non-diarize backends.
 
 ## ── Post-processing (with AI models) ──────────────────────────────────────────
 # Post-processors send the transcript to an AI model and return structured output.
@@ -149,7 +191,7 @@ postprocessor_backends:                       # FIXME: Update this section based
 #   template:      output template name from output_templates below (default: "default")
 #   context_path:  list of file glob patterns; contents are injected into the LLM request
 postprocessors:                               # FIXME: Update this section based on your setup
-  mock-demo:                                  # Mock post-processor for testing (analyzes prompt and transcript)
+  mock-pp:                                    # Mock post-processor for testing (analyzes prompt and transcript)
     backend: mock
     prompt: "Enhance the transcript with great clarity and rigor"
 
@@ -274,8 +316,9 @@ postprocessors:                               # FIXME: Update this section based
 ## Placeholders: {result} {transcript} {date} {datetime}
 ##               {prompt_name} {model} {backend} {duration_s}
 output_templates:
-  bare: "{result}"
-  full: |
+  raw: "{transcript}"                         # No post processing
+  bare: "{result}"                            # Only the AI models output
+  full: |                                     # Both the AI output and the transcript on a Markdown template
     {result}
 
     ---
