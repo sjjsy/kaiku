@@ -36,7 +36,6 @@ from .transcribe import test_transcription, transcribe_audio, transcribe
 from .utils import (
     error,
     info,
-    log,
     print_key_value,
     print_separator,
     safe_unlink,
@@ -56,7 +55,7 @@ def test_config(config: Config) -> bool:
     Returns:
         True if all configured components are accessible.
     """
-    from .utils import print_error, print_success
+    from .utils import error, success
 
     backend = config.asr_backend
     info(f"Testing configuration (backend: {backend.name})...")
@@ -91,10 +90,10 @@ def test_config(config: Config) -> bool:
     preprocessor_name = config.preprocessor
     avail, hint = check_preprocessor_available(preprocessor_name)
     if avail:
-        print_success(f"Preprocessor: {preprocessor_name}")
+        success(f"Preprocessor: {preprocessor_name}")
         pp_ok = True
     else:
-        print_error(f"Preprocessor: {preprocessor_name} — NOT AVAILABLE  ({hint})")
+        error(f"Preprocessor: {preprocessor_name} — NOT AVAILABLE  ({hint})")
         pp_ok = False
 
     return backend_ok and pp_ok
@@ -104,7 +103,7 @@ def _test_postprocessors(config: Config) -> bool:
     """Check that post-processor backends are reachable. Returns True if all OK."""
     import shutil
     from .postprocessors import _resolve_backend, _resolve_prompt
-    from .utils import print_error, print_success
+    from .utils import error, success
 
     print_separator()
     info("Checking post-processors...")
@@ -113,14 +112,14 @@ def _test_postprocessors(config: Config) -> bool:
     model_override = config.postprocessor.model_override
 
     if not name or name == "none":
-        print_success("No post-processors configured to check")
+        success("No post-processors configured to check")
         return True
 
     try:
         resolved = _resolve_prompt(name, config._config_dict)
         backend_cfg = _resolve_backend(config._config_dict, resolved["backend_name"], model_override)
     except SystemExit:
-        print_error(f"Post-processor '{name}' — config error (see above)")
+        error(f"Post-processor '{name}' — config error (see above)")
         return False
 
     ok = True
@@ -130,27 +129,27 @@ def _test_postprocessors(config: Config) -> bool:
 
     if btype == "claude_code":
         if shutil.which("claude"):
-            print_success(f"Post-processor '{name}': claude_code{model_note}")
-            print_success("  claude CLI: found")
+            success(f"Post-processor '{name}': claude_code{model_note}")
+            success("  claude CLI: found")
         else:
-            print_error(f"Post-processor '{name}': claude_code{model_note}")
-            print_error("  claude CLI: NOT FOUND — install from https://claude.ai/code")
+            error(f"Post-processor '{name}': claude_code{model_note}")
+            error("  claude CLI: NOT FOUND — install from https://claude.ai/code")
             ok = False
 
     elif btype == "openai_compat":
         from .transcribe import test_transcription
         api_base = backend_cfg.get("api_base_url", "")
         api_key = backend_cfg.get("api_key", "sk-none")
-        print_success(f"Post-processor '{name}': openai_compat{model_note}")
+        success(f"Post-processor '{name}': openai_compat{model_note}")
         print_key_value("  Endpoint", api_base)
         if not test_transcription(api_key, api_base, model, None):
             ok = False
 
     elif btype == "mock":
-        print_success(f"Post-processor '{name}': mock (no credentials needed)")
+        success(f"Post-processor '{name}': mock (no credentials needed)")
 
     else:
-        print_error(f"Post-processor '{name}' — unknown backend type '{btype}'")
+        error(f"Post-processor '{name}' — unknown backend type '{btype}'")
         ok = False
 
     return ok
@@ -158,48 +157,47 @@ def _test_postprocessors(config: Config) -> bool:
 
 def _test_clipboard() -> bool:
     """Check clipboard availability. Returns True if OK."""
-    from .utils import print_error, print_success
+    from .utils import error, success
     import shutil, os
 
     print_separator()
     info("Checking clipboard...")
 
     if os.environ.get("WAYLAND_DISPLAY") and shutil.which("wl-copy"):
-        print_success("wl-copy available (Wayland)")
+        success("wl-copy available (Wayland)")
         return True
     try:
         import copykitten
         copykitten.copy("")
-        print_success("copykitten available (X11 / fallback)")
+        success("copykitten available (X11 / fallback)")
         return True
     except Exception as e:
-        from .utils import print_error
-        print_error(f"Clipboard unavailable: {e}")
-        print_error("  Install wl-copy (Wayland) or ensure copykitten works on X11")
+        error(f"Clipboard unavailable: {e}")
+        error("  Install wl-copy (Wayland) or ensure copykitten works on X11")
         return False
 
 
 def _test_diarization(config: Config) -> None:
     """Check diarization dependencies. Prints warnings; never blocks overall success."""
     import importlib.util
-    from .utils import print_success, print_warning
+    from .utils import success, warning
 
     print_separator()
     info("Checking diarization (optional)...")
 
     if importlib.util.find_spec("whisperx") is None:
-        print_warning("whisperx: not installed  →  pip install asr2clip[diarize]")
-        print_warning("  (backend type 'whisperx' will not work until installed)")
+        warning("whisperx: not installed  →  pip install asr2clip[diarize]")
+        warning("  (backend type 'whisperx' will not work until installed)")
         return
 
-    print_success("whisperx: installed")
+    success("whisperx: installed")
 
     hf_token = os.environ.get("HF_TOKEN")
     if hf_token:
         masked = f"{'*' * 8}...{hf_token[-4:]}" if len(hf_token) > 4 else "****"
-        print_success(f"HuggingFace token (HF_TOKEN): {masked}")
+        success(f"HuggingFace token (HF_TOKEN): {masked}")
     else:
-        print_warning(
+        warning(
             "HuggingFace token: not set\n"
             "  Set HF_TOKEN env var or add 'hf_token: hf_...' to the whisperx\n"
             "  entry in asr_backends."
@@ -224,24 +222,24 @@ def process_recording(config: Config):
         info(f"Mock device: loaded {duration:.1f}s from {mock_source}")
     else:
         setup_signal_handlers(daemon_mode=False)
-        log("Recording... Press Ctrl+C to stop (press twice to cancel)")
+        info("Recording... Press Ctrl+C to stop (press twice to cancel)")
         device_spec = config.recorder.device.get_spec(config.recorder.name)
         t0 = time.time()
         audio_data = record_audio(device=device_spec)
         duration = get_audio_duration(audio_data)
         if duration < 0.1:
-            log("Recording too short or empty. Exiting.")
+            info("Recording too short or empty. Exiting.")
             sys.exit(0)
         info(f"Recorded {duration:.1f}s of audio ({time.time() - t0:.1f}s elapsed)")
 
     preprocessor = make_preprocessor(config.preprocessor)
     if not isinstance(preprocessor, NonePreprocessor):
-        log(f"Preprocessing audio with {preprocessor.name}...")
+        info(f"Preprocessing audio with {preprocessor.name}...")
         t_pre = time.time()
         audio_data = preprocessor.process(audio_data, 16000)
         info(f"Preprocessing completed in {time.time() - t_pre:.2f}s")
 
-    log("Processing...")
+    info("Processing...")
     temp_path = save_audio(audio_data)
 
     try:
@@ -254,7 +252,7 @@ def process_recording(config: Config):
         info(f"Transcription completed in {time.time() - t1:.1f}s")
 
         if not transcript.strip():
-            log("No speech detected in the recording.")
+            info("No speech detected in the recording.")
             return
 
         is_diarized = config.asr_backend.type in ("whisperx", "mock-diarize")
@@ -270,7 +268,7 @@ def process_recording(config: Config):
             source="recording",
         )
         if not isinstance(postprocessor, NonePostProcessor):
-            log(f"Post-processing with '{postprocessor.name}'...")
+            info(f"Post-processing with '{postprocessor.name}'...")
             t_post = time.time()
             result = postprocessor.process(transcript, metadata=metadata)
             info(f"Post-processing completed in {time.time() - t_post:.1f}s")
@@ -285,6 +283,7 @@ def process_recording(config: Config):
         output_transcript(
             final, to_clipboard=True, to_stdout=True, to_file=config.output_file,
             max_clipboard_chars=config.clipboard_max_chars,
+            no_clipboard=config.no_clipboard,
         )
 
     finally:
@@ -302,13 +301,13 @@ def process_file(config: Config):
         print(f"File not found: {input_file}")
         sys.exit(1)
 
-    log(f"Processing file: {input_file}")
+    info(f"Processing file: {input_file}")
 
     if input_file.lower().endswith(".txt"):
         with open(input_file, encoding="utf-8") as fh:
             transcript = fh.read()
         if not transcript.strip():
-            log("Transcript file is empty.")
+            info("Transcript file is empty.")
             return
         from datetime import date
         postprocessor = make_postprocessor(config)
@@ -322,7 +321,7 @@ def process_file(config: Config):
             source="file",
         )
         if not isinstance(postprocessor, NonePostProcessor):
-            log(f"Post-processing with '{postprocessor.name}'...")
+            info(f"Post-processing with '{postprocessor.name}'...")
             t_post = time.time()
             result = postprocessor.process(transcript, metadata=metadata)
             info(f"Post-processing completed in {time.time() - t_post:.1f}s")
@@ -336,12 +335,13 @@ def process_file(config: Config):
         output_transcript(
             final, to_clipboard=True, to_stdout=True, to_file=config.output_file,
             max_clipboard_chars=config.clipboard_max_chars,
+            no_clipboard=config.no_clipboard,
         )
         return
 
     if not input_file.lower().endswith(".wav"):
         t0 = time.time()
-        log("Converting to WAV format...")
+        info("Converting to WAV format...")
         temp_path = convert_audio_to_wav(input_file)
         info(f"Conversion completed in {time.time() - t0:.1f}s")
         cleanup_temp = True
@@ -353,7 +353,7 @@ def process_file(config: Config):
     if not isinstance(preprocessor, NonePreprocessor):
         try:
             audio_data, sr = load_wav(temp_path)
-            log(f"Preprocessing audio with {preprocessor.name}...")
+            info(f"Preprocessing audio with {preprocessor.name}...")
             t_pre = time.time()
             audio_data = preprocessor.process(audio_data, sr)
             info(f"Preprocessing completed in {time.time() - t_pre:.2f}s")
@@ -375,7 +375,7 @@ def process_file(config: Config):
         info(f"Transcription completed in {time.time() - t1:.1f}s")
 
         if not transcript.strip():
-            log("No speech detected in the audio file.")
+            info("No speech detected in the audio file.")
             return
 
         try:
@@ -397,7 +397,7 @@ def process_file(config: Config):
             source="file",
         )
         if not isinstance(postprocessor, NonePostProcessor):
-            log(f"Post-processing with '{postprocessor.name}'...")
+            info(f"Post-processing with '{postprocessor.name}'...")
             t_post = time.time()
             result = postprocessor.process(transcript, metadata=metadata)
             info(f"Post-processing completed in {time.time() - t_post:.1f}s")
@@ -412,6 +412,7 @@ def process_file(config: Config):
         output_transcript(
             final, to_clipboard=True, to_stdout=True, to_file=config.output_file,
             max_clipboard_chars=config.clipboard_max_chars,
+            no_clipboard=config.no_clipboard,
         )
 
     finally:
@@ -458,15 +459,6 @@ See https://github.com/sjjsy/asr2clip for full documentation and configuration e
         default=None,
     )
     setup_group.add_argument(
-        "-x", "--preset", metavar="NAME",
-        default=None,
-        help=(
-            "Pipeline preset name (key under 'presets:' in config). "
-            "Presets define complete pipelines: ASR backend, preprocessor, post-processor. "
-            "Optional if 'default_preset' is set in config; CLI overrides still work (-b, -p, -P)."
-        ),
-    )
-    setup_group.add_argument(
         "-e", "--edit", action="store_true",
         help="Open configuration file in editor (creates default config if missing)",
     )
@@ -482,6 +474,15 @@ See https://github.com/sjjsy/asr2clip for full documentation and configuration e
         "--test", action="store_true",
         help="Test backend connectivity and configured preprocessors, then exit",
     )
+    setup_group.add_argument(
+        "-x", "--preset", metavar="NAME",
+        default=None,
+        help=(
+            "Pipeline preset name (key under 'presets:' in config). "
+            "Presets define complete pipelines: ASR backend, preprocessor, post-processor. "
+            "Optional if 'default_preset' is set in config; CLI overrides still work (-b, -p, -P)."
+        ),
+    )
 
     # Audio
     audio_group = parser.add_argument_group("Audio")
@@ -492,6 +493,15 @@ See https://github.com/sjjsy/asr2clip for full documentation and configuration e
     audio_group.add_argument(
         "-d", "--device", metavar="DEV",
         help="Audio input device (name, ALSA name, or index). Overrides config.",
+        default=None,
+    )
+    audio_group.add_argument(
+        "-i", "--input", metavar="FILE",
+        help=(
+            "Transcribe an existing audio or video file instead of recording. "
+            "Supported: wav, mp3, m4a, ogg, flac, aac, opus, wma, "
+            "mp4, mov, mkv, webm, avi, flv, mvi"
+        ),
         default=None,
     )
     audio_group.add_argument(
@@ -514,20 +524,6 @@ See https://github.com/sjjsy/asr2clip for full documentation and configuration e
         ),
     )
     trans_group.add_argument(
-        "-i", "--input", metavar="FILE",
-        help=(
-            "Transcribe an existing audio or video file instead of recording. "
-            "Supported: wav, mp3, m4a, ogg, flac, aac, opus, wma, "
-            "mp4, mov, mkv, webm, avi, flv, mvi"
-        ),
-        default=None,
-    )
-    trans_group.add_argument(
-        "-o", "--output", metavar="FILE",
-        help="Append transcripts to file",
-        default=None,
-    )
-    trans_group.add_argument(
         "-l", "--language", metavar="LANG",
         default=None,
         help=(
@@ -548,7 +544,7 @@ See https://github.com/sjjsy/asr2clip for full documentation and configuration e
         help="Max chunk duration in seconds for -r/--robust mode (default: 180)",
     )
     trans_group.add_argument(
-        "--toggle", action="store_true",
+        "-g", "--toggle", action="store_true",
         help=(
             "Toggle recording: first call starts, second call stops and transcribes. "
             "Designed for keyboard shortcuts."
@@ -650,13 +646,28 @@ See https://github.com/sjjsy/asr2clip for full documentation and configuration e
             "Overrides the post-processor config for this run."
         ),
     )
-    post_group.add_argument(
+
+    # Output
+    output_group = parser.add_argument_group("Output")
+    output_group.add_argument(
+        "-o", "--output", metavar="FILE",
+        help="Append transcripts to file",
+        default=None,
+    )
+    output_group.add_argument(
         "-T", "--template", metavar="NAME",
         default=None,
         help=(
             "Output template name from 'output_templates:' in config. "
             "Controls what is written to clipboard/-o FILE. "
             "Overrides the template specified in the prompt definition."
+        ),
+    )
+    output_group.add_argument(
+        "-z", "--no-clipboard", action="store_true",
+        help=(
+            "Do not copy the transcript (or a file path) to the system clipboard. "
+            "Stdout and -o output behave as usual."
         ),
     )
 
@@ -667,6 +678,10 @@ def main():
     """Main entry point for asr2clip."""
     parser = _build_parser()
     args = parser.parse_args()
+
+    quiet = args.quiet
+    setup_logging(verbose=not quiet)
+    set_verbose(not quiet)
 
     # Handle --generate_config and --print_config
     if args.print_config:
@@ -686,10 +701,6 @@ def main():
         return
 
     config = Config.from_file(args.config, args)
-
-    quiet = args.quiet
-    setup_logging(verbose=not quiet)
-    set_verbose(not quiet)
 
     if args.serve:
         from .local_asr import check_deps
@@ -713,9 +724,9 @@ def main():
         ok_clip = _test_clipboard()
         _test_diarization(config)
         print_separator()
-        success = ok_asr and ok_post and ok_clip
-        info("All checks passed." if success else "Some checks failed — see details above.")
-        sys.exit(0 if success else 1)
+        checks_ok = ok_asr and ok_post and ok_clip
+        info("All checks passed." if checks_ok else "Some checks failed — see details above.")
+        sys.exit(0 if checks_ok else 1)
 
     if args.toggle:
         from .toggle import toggle_recording

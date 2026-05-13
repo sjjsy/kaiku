@@ -114,25 +114,25 @@ def test(cfg: WhisperCppConfig) -> bool:
     Returns:
         True if binary and model are usable.
     """
-    from ..utils import print_error, print_key_value, print_success
+    from ..utils import error, print_key_value, success
 
     ok = True
 
     binary_path = shutil.which(cfg.binary) or cfg.binary
     if os.path.isfile(binary_path):
-        print_success(f"Binary found: {binary_path}")
+        success(f"Binary found: {binary_path}")
     else:
-        print_error(f"Binary not found: {cfg.binary}")
+        error(f"Binary not found: {cfg.binary}")
         ok = False
 
     if cfg.model:
         if os.path.isfile(cfg.model):
-            print_success(f"Model found: {cfg.model}")
+            success(f"Model found: {cfg.model}")
         else:
-            print_error(f"Model not found: {cfg.model}")
+            error(f"Model not found: {cfg.model}")
             ok = False
     else:
-        print_error("No model path configured (whisper_cpp.model)")
+        error("No model path configured (whisper_cpp.model)")
         ok = False
 
     if ok:

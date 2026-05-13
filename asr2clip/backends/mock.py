@@ -238,9 +238,9 @@ def test(cfg: MockConfig) -> bool:
     Returns:
         Always True (mock backend has no external dependencies).
     """
-    from ..utils import print_key_value, print_success
+    from ..utils import print_key_value, success
 
-    print_success("Mock backend is always available")
+    success("Mock backend is always available")
     if cfg.response != _DEFAULT_RESPONSE:
         print_key_value("Custom response", f"{len(cfg.response)} characters")
     if cfg.latency_ms > 0:

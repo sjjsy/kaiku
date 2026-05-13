@@ -8,8 +8,6 @@ import signal
 import subprocess
 import sys
 
-# Import logging functions from the new logging module
-# This provides backward compatibility while using the new structured logging
 from .logging import (
     debug,
     error,
@@ -17,26 +15,18 @@ from .logging import (
     get_logger,
     get_verbose,
     info,
-    log,
-    print_error,
     print_key_value,
-    print_recording_status,
     print_separator,
-    print_status,
-    print_success,
-    print_transcribe_status,
-    print_warning,
     set_verbose,
     setup_logging,
+    success,
     warning,
 )
 
 # Global state for signal handling
 stop_recording = False
 
-# Re-export logging functions for backward compatibility
 __all__ = [
-    "log",
     "set_verbose",
     "get_verbose",
     "setup_logging",
@@ -46,12 +36,7 @@ __all__ = [
     "warning",
     "error",
     "exception",
-    "print_status",
-    "print_recording_status",
-    "print_transcribe_status",
-    "print_success",
-    "print_error",
-    "print_warning",
+    "success",
     "print_separator",
     "print_key_value",
     "run_subprocess",
@@ -133,7 +118,7 @@ def run_subprocess(
 
     All keyword arguments are forwarded to subprocess.run().
     """
-    log("$ " + " ".join(shlex.quote(str(a)) for a in cmd))
+    info("$ " + " ".join(shlex.quote(str(a)) for a in cmd))
     return subprocess.run(cmd, **kwargs)
 
 
@@ -142,5 +127,5 @@ def popen_subprocess(cmd: list[str], **kwargs) -> "subprocess.Popen":
 
     All keyword arguments are forwarded to subprocess.Popen().
     """
-    log("$ " + " ".join(shlex.quote(str(a)) for a in cmd))
+    info("$ " + " ".join(shlex.quote(str(a)) for a in cmd))
     return subprocess.Popen(cmd, **kwargs)

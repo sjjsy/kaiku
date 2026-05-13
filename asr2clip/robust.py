@@ -14,7 +14,7 @@ from pydub.silence import detect_silence
 from .audio import audiosegment_to_float32, float32_to_audiosegment
 from .output import copy_transcript_to_clipboard, append_transcript_to_file
 from .transcribe import TranscriptionError, transcribe
-from .utils import info, log, safe_unlink, warning
+from .utils import info, safe_unlink, warning
 
 if TYPE_CHECKING:
     from .config_types import Config
@@ -90,7 +90,7 @@ def process_file_robust(config: "Config"):
         print(f"File not found: {input_file}")
         sys.exit(1)
 
-    log(f"Loading audio: {input_file}")
+    info(f"Loading audio: {input_file}")
     t0 = time.time()
     audio = AudioSegment.from_file(input_file)
     # Normalise to 16 kHz mono for consistent transcription
@@ -100,7 +100,7 @@ def process_file_robust(config: "Config"):
 
     preprocessor = make_preprocessor(config.preprocessor)
     if not isinstance(preprocessor, NonePreprocessor):
-        log(f"Preprocessing audio with {preprocessor.name}...")
+        info(f"Preprocessing audio with {preprocessor.name}...")
         t_pre = time.time()
         try:
             audio_np = audiosegment_to_float32(audio)
@@ -113,7 +113,7 @@ def process_file_robust(config: "Config"):
     max_chunk_ms = chunk_duration * 1000
     boundaries = _find_chunk_boundaries(audio, max_chunk_ms)
     n_chunks = len(boundaries)
-    log(f"Splitting into {n_chunks} chunk(s)")
+    info(f"Splitting into {n_chunks} chunk(s)")
 
     all_text_parts: list[str] = []
 
@@ -185,13 +185,13 @@ def process_file_robust(config: "Config"):
                     f.write(warning_line)
                 f.write(text)
                 f.write("\n\n")
-            log(f"Chunk {idx}/{n_chunks} appended to {output_file}")
+            info(f"Chunk {idx}/{n_chunks} appended to {output_file}")
         else:
             print(text)
             print()
 
     if not all_text_parts:
-        log("No speech detected in any chunk.")
+        info("No speech detected in any chunk.")
         return
 
     full_text = "\n\n".join(all_text_parts)
@@ -210,7 +210,7 @@ def process_file_robust(config: "Config"):
         source="file",
     )
     if not isinstance(postprocessor, NonePostProcessor):
-        log(f"Post-processing full transcript with '{postprocessor.name}'…")
+        info(f"Post-processing full transcript with '{postprocessor.name}'…")
         t_post = time.time()
         result = postprocessor.process(transcript, metadata=metadata)
         info(f"Post-processing completed in {time.time() - t_post:.1f}s")
@@ -222,8 +222,13 @@ def process_file_robust(config: "Config"):
         backend=postprocessor.backend_type,
     )
 
-    copy_transcript_to_clipboard(final, output_file, config.clipboard_max_chars)
+    copy_transcript_to_clipboard(
+        final,
+        output_file,
+        config.clipboard_max_chars,
+        no_clipboard=config.no_clipboard,
+    )
     if output_file:
-        log(f"Full transcript written to {output_file}")
+        info(f"Full transcript written to {output_file}")
 
-    log(f"Done. {n_chunks} chunk(s), {total_s:.0f}s audio transcribed.")
+    info(f"Done. {n_chunks} chunk(s), {total_s:.0f}s audio transcribed.")

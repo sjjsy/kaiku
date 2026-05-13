@@ -1,7 +1,9 @@
 """Structured logging for asr2clip.
 
-Provides a beautiful, structured logging system using Python's standard logging module
-with ANSI color codes for terminal output.
+Uses Python's ``logging`` module with ``ColoredFormatter`` on stderr. For CLI
+sections that need a different shape than ``timestamp │ LEVEL │ message`` (dim
+separators and key/value lines), this module also exposes ``print_separator`` and
+``print_key_value``, which write directly to stderr and do not create log records.
 """
 
 from __future__ import annotations
@@ -9,6 +11,11 @@ from __future__ import annotations
 import logging
 import os
 import sys
+
+# Between INFO (20) and WARNING (30): positive outcomes (tests, clipboard, …).
+# Quiet mode sets the logger to ERROR so these are suppressed with other INFO/WARN noise.
+LOG_SUCCESS = 25
+logging.addLevelName(LOG_SUCCESS, "OK")
 
 
 # ANSI color codes for terminal output
@@ -122,6 +129,7 @@ class ColoredFormatter(logging.Formatter):
     LEVEL_COLORS = {
         logging.DEBUG: Colors.DIM,
         logging.INFO: Colors.CYAN,
+        LOG_SUCCESS: Colors.BOLD_GREEN,
         logging.WARNING: Colors.YELLOW,
         logging.ERROR: Colors.BOLD_RED,
         logging.CRITICAL: Colors.BG_RED + Colors.WHITE,
@@ -131,6 +139,7 @@ class ColoredFormatter(logging.Formatter):
     LEVEL_NAMES = {
         logging.DEBUG: "DEBUG",
         logging.INFO: "INFO",
+        LOG_SUCCESS: "OK",
         logging.WARNING: "WARN",
         logging.ERROR: "ERROR",
         logging.CRITICAL: "CRIT",
@@ -216,7 +225,8 @@ def setup_logging(
     elif verbose:
         logger.setLevel(logging.INFO)
     else:
-        logger.setLevel(logging.WARNING)
+        # Quiet: only hard failures on stderr; transcript/template stays on stdout.
+        logger.setLevel(logging.ERROR)
 
     # Create console handler with colored formatting
     handler = logging.StreamHandler(sys.stderr)
@@ -262,7 +272,7 @@ def set_verbose(value: bool):
     if value:
         logger.setLevel(logging.INFO)
     else:
-        logger.setLevel(logging.WARNING)
+        logger.setLevel(logging.ERROR)
 
 
 def get_verbose() -> bool:
@@ -308,6 +318,14 @@ def warning(message: str, *args, **kwargs):
     get_logger().warning(message, *args, **kwargs)
 
 
+def success(message: str, *args, **kwargs):
+    """Log a positive outcome (same layout as info/warning; green level tag).
+
+    Suppressed in quiet mode (logger at ERROR) together with other non-error chatter.
+    """
+    get_logger().log(LOG_SUCCESS, message, *args, **kwargs)
+
+
 def error(message: str, *args, **kwargs):
     """Log an error message.
 
@@ -330,73 +348,12 @@ def exception(message: str, *args, **kwargs):
     get_logger().exception(message, *args, **kwargs)
 
 
-# Styled output functions for special messages
-def print_status(message: str, style: str = "info"):
-    """Print a styled status message.
-
-    Args:
-        message: The message to print.
-        style: Style name (info, warning, error, success, recording, transcribe).
-    """
-    style_colors = {
-        "info": Colors.CYAN,
-        "warning": Colors.YELLOW,
-        "error": Colors.BOLD_RED,
-        "success": Colors.BOLD_GREEN,
-        "recording": Colors.BOLD_MAGENTA,
-        "transcribe": Colors.BOLD_BLUE,
-    }
-    color = style_colors.get(style, "")
-    print(colorize(message, color), file=sys.stderr)
-
-
-def print_recording_status(message: str):
-    """Print a recording status message.
-
-    Args:
-        message: The message to print.
-    """
-    print_status(message, "recording")
-
-
-def print_transcribe_status(message: str):
-    """Print a transcription status message.
-
-    Args:
-        message: The message to print.
-    """
-    print_status(message, "transcribe")
-
-
-def print_success(message: str):
-    """Print a success message.
-
-    Args:
-        message: The message to print.
-    """
-    print_status(f"✓ {message}", "success")
-
-
-def print_error(message: str):
-    """Print an error message.
-
-    Args:
-        message: The message to print.
-    """
-    print_status(f"✗ {message}", "error")
-
-
-def print_warning(message: str):
-    """Print a warning message (non-fatal advisory).
-
-    Args:
-        message: The message to print.
-    """
-    print_status(f"⚠ {message}", "warning")
-
-
+# CLI layout helpers: stderr, no timestamp/level column (not LogRecords).
 def print_separator(char: str = "─", width: int = 40):
-    """Print a separator line.
+    """Print a dim separator line to stderr.
+
+    Used in ``asr2clip.py`` (``--test``, ``--print-config``, local-ASR / model
+    listing blocks) and ``daemon.py`` (banner around continuous mode).
 
     Args:
         char: Character to use for the separator.
@@ -406,7 +363,11 @@ def print_separator(char: str = "─", width: int = 40):
 
 
 def print_key_value(key: str, value: str):
-    """Print a key-value pair.
+    """Print a dim ``key:`` label and value to stderr (not a ``logging`` record).
+
+    Used in ``asr2clip.py`` (``--test`` success output), ``transcribe.py``
+    (``test_transcription``), ``backends/whisper_cpp.py`` (stderr passthrough
+    lines), and ``backends/mock.py`` (mock backend details).
 
     Args:
         key: The key/label.
@@ -414,17 +375,3 @@ def print_key_value(key: str, value: str):
     """
     key_formatted = colorize(f"  {key}:", Colors.DIM)
     print(f"{key_formatted} {value}", file=sys.stderr)
-
-
-# Backward compatibility: log function that respects verbose setting
-def log(message: str, **kwargs):
-    """Log a message if verbose mode is enabled.
-
-    This function provides backward compatibility with the old log() function.
-
-    Args:
-        message: The message to log.
-        **kwargs: Additional keyword arguments (ignored for compatibility).
-    """
-    if _verbose:
-        info(message)

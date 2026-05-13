@@ -20,6 +20,10 @@ We use them as assertions:
     result = _run("-i", wav, "-b", "wcpp", config=cfg)
     assert "Using backend: wcpp (CLI -b)" in result.stderr
 
+By default ``_run`` injects ``--no-clipboard`` so E2E runs avoid the system
+clipboard (no wl-copy / copykitten helper processes). Pass ``clipboard=True``
+only in tests that assert on clipboard behaviour.
+
 This verifies end-to-end that the CLI flag reached the right code path and
 that the correct value was selected — without importing a single module.
 
@@ -58,9 +62,21 @@ def _run(
     *args,
     config: Path,
     env: Optional[dict] = None,
+    clipboard: bool = False,
 ) -> subprocess.CompletedProcess:
+    """Run ``asr2clip`` as a subprocess (black-box E2E).
+
+    Unless ``clipboard=True`` is passed as a keyword argument, ``--no-clipboard``
+    is inserted after ``--config`` so the suite does not spawn wl-copy / copykitten
+    clipboard helpers. ``config`` and ``clipboard`` are keyword-only (they follow
+    ``*args``).
+    """
+    cmd = ["asr2clip", "--config", str(config)]
+    if not clipboard:
+        cmd.append("--no-clipboard")
+    cmd.extend(args)
     return subprocess.run(
-        ["asr2clip", "--config", str(config), *args],
+        cmd,
         capture_output=True, text=True,
         env=env,
     )
@@ -330,6 +346,39 @@ class TestMockPostprocessor:
         result = _run("-i", str(silent_wav), "-P", "mock-pp", config=example_cfg)
         assert result.returncode == 0
         assert len(result.stdout.strip()) > 0
+
+
+class TestClipboardE2E:
+    """Explicit clipboard-on tests (all other E2E runs use ``--no-clipboard`` via ``_run``)."""
+
+    def test_clipboard_opt_in_reports_transcript_copied(self, example_cfg, silent_wav):
+        """With ``clipboard=True``, stderr should report transcript text copied."""
+        result = _run(
+            "-i", str(silent_wav), "-b", "mock",
+            config=example_cfg,
+            clipboard=True,
+        )
+        assert result.returncode == 0
+        assert "Transcript text copied to clipboard" in result.stderr
+
+    def test_default_e2e_skips_clipboard(self, example_cfg, silent_wav):
+        """Default ``_run`` skips clipboard and logs why."""
+        result = _run("-i", str(silent_wav), "-b", "mock", config=example_cfg)
+        assert result.returncode == 0
+        assert "nothing was placed on the system clipboard" in result.stderr.lower()
+        assert "Transcript text copied to clipboard" not in result.stderr
+
+    def test_output_file_with_default_no_clipboard(self, example_cfg, silent_wav, tmp_path):
+        """-o with default E2E still writes file; clipboard remains skipped."""
+        out = tmp_path / "t.txt"
+        result = _run(
+            "-i", str(silent_wav), "-b", "mock", "-o", str(out),
+            config=example_cfg,
+        )
+        assert result.returncode == 0
+        assert out.exists()
+        assert "nothing was placed on the system clipboard" in result.stderr.lower()
+        assert MOCK_FIXED in out.read_text()
 
 
 # ---------------------------------------------------------------------------

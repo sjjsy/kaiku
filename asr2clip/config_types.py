@@ -505,9 +505,11 @@ class Config:
             error(f"Preset error: {e}")
             sys.exit(1)
 
-        info(f"Using preset: {preset_name}")
-        if preset.description:
-            info(f"  {preset.description}")
+        desc = (preset.description or "").strip()
+        if desc:
+            info(f"Using preset: {preset_name} — {desc}")
+        else:
+            info(f"Using preset: {preset_name}")
 
         return cls(config_dict, preset, args)
 
@@ -556,6 +558,11 @@ class Config:
     @property
     def output_file(self) -> Optional[str]:
         return getattr(self._args, "output", None)
+
+    @property
+    def no_clipboard(self) -> bool:
+        """True when ``--no-clipboard`` was passed (no wl-copy / copykitten)."""
+        return bool(getattr(self._args, "no_clipboard", False))
 
     @property
     def language(self) -> Optional[str]:

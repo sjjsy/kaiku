@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, NoReturn
 
 from asr2clip._vendor.httpclient import httpclient
 
-from .utils import error, print_error, print_key_value, print_success, warning
+from .utils import error, print_key_value, success, warning
 
 if TYPE_CHECKING:
     from .config_types import Config
@@ -238,19 +238,19 @@ def test_transcription(
             assert isinstance(response, httpclient.Response)
 
         if response.status_code == 200:
-            print_success("API connection successful")
+            success("API connection successful")
             print_key_value("Base URL", api_base_url)
             print_key_value("Model", model_name)
             return True
         else:
-            print_error(f"API returned status {response.status_code}")
+            error(f"API returned status {response.status_code}")
             print_key_value("Response", response.text[:200])
             return False
 
     except httpclient.HttpTimeoutError:
-        print_error("Connection timed out")
+        error("Connection timed out")
         return False
 
     except httpclient.HttpClientError as e:
-        print_error(f"Connection failed: {e}")
+        error(f"Connection failed: {e}")
         return False

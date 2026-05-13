@@ -13,7 +13,7 @@ from dataclasses import dataclass
 import numpy as np
 import sounddevice as sd
 
-from .utils import info, is_stop_requested, log, run_subprocess, warning
+from .utils import info, is_stop_requested, run_subprocess, warning
 
 
 @dataclass
@@ -190,7 +190,7 @@ def find_device(name: str) -> DeviceInfo | None:
         dev for dev in available if name_lower in dev.name.lower()
     ]
     if partial_matches:
-        log(f"Device '{name}' not exact; using first match: {partial_matches[0].name}")
+        info(f"Device '{name}' not exact; using first match: {partial_matches[0].name}")
         return partial_matches[0]
 
     return None
@@ -230,7 +230,7 @@ def resolve_device_preference_order(spec: str | list | None) -> list[DeviceInfo]
             tried.append(f"{name} (not available)")
 
     if tried:
-        log(f"Device preference order: {', '.join(tried)}")
+        info(f"Device preference order: {', '.join(tried)}")
 
     return resolved
 
@@ -394,9 +394,9 @@ def record_audio(
         except Exception as e:
             last_exc = e
             if rate == sample_rate:
-                log(f"Recording error at {rate} Hz: {e}. Trying device native rate...")
+                info(f"Recording error at {rate} Hz: {e}. Trying device native rate...")
                 continue
-            log(f"Recording error: {e}")
+            info(f"Recording error: {e}")
             raise
 
     if last_exc:

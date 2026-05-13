@@ -19,7 +19,6 @@ from .transcribe import TranscriptionError, transcribe_audio
 from .utils import (
     info,
     is_stop_requested,
-    log,
     print_separator,
     setup_signal_handlers,
     warning,
@@ -153,6 +152,7 @@ def _run_output_worker(
     state: RecorderState,
     output_file: str | None,
     max_clipboard_chars: int = _DEFAULT_CLIPBOARD_MAX_CHARS,
+    no_clipboard: bool = False,
 ):
     """Output transcription results in order."""
     while not is_stop_requested():
@@ -168,7 +168,9 @@ def _run_output_worker(
             if is_stop_requested():
                 break
 
-            _output_single_result(text, error, output_file, max_clipboard_chars)
+            _output_single_result(
+                text, error, output_file, max_clipboard_chars, no_clipboard
+            )
             state.next_output_sequence += 1
 
 
@@ -177,6 +179,7 @@ def _output_single_result(
     error: str | None,
     output_file: str | None,
     max_clipboard_chars: int = _DEFAULT_CLIPBOARD_MAX_CHARS,
+    no_clipboard: bool = False,
 ):
     """Output a single transcription result."""
     if error:
@@ -186,6 +189,7 @@ def _output_single_result(
         output_transcript(
             text, to_clipboard=True, to_stdout=True, to_file=output_file,
             max_clipboard_chars=max_clipboard_chars,
+            no_clipboard=no_clipboard,
         )
     else:
         print(f"\r{YELLOW}○{RESET} (no speech)" + " " * 30, flush=True)
@@ -376,17 +380,19 @@ def continuous_recording(
     executor = ThreadPoolExecutor(max_workers=max_concurrent_transcriptions)
 
     output_thread = threading.Thread(
-        target=_run_output_worker, args=(state, cfg.output_file, max_clipboard_chars), daemon=True
+        target=_run_output_worker,
+        args=(state, cfg.output_file, max_clipboard_chars, config.no_clipboard),
+        daemon=True,
     )
     output_thread.start()
 
     _run_recording_loop(cfg, state, executor)
 
-    log("\nProcessing remaining audio...")
+    info("\nProcessing remaining audio...")
     _transcribe_chunks(cfg, state, executor, skip_silence_check=False)
 
     if state.pending_tasks:
-        log("Waiting for pending transcriptions...")
+        info("Waiting for pending transcriptions...")
         executor.shutdown(wait=True, cancel_futures=False)
     else:
         executor.shutdown(wait=False, cancel_futures=True)
@@ -394,4 +400,4 @@ def continuous_recording(
     if output_thread.is_alive():
         output_thread.join(timeout=2.0)
 
-    log("Continuous recording stopped.")
+    info("Continuous recording stopped.")

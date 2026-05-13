@@ -19,7 +19,7 @@ from .postprocessors import NonePostProcessor, PostMetadata, format_output, make
 from .preprocessors import NonePreprocessor, make_preprocessor
 from .recorders import _kill_process, _pid_alive, make_recorder
 from .transcribe import transcribe
-from .utils import info, log, run_subprocess, safe_unlink, warning
+from .utils import info, run_subprocess, safe_unlink, warning
 
 if TYPE_CHECKING:
     from .config_types import Config
@@ -88,7 +88,7 @@ def _stop_and_transcribe(lock_path: str, config: "Config"):
             _transcribe_and_output(audio_path, config)
         return
 
-    log(f"Stopping recorder (pid {pid})…")
+    info(f"Stopping recorder (pid {pid})…")
     _kill_process(pid)
     os.unlink(lock_path)
 
@@ -99,7 +99,7 @@ def _stop_and_transcribe(lock_path: str, config: "Config"):
 
 def _transcribe_and_output(audio_path: str, config: "Config"):
     if not os.path.exists(audio_path) or os.path.getsize(audio_path) < 100:
-        log("Audio file is empty or missing — nothing to transcribe.")
+        info("Audio file is empty or missing — nothing to transcribe.")
         return
 
     duration = 0.0
@@ -116,7 +116,7 @@ def _transcribe_and_output(audio_path: str, config: "Config"):
     if not isinstance(preprocessor, NonePreprocessor):
         try:
             audio_data, sr = load_wav(audio_path)
-            log(f"Preprocessing audio with {preprocessor.name}…")
+            info(f"Preprocessing audio with {preprocessor.name}…")
             t_pre = time.time()
             audio_data = preprocessor.process(audio_data, sr)
             info(f"Preprocessing completed in {time.time() - t_pre:.2f}s")
@@ -149,7 +149,7 @@ def _transcribe_and_output(audio_path: str, config: "Config"):
     info(f"Transcription completed in {time.time() - t0:.1f}s")
 
     if not transcript.strip():
-        log("No speech detected.")
+        info("No speech detected.")
         _notify("asr2clip", "No speech detected.")
         return
 
@@ -166,7 +166,7 @@ def _transcribe_and_output(audio_path: str, config: "Config"):
         source="toggle",
     )
     if not isinstance(postprocessor, NonePostProcessor):
-        log(f"Post-processing with '{postprocessor.name}'…")
+        info(f"Post-processing with '{postprocessor.name}'…")
         t_post = time.time()
         result = postprocessor.process(transcript, metadata=metadata)
         info(f"Post-processing completed in {time.time() - t_post:.1f}s")
@@ -181,5 +181,6 @@ def _transcribe_and_output(audio_path: str, config: "Config"):
     output_transcript(
         final, to_clipboard=True, to_stdout=True, to_file=config.output_file,
         max_clipboard_chars=config.clipboard_max_chars,
+        no_clipboard=config.no_clipboard,
     )
     _notify("asr2clip", final[:100])

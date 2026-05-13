@@ -7,7 +7,7 @@ import shutil
 import tempfile
 from datetime import datetime
 
-from .utils import log, print_success, run_subprocess, warning
+from .utils import info, run_subprocess, success, warning
 
 # Default UX threshold for clipboard text vs file-path fallback.
 # Modern clipboards (X11 INCR, Wayland, macOS NSPasteboard, Windows) have no
@@ -31,7 +31,7 @@ def _wl_copy(text: str) -> bool:
     """Copy text using wl-copy (Wayland native, persists after exit).
 
     Args:
-        text: Text to copy.
+        text: Text to copy to the clipboard.
 
     Returns:
         True if successful, False otherwise.
@@ -73,7 +73,7 @@ def copy_to_clipboard(text: str) -> bool:
     Falls back to copykitten on X11 or when wl-copy is unavailable.
 
     Args:
-        text: Text to copy to clipboard.
+        text: Text to copy to the clipboard.
 
     Returns:
         True if successful, False otherwise.
@@ -97,14 +97,14 @@ def copy_to_clipboard(text: str) -> bool:
 def generate_timestamp_filename(
     prefix: str = "transcript", extension: str = "txt"
 ) -> str:
-    """Generate a filename with timestamp.
+    """Generate a filename with a timestamp.
 
     Args:
         prefix: Prefix for the filename.
         extension: File extension.
 
     Returns:
-        Filename with timestamp.
+        Filename with a timestamp.
     """
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     return f"{prefix}_{timestamp}.{extension}"
@@ -114,7 +114,7 @@ def append_transcript_to_file(text: str, filepath: str):
     """Append transcript text to a file with timestamp.
 
     Args:
-        text: Transcript text to append.
+        text: Transcript text.
         filepath: Path to the output file.
     """
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -127,7 +127,7 @@ def append_transcript_to_file(text: str, filepath: str):
     with open(filepath, "a", encoding="utf-8") as f:
         f.write(f"\n[{timestamp}]\n{text}\n")
 
-    log(f"Appended transcript to {filepath}")
+    info(f"Appended transcript to {filepath}")
 
 
 def _write_temp_transcript(text: str) -> str:
@@ -147,6 +147,8 @@ def copy_transcript_to_clipboard(
     text: str,
     output_file: str | None = None,
     max_chars: int = _DEFAULT_CLIPBOARD_MAX_CHARS,
+    *,
+    no_clipboard: bool = False,
 ) -> bool:
     """Copy transcript to clipboard.
 
@@ -161,17 +163,25 @@ def copy_transcript_to_clipboard(
         text: Transcript text.
         output_file: Path to the output file, if one was written.
         max_chars: Character threshold; 0 = always use file path.
+        no_clipboard: When True (``--no-clipboard``), skip all clipboard writes.
 
     Returns:
         True if something was copied to clipboard, False otherwise.
     """
+    if no_clipboard:
+        info(
+            "Clipboard: skipped (--no-clipboard); nothing was placed on the system clipboard "
+            "(stdout and -o file output are unchanged)"
+        )
+        return False
+
     use_path = (max_chars == 0) or (max_chars > 0 and len(text) > max_chars)
 
     if not use_path:
         if copy_to_clipboard(text):
-            print_success("Copied to clipboard")
+            success("Transcript text copied to clipboard")
             return True
-        warning("Failed to copy to clipboard")
+        warning("Failed to copy transcript text to clipboard")
         return False
 
     # Resolve the file path to copy
@@ -179,19 +189,19 @@ def copy_transcript_to_clipboard(
         path = os.path.abspath(output_file)
     elif max_chars == 0:
         path = _write_temp_transcript(text)
-        log(f"Transcript written to temp file (clipboard_max_chars=0): {path}")
+        info(f"Transcript written to temp file (clipboard_max_chars=0): {path}")
     else:
         # max_chars > 0 but text too long and no output file — copy full text anyway
         if copy_to_clipboard(text):
-            print_success("Copied to clipboard")
+            success("Transcript text copied to clipboard (long text, no -o path)")
             return True
-        warning("Failed to copy to clipboard")
+        warning("Failed to copy transcript text to clipboard")
         return False
 
     if copy_to_clipboard(path):
-        log(f"File path copied to clipboard: {path}")
+        success(f"Transcript file path copied to clipboard ({path})")
         return True
-    warning("Failed to copy file path to clipboard")
+    warning("Failed to copy transcript file path to clipboard")
     return False
 
 
@@ -201,6 +211,8 @@ def output_transcript(
     to_stdout: bool = True,
     to_file: str | None = None,
     max_clipboard_chars: int = _DEFAULT_CLIPBOARD_MAX_CHARS,
+    *,
+    no_clipboard: bool = False,
 ):
     """Output transcript to various destinations.
 
@@ -210,9 +222,15 @@ def output_transcript(
         to_stdout: Whether to print to stdout.
         to_file: Optional file path to append transcript to.
         max_clipboard_chars: Passed to copy_transcript_to_clipboard.
+        no_clipboard: When True, skip clipboard (same as CLI ``--no-clipboard``).
     """
     if to_clipboard:
-        copy_transcript_to_clipboard(text, to_file if to_file else None, max_clipboard_chars)
+        copy_transcript_to_clipboard(
+            text,
+            to_file if to_file else None,
+            max_clipboard_chars,
+            no_clipboard=no_clipboard,
+        )
 
     if to_stdout:
         print(text)
