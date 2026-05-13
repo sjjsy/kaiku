@@ -193,7 +193,13 @@ postprocessor_backends:                       # FIXME: Update this section based
 postprocessors:                               # FIXME: Update this section based on your setup
   mock-pp:                                    # Mock post-processor for testing (analyzes prompt and transcript)
     backend: mock
-    prompt: "Enhance the transcript with great clarity and rigor"
+    prompt: "Enhance the transcript with great clarity and rigor."
+
+  mock-pp2:                                    # Mock post-processor for testing (analyzes prompt and transcript)
+    extends: mock-pp
+    backend: mock
+    extra: |
+      Add a post script with a short poem on the beauty of human language.
 
   solo-base:                                  # Note this is a "base" and is not intended to be used as a post-processor directly; The solo-enhance was devised as the minimal post-processor.
     backend: groq
