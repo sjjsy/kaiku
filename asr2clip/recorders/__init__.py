@@ -6,11 +6,13 @@ import sys
 
 from .arecord import ArecordRecorder, _ALSA_PREFIXES
 from .base import AudioRecorder, _kill_process, _pid_alive
+from .mock import MockRecorder
 from .sounddevice_recorder import SounddeviceRecorder
 
 __all__ = [
     "AudioRecorder",
     "ArecordRecorder",
+    "MockRecorder",
     "SounddeviceRecorder",
     "PREFERENCE_ORDER",
     "VALID_NAMES",
@@ -22,13 +24,16 @@ __all__ = [
 
 # sounddevice is first: it is a required Python dependency and works on all platforms.
 # arecord is an explicit opt-in for users who want direct ALSA access on Linux.
+# mock is never auto-selected; it is chosen explicitly by RecorderConfig when a
+# mock_devices: entry is matched.
 PREFERENCE_ORDER = ["sounddevice", "arecord"]
 
-VALID_NAMES = ["auto"] + PREFERENCE_ORDER
+VALID_NAMES = ["auto", "mock"] + PREFERENCE_ORDER
 
 _CLASS_MAP: dict[str, type[AudioRecorder]] = {
     "sounddevice": SounddeviceRecorder,
     "arecord": ArecordRecorder,
+    "mock": MockRecorder,
 }
 
 

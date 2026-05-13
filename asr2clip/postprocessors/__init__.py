@@ -36,25 +36,17 @@ _FALLBACK_TEMPLATE = "{result}"
 # Config resolution helpers
 # ---------------------------------------------------------------------------
 
-def resolve_output_template(
-    config: "Config",
-    postprocessor_template: str = "{result}",
-    cli_override: str | None = None,
-) -> str:
+def resolve_output_template(config: "Config") -> str:
     """Return the output template string to use for this run.
 
-    Args:
-        config: Resolved Config instance.
-        postprocessor_template: Template from PostprocessorConfig (already resolved).
-        cli_override: -T/--template CLI override (highest priority).
-
     Lookup order:
-    1. -T/--template CLI override
-    2. The template string from PostprocessorConfig (if provided)
+    1. -T/--template CLI override (config.template)
+    2. Template from postprocessor definition (config.postprocessor.template)
     3. The 'default' entry in output_templates
     4. Built-in fallback: '{result}'
     """
     templates = config._config_dict.get("output_templates", {})
+    cli_override = config.template
 
     if cli_override:
         t = templates.get(cli_override)
@@ -67,7 +59,7 @@ def resolve_output_template(
         else:
             return t
 
-    # Use the already-resolved template from PostprocessorConfig
+    postprocessor_template = config.postprocessor.template
     if postprocessor_template and postprocessor_template != "{result}":
         return postprocessor_template
 
@@ -316,22 +308,19 @@ def _resolve_backend(
 # Public factory
 # ---------------------------------------------------------------------------
 
-def make_postprocessor(
-    name: str,
-    config: "Config",
-    model_override: str | None = None,
-) -> PostProcessor:
-    """Instantiate a post-processor by name from config.
+def make_postprocessor(config: "Config") -> PostProcessor:
+    """Instantiate a post-processor from the resolved config.
 
     Args:
-        name: Post-processor name (key in config['postprocessors']) or 'none'.
-              May also be a raw prompt string (contains spaces / length > 40).
-        config: Resolved Config instance.
-        model_override: Model name from -M/--post-model CLI flag (highest priority).
+        config: Resolved Config instance. Reads config.postprocessor.name and
+                config.postprocessor.model_override for resolution.
 
     Returns:
         A PostProcessor instance ready to call .process().
     """
+    name = config.postprocessor.name
+    model_override = config.postprocessor.model_override
+
     if name in (None, "none"):
         return NonePostProcessor()
 

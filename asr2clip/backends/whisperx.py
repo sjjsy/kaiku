@@ -1,28 +1,21 @@
-"""Speaker diarization via WhisperX.
+"""WhisperX diarization backend for asr2clip.
 
-When --diarize / -D is set, this module replaces the standard ASR backend entirely.
-WhisperX runs its own Whisper inference + word-level alignment + pyannote
-diarization in one pass — no double transcription.
+Performs speaker diarization: runs Whisper + word-level alignment + pyannote
+speaker assignment in one pass and returns a timestamped, speaker-attributed
+transcript.
 
 Output format: "[HH:MM:SS] SPEAKER_NN: text"
-Speaker label substitution (SPEAKER_00 → real names) is left to the calling
-assistant or post-processor, not done here.
+Speaker label substitution (SPEAKER_00 → real names) is left to the caller.
 
 Requires: pip install asr2clip[diarize]
 """
 
 from __future__ import annotations
 
-import os
-import sys
-from typing import TYPE_CHECKING
+from dataclasses import dataclass, field
+from typing import Optional
 
-if TYPE_CHECKING:
-    from .config_types import Config
-
-
-class DiarizationError(Exception):
-    pass
+from ..transcribe import TranscriptionError
 
 
 def _fmt_ts(seconds: float) -> str:
@@ -33,7 +26,7 @@ def _fmt_ts(seconds: float) -> str:
 
 
 def _format_transcript(segments: list[dict]) -> str:
-    """Merge consecutive same-speaker segments and format as timestamped turns."""
+    """Merge consecutive same-speaker segments into timestamped turns."""
     lines: list[str] = []
     current_speaker: str | None = None
     current_text: list[str] = []
@@ -41,7 +34,9 @@ def _format_transcript(segments: list[dict]) -> str:
 
     def flush() -> None:
         if current_text and current_speaker is not None:
-            lines.append(f"[{_fmt_ts(current_start)}] {current_speaker}: {' '.join(current_text).strip()}")
+            lines.append(
+                f"[{_fmt_ts(current_start)}] {current_speaker}: {' '.join(current_text).strip()}"
+            )
 
     for seg in segments:
         speaker = seg.get("speaker", "SPEAKER_00")
@@ -61,60 +56,62 @@ def _format_transcript(segments: list[dict]) -> str:
     return "\n".join(lines)
 
 
-def run_diarization(
-    audio_path: str,
-    config: "Config",
-    language: str | None = None,
-    num_speakers: int | None = None,
-) -> str:
-    """Run WhisperX on audio_path; return a speaker-attributed transcript.
+@dataclass
+class WhisperXConfig:
+    """Parameters for a WhisperX diarization run.
 
-    Format per turn: "[HH:MM:SS] SPEAKER_NN: text"
-    Speaker label substitution is left to the caller (assistant / post-processor).
+    Args:
+        hf_token: HuggingFace token for the pyannote speaker-diarization model.
+        min_speakers: Lower bound on speaker count passed to pyannote (optional).
+        max_speakers: Upper bound on speaker count passed to pyannote (optional).
+    """
+    hf_token: str
+    min_speakers: Optional[int] = None
+    max_speakers: Optional[int] = None
+
+
+def transcribe(
+    audio_path: str,
+    cfg: WhisperXConfig,
+    language: str | None = None,
+    timeout: float | None = None,
+) -> str:
+    """Run WhisperX on audio_path and return a speaker-attributed transcript.
 
     Args:
         audio_path: Path to a WAV or supported audio file.
-        config: Resolved Config instance (for HF token and speaker count hints).
+        cfg: WhisperX backend configuration (token + optional speaker hints).
         language: ISO-639-1 language code, or None for auto-detect.
-        num_speakers: Expected speaker count; overrides config hints when set.
+        timeout: Ignored; present for API compatibility.
 
     Returns:
-        Formatted speaker-attributed transcript string.
+        Formatted transcript string: "[HH:MM:SS] SPEAKER_NN: text" per turn.
 
     Raises:
-        DiarizationError: If whisperx is not installed or diarization fails.
+        TranscriptionError: If whisperx is not installed or the run fails.
     """
     try:
         import whisperx  # type: ignore
     except ImportError:
-        raise DiarizationError(
+        raise TranscriptionError(
             "whisperx is not installed.\n"
             "Install with: pip install asr2clip[diarize]\n"
             "Then accept the pyannote model licence at "
             "https://huggingface.co/pyannote/speaker-diarization-3.1\n"
-            "and set HF_TOKEN in your environment or 'diarize_hf_token' in config."
+            "and set HF_TOKEN in your environment or 'hf_token:' in the whisperx\n"
+            "asr_backends entry."
         )
 
     import torch
 
-    diarization_cfg = config.diarization
-
     device = "cuda" if torch.cuda.is_available() else "cpu"
     compute_type = "float16" if device == "cuda" else "int8"
 
-    hf_token = diarization_cfg.hf_token
-    if not hf_token:
-        raise DiarizationError(
-            "Diarization requires a HuggingFace token to download the pyannote model.\n"
-            "Set HF_TOKEN in your environment or add 'diarize_hf_token: hf_...' to config.\n"
-            "Accept the licence at https://huggingface.co/pyannote/speaker-diarization-3.1"
-        )
-
-    if num_speakers is not None:
-        min_speakers = max_speakers = num_speakers
-    else:
-        min_speakers = diarization_cfg.min_speakers
-        max_speakers = diarization_cfg.max_speakers
+    diarize_kwargs: dict = {}
+    if cfg.min_speakers is not None:
+        diarize_kwargs["min_speakers"] = cfg.min_speakers
+    if cfg.max_speakers is not None:
+        diarize_kwargs["max_speakers"] = cfg.max_speakers
 
     try:
         model = whisperx.load_model(
@@ -133,20 +130,14 @@ def run_diarization(
         )
 
         diarize_model = whisperx.DiarizationPipeline(
-            use_auth_token=hf_token, device=device
+            use_auth_token=cfg.hf_token, device=device
         )
-        diarize_kwargs: dict = {}
-        if min_speakers is not None:
-            diarize_kwargs["min_speakers"] = min_speakers
-        if max_speakers is not None:
-            diarize_kwargs["max_speakers"] = max_speakers
         diarize_segments = diarize_model(audio, **diarize_kwargs)
-
         result = whisperx.assign_word_speakers(diarize_segments, result)
 
-    except DiarizationError:
+    except TranscriptionError:
         raise
     except Exception as e:
-        raise DiarizationError(f"Diarization failed: {e}") from e
+        raise TranscriptionError(f"WhisperX diarization failed: {e}") from e
 
     return _format_transcript(result.get("segments", []))

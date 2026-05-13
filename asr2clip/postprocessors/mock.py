@@ -95,5 +95,5 @@ class MockPostProcessor(PostProcessor):
         return (
             f"Prompt analyzed: {prompt_analysis}\n"
             f"Transcript analyzed: {transcript_analysis}\n"
-            f"*Yours truly, {model_title}\n*"
+            f"*Yours truly, {model_title}*\n"
         )

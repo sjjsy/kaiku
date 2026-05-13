@@ -1,25 +1,33 @@
 """Configuration type definitions and resolution classes.
 
 Each Config class owns its domain completely: defaults, env vars, fallbacks,
-validation, and logging. All resolution happens once at startup and is cached.
+validation, and logging. All resolution happens lazily via cached_property on
+first access, sourced from the argparse Namespace (_args) and the YAML config
+dict (_config_dict). No CliOverrides translation layer; _args is stored directly.
 """
 
 from __future__ import annotations
 
+import functools
 import os
-from dataclasses import dataclass, field
-from typing import Optional
+import sys
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, Optional
 
 from .audio import DeviceInfo
 from .utils import info, warning
 
+if TYPE_CHECKING:
+    pass
+
+
+# ---------------------------------------------------------------------------
+# Preset (plain data container — not a resolver)
+# ---------------------------------------------------------------------------
 
 @dataclass(frozen=True)
 class Preset:
     """Pipeline preset: an atomic combination of all processing stages.
-
-    Presets allow users to define complete pipelines in config and select
-    one per run. All stages must be explicitly specified — no defaults.
 
     Format in config: [preprocessor, asr_backend, postprocessor, description]
     This order matches the pipeline flow: audio → preprocess → ASR → postprocess → output.
@@ -32,7 +40,6 @@ class Preset:
     description: Optional[str] = None
 
     def validate(self) -> None:
-        """Validate preset completeness. Raises ValueError if incomplete."""
         if not self.preprocessor:
             raise ValueError(f"Preset '{self.name}': preprocessor is required")
         if not self.asr_backend or self.asr_backend == "none":
@@ -42,24 +49,12 @@ class Preset:
 
     @classmethod
     def from_dict(cls, name: str, defn) -> "Preset":
-        """Create Preset from a config entry (list format only).
-
-        List format: [preprocessor, asr_backend, postprocessor, description]
-        """
-        if not isinstance(defn, list):
+        if not isinstance(defn, list) or len(defn) != 4:
             raise ValueError(
                 f"Preset '{name}' must be a 4-element list: "
                 "[preprocessor, asr_backend, postprocessor, description]"
             )
-
-        if len(defn) != 4:
-            raise ValueError(
-                f"Preset '{name}' list must have exactly 4 elements: "
-                "[preprocessor, asr_backend, postprocessor, description]"
-            )
-
         preprocessor, asr_backend, postprocessor, description = defn
-
         preset = cls(
             name=name,
             preprocessor=preprocessor,
@@ -72,259 +67,299 @@ class Preset:
         return preset
 
 
-@dataclass
-class CliOverrides:
-    """CLI flag overrides for config values.
+# ---------------------------------------------------------------------------
+# ASRBackendConfig
+# ---------------------------------------------------------------------------
 
-    Precedence: Individual component flags override preset components.
-    Example: --preset fast --backend groq uses preset 'fast' but overrides
-    its ASR backend with 'groq'.
-    """
-    preset: Optional[str] = None
-    backend: Optional[str] = None
-    preprocessor: Optional[str] = None
-    device: Optional[str] = None
-    post: Optional[str] = None
-    post_model: Optional[str] = None
-    # local ASR server (--serve / --download-model); None means use YAML / built-in default
-    local_asr_host: Optional[str] = None
-    local_asr_port: Optional[int] = None
-    local_asr_model_dir: Optional[str] = None
-    local_asr_num_threads: Optional[int] = None
-    local_asr_models_config: Optional[str] = None  # path to sherpa models.yaml
-
-
-@dataclass(frozen=True)
-class LocalAsrConfig:
-    """Resolved settings for the bundled sherpa-onnx HTTP server (`--serve`, `--download-model`)."""
-
-    host: str
-    port: int
-    model_dir: Optional[str]
-    num_threads: int
-    models_config_path: Optional[str] = None
-
-    @classmethod
-    def resolve(cls, config_dict: dict, cli: CliOverrides) -> "LocalAsrConfig":
-        """Merge optional ``local_asr:`` YAML block with CLI overrides (CLI wins)."""
-        raw = config_dict.get("local_asr") or {}
-        if not isinstance(raw, dict):
-            raw = {}
-        host = cli.local_asr_host if cli.local_asr_host is not None else raw.get("host") or "127.0.0.1"
-        port = (
-            cli.local_asr_port
-            if cli.local_asr_port is not None
-            else int(raw.get("port", 8000))
-        )
-        model_dir = (
-            cli.local_asr_model_dir
-            if cli.local_asr_model_dir is not None
-            else raw.get("model_dir")
-        )
-        if model_dir:
-            model_dir = os.path.expanduser(str(model_dir))
-        num_threads = (
-            cli.local_asr_num_threads
-            if cli.local_asr_num_threads is not None
-            else int(raw.get("num_threads", 4))
-        )
-        mpath = (
-            cli.local_asr_models_config
-            if cli.local_asr_models_config is not None
-            else (raw.get("models_config") or raw.get("models_config_path"))
-        )
-        if mpath:
-            mpath = os.path.expanduser(str(mpath))
-        return cls(
-            host=host,
-            port=port,
-            model_dir=model_dir,
-            num_threads=num_threads,
-            models_config_path=mpath,
-        )
-
-
-@dataclass(frozen=True)
 class ASRBackendConfig:
-    """Resolved ASR (transcription) backend configuration."""
-    name: str
-    type: str  # "api", "whisper_cpp", or "mock"
-    # API-specific
-    api_key: Optional[str] = None
-    api_base_url: Optional[str] = None
-    model_name: Optional[str] = None
-    org_id: Optional[str] = None
-    # whisper.cpp-specific
-    binary: Optional[str] = None
-    model: Optional[str] = None
-    threads: Optional[int] = None
-    # mock-specific
-    response: Optional[str] = None
-    latency_ms: Optional[int] = None
+    """Lazy-resolved ASR backend configuration.
 
-    @classmethod
-    def resolve(
-        cls,
-        config_dict: dict,
-        backend_name: str,
-    ) -> ASRBackendConfig:
-        """Resolve ASR backend configuration.
+    Reads from asr_backends[name] in the YAML config dict. Backend name is
+    resolved from CLI -b flag (highest priority) or the selected preset.
+    All properties are cached on first access.
+    """
 
-        Args:
-            config_dict: Full configuration dictionary.
-            backend_name: Name of the backend (from preset or CLI override).
+    def __init__(self, config_dict: dict, preset: Preset, args: Any) -> None:
+        self._config_dict = config_dict
+        self._preset = preset
+        self._args = args
 
-        All logic: env var fallback, defaults, validation, logging.
-        """
-        # Fetch backend definition
-        backends = config_dict.get("asr_backends", {})
-        if backend_name not in backends:
+    @functools.cached_property
+    def name(self) -> str:
+        n = getattr(self._args, "backend", None) or self._preset.asr_backend
+        source = "CLI -b" if getattr(self._args, "backend", None) else f"preset '{self._preset.name}'"
+        info(f"Using backend: {n} ({source})")
+        return n
+
+    @functools.cached_property
+    def _defn(self) -> dict:
+        backends = self._config_dict.get("asr_backends", {})
+        if self.name not in backends:
+            raise ValueError(
+                f"Backend '{self.name}' not found. Available: {', '.join(backends)}"
+            )
+        return backends[self.name]
+
+    @functools.cached_property
+    def type(self) -> str:
+        return self._defn.get("type", "api")
+
+    @functools.cached_property
+    def api_key(self) -> Optional[str]:
+        if self.type not in ("api",):
+            return None
+        key = self._defn.get("api_key") or os.environ.get("OPENAI_API_KEY")
+        if not key:
+            raise ValueError(
+                f"Backend '{self.name}' requires api_key. "
+                "Set in config or OPENAI_API_KEY env var."
+            )
+        key_source = "config" if self._defn.get("api_key") else "env var OPENAI_API_KEY"
+        info(f"  API key: from {key_source}")
+        return key
+
+    @functools.cached_property
+    def api_base_url(self) -> Optional[str]:
+        url = self._defn.get("api_base_url")
+        if self.type == "api" and not url:
+            raise ValueError(f"Backend '{self.name}' requires api_base_url in config.")
+        if url:
+            info(f"  URL: {url}")
+        return url
+
+    @functools.cached_property
+    def model_name(self) -> Optional[str]:
+        m = self._defn.get("model_name")
+        if self.type == "api" and not m:
+            raise ValueError(f"Backend '{self.name}' requires model_name in config.")
+        return m
+
+    @functools.cached_property
+    def org_id(self) -> Optional[str]:
+        return self._defn.get("org_id") or os.environ.get("OPENAI_ORG_ID")
+
+    @functools.cached_property
+    def binary(self) -> Optional[str]:
+        b = os.path.expanduser(self._defn.get("binary") or "")
+        if self.type == "whisper_cpp" and not b:
+            raise ValueError(f"Backend '{self.name}' requires binary path in config.")
+        if b:
+            info(f"  Binary: {b}")
+        return b or None
+
+    @functools.cached_property
+    def model(self) -> Optional[str]:
+        m = os.path.expanduser(self._defn.get("model") or "")
+        if self.type == "whisper_cpp" and not m:
+            raise ValueError(f"Backend '{self.name}' requires model path in config.")
+        if m:
+            info(f"  Model: {m}")
+        return m or None
+
+    @functools.cached_property
+    def threads(self) -> int:
+        t = self._defn.get("threads", 4)
+        if self.type == "whisper_cpp":
+            info(f"  Threads: {t}")
+        return t
+
+    @functools.cached_property
+    def response(self) -> Optional[str]:
+        r = self._defn.get("response")
+        if r:
+            info(f"  Response: {len(r)} characters")
+        return r
+
+    @functools.cached_property
+    def latency_ms(self) -> int:
+        ms = self._defn.get("latency_ms", 0)
+        if ms:
+            info(f"  Simulated latency: {ms}ms")
+        return ms
+
+    @functools.cached_property
+    def transcript_path(self) -> Optional[str]:
+        p = self._defn.get("transcript_path")
+        if p:
+            info(f"  Transcript: {p}")
+        return os.path.expanduser(p) if p else None
+
+    @functools.cached_property
+    def speaker_count(self) -> Optional[int]:
+        v = self._defn.get("speaker_count")
+        return int(v) if v is not None else None
+
+    @functools.cached_property
+    def hf_token(self) -> Optional[str]:
+        token = self._defn.get("hf_token") or os.environ.get("HF_TOKEN")
+        if token:
+            src = "asr_backends entry" if self._defn.get("hf_token") else "env var HF_TOKEN"
+            info(f"  HF token: from {src}")
+        return token
+
+    @functools.cached_property
+    def min_speakers(self) -> Optional[int]:
+        v = self._defn.get("speakers_min")
+        return int(v) if v is not None else None
+
+    @functools.cached_property
+    def max_speakers(self) -> Optional[int]:
+        v = self._defn.get("speakers_max")
+        return int(v) if v is not None else None
+
+
+# ---------------------------------------------------------------------------
+# PostprocessorConfig (merges old PostprocessorConfig + PostprocessorBackendConfig)
+# ---------------------------------------------------------------------------
+
+class PostprocessorConfig:
+    """Lazy-resolved post-processor configuration.
+
+    Reads from postprocessors[name] in the YAML config dict. Name is resolved
+    from CLI -P flag (highest priority) or the selected preset.
+    """
+
+    def __init__(self, config_dict: dict, preset: Preset, args: Any) -> None:
+        self._config_dict = config_dict
+        self._preset = preset
+        self._args = args
+
+    @functools.cached_property
+    def name(self) -> str:
+        n = getattr(self._args, "post", None) or self._preset.postprocessor
+        source = "CLI -P" if getattr(self._args, "post", None) else f"preset '{self._preset.name}'"
+        info(f"Using post-processor: {n} ({source})")
+        return n
+
+    @functools.cached_property
+    def _defn(self) -> dict:
+        if self.name == "none":
+            return {}
+        postprocessors = self._config_dict.get("postprocessors", {})
+        if self.name not in postprocessors:
+            available = ", ".join(postprocessors.keys())
+            raise ValueError(
+                f"Postprocessor '{self.name}' not found. Available: {available}"
+            )
+        return postprocessors[self.name]
+
+    @functools.cached_property
+    def template(self) -> str:
+        return self._defn.get("template", "{result}")
+
+    @functools.cached_property
+    def backend_name(self) -> str:
+        if self.name == "none":
+            return "none"
+        bn = self._defn.get("backend")
+        if not bn:
+            backends = self._config_dict.get("postprocessor_backends", {})
+            bn = next(iter(backends.keys()), "none") if backends else "none"
+        if bn:
+            info(f"  Post-processor backend: {bn}")
+        model_override = getattr(self._args, "post_model", None) or self._defn.get("model")
+        if model_override:
+            info(f"  Post-processor model override: {model_override}")
+        return bn
+
+    @functools.cached_property
+    def model_override(self) -> Optional[str]:
+        return getattr(self._args, "post_model", None) or self._defn.get("model")
+
+    @functools.cached_property
+    def _backend_defn(self) -> dict:
+        if self.backend_name == "none":
+            return {}
+        backends = self._config_dict.get("postprocessor_backends", {})
+        if self.backend_name not in backends:
             available = ", ".join(backends.keys())
             raise ValueError(
-                f"Backend '{backend_name}' not found. Available: {available}"
+                f"Post-processor backend '{self.backend_name}' not found. Available: {available}"
             )
+        return backends[self.backend_name]
 
-        defn = backends[backend_name]
-        btype = defn.get("type", "api")
+    @functools.cached_property
+    def backend_type(self) -> str:
+        return self._backend_defn.get("type", "openai_compat") if self._backend_defn else "none"
 
-        # Resolve based on type
-        if btype == "api":
-            api_key = defn.get("api_key") or os.environ.get("OPENAI_API_KEY")
-            if not api_key:
-                raise ValueError(
-                    f"Backend '{backend_name}' requires api_key. "
-                    f"Set in config or OPENAI_API_KEY env var."
-                )
+    @functools.cached_property
+    def backend_api_key(self) -> Optional[str]:
+        defn = self._backend_defn
+        if not defn:
+            return None
+        key = defn.get("api_key")
+        api_key_env = defn.get("api_key_env")
+        if key is None and api_key_env:
+            key = os.environ.get(api_key_env)
+        if key is None:
+            key = os.environ.get("OPENAI_API_KEY")
+        return key
 
-            api_base_url = defn.get("api_base_url")
-            if not api_base_url:
-                raise ValueError(
-                    f"Backend '{backend_name}' requires api_base_url in config."
-                )
+    @functools.cached_property
+    def backend_api_base_url(self) -> Optional[str]:
+        return self._backend_defn.get("api_base_url") if self._backend_defn else None
 
-            model_name = defn.get("model_name")
-            if not model_name:
-                raise ValueError(
-                    f"Backend '{backend_name}' requires model_name in config."
-                )
-
-            org_id = defn.get("org_id") or os.environ.get("OPENAI_ORG_ID")
-
-            key_source = "config" if defn.get("api_key") else "env var OPENAI_API_KEY"
-            info(f"  API key: from {key_source}")
-            info(f"  URL: {api_base_url}")
-
-            return cls(
-                name=backend_name,
-                type="api",
-                api_key=api_key,
-                api_base_url=api_base_url,
-                model_name=model_name,
-                org_id=org_id,
-            )
-
-        elif btype == "whisper_cpp":
-            binary = os.path.expanduser(defn.get("binary") or "")
-            if not binary:
-                raise ValueError(
-                    f"Backend '{backend_name}' requires binary path in config."
-                )
-            model = os.path.expanduser(defn.get("model") or "")
-            if not model:
-                raise ValueError(
-                    f"Backend '{backend_name}' requires model path in config."
-                )
-            threads = defn.get("threads", 4)
-
-            info(f"  Binary: {binary}")
-            info(f"  Model: {model}")
-            info(f"  Threads: {threads}")
-
-            return cls(
-                name=backend_name,
-                type="whisper_cpp",
-                binary=binary,
-                model=model,
-                threads=threads,
-            )
-
-        elif btype == "mock":
-            response = defn.get("response")
-            latency_ms = defn.get("latency_ms", 0)
-
-            if response:
-                info(f"  Response: {len(response)} characters")
-            if latency_ms:
-                info(f"  Simulated latency: {latency_ms}ms")
-
-            return cls(
-                name=backend_name,
-                type="mock",
-                response=response,
-                latency_ms=latency_ms,
-            )
-
-        else:
-            raise ValueError(f"Unknown backend type: {btype}")
+    @functools.cached_property
+    def model(self) -> Optional[str]:
+        return self.model_override or (self._backend_defn.get("model") if self._backend_defn else None)
 
 
-@dataclass(frozen=True)
-class PreprocessorConfig:
-    """Resolved audio preprocessor configuration."""
-    name: str  # "none", "noisereduce", "deepfilter", "pyrnnoise"
+# ---------------------------------------------------------------------------
+# RecorderConfig
+# ---------------------------------------------------------------------------
 
-    @classmethod
-    def resolve(
-        cls,
-        config_dict: dict,
-        preset_name: str = "none",
-        cli_override: Optional[str] = None,
-    ) -> PreprocessorConfig:
-        """Resolve preprocessor from CLI override or preset."""
-        name = cli_override if cli_override else preset_name
-        return cls(name=name)
-
-
-@dataclass(frozen=True)
 class RecorderConfig:
-    """Resolved audio input recorder configuration."""
-    name: str  # "sounddevice", "arecord"
-    device: Optional[DeviceInfo] = None
+    """Lazy-resolved audio input recorder and device configuration."""
 
-    @classmethod
-    def resolve(
-        cls,
-        config_dict: dict,
-        cli_device_override: Optional[str] = None,
-    ) -> RecorderConfig:
-        """Resolve recorder and audio device."""
-        from .audio import resolve_device_preference_order
+    def __init__(self, config_dict: dict, args: Any) -> None:
+        self._config_dict = config_dict
+        self._args = args
+
+    @functools.cached_property
+    def _resolved(self) -> tuple:
+        from .audio import DeviceInfo, resolve_device_preference_order
         from .recorders import PREFERENCE_ORDER, _CLASS_MAP
 
-        # Resolve device preference order
-        device_spec = cli_device_override or config_dict.get("audio_device") or "auto"
+        cli_device = getattr(self._args, "device", None)
+        device_spec = cli_device or self._config_dict.get("audio_device") or "auto"
+
+        # Check mock_devices before querying real hardware.
+        # A mock device spec is any comma-separated token that appears as a key
+        # in the config's mock_devices: section.
+        mock_devices = self._config_dict.get("mock_devices", {})
+        specs = [s.strip() for s in device_spec.split(",")] if isinstance(device_spec, str) else [str(s) for s in device_spec]
+        for spec in specs:
+            if spec in mock_devices:
+                mock_cfg = mock_devices[spec]
+                source_file = os.path.expanduser(mock_cfg.get("source_file", ""))
+                if not source_file or not os.path.exists(source_file):
+                    warning(f"Mock device '{spec}' source file not found: {source_file!r}")
+                    continue
+                device_info = DeviceInfo(
+                    index=-1, name=spec, portaudio_name=None, alsa_name=None,
+                    channels=1, sample_rate=16000, mock_source=source_file,
+                )
+                info(f"Using mock device: {spec} (source: {source_file}) (from mock_devices config)")
+                return "mock", device_info
+
         devices = resolve_device_preference_order(device_spec)
 
         if not devices:
-            if cli_device_override:
-                warning(f"None of the devices in '{cli_device_override}' are available.")
+            if cli_device:
+                warning(f"None of the devices in '{cli_device}' are available.")
             device_info = None
         else:
             device_info = devices[0]
             if device_info:
                 info(f"Using device: {device_info.name}")
 
-        # Determine recorder: prefer arecord for ALSA-only devices
         recorder_name = None
         if device_info and device_info.portaudio_name is None and device_info.alsa_name:
-            # ALSA-only device, prefer arecord
             recorder_name = "arecord"
         else:
-            # Use default preference order (sounddevice first, then arecord)
             for candidate in PREFERENCE_ORDER:
                 if candidate in _CLASS_MAP:
-                    recorder_class = _CLASS_MAP[candidate]()
-                    if recorder_class.is_available():
+                    if _CLASS_MAP[candidate]().is_available():
                         recorder_name = candidate
                         break
 
@@ -332,400 +367,110 @@ class RecorderConfig:
             raise ValueError("No audio recorders available (sounddevice or arecord)")
 
         info(f"Using recorder: {recorder_name}")
-        return cls(name=recorder_name, device=device_info)
+        return recorder_name, device_info
+
+    @property
+    def name(self) -> str:
+        return self._resolved[0]
+
+    @property
+    def device(self) -> Optional[DeviceInfo]:
+        return self._resolved[1]
 
 
-@dataclass(frozen=True)
-class PostprocessorConfig:
-    """Resolved LLM post-processor configuration."""
-    name: str
-    backend_name: str
-    model_override: Optional[str] = None
-    template: str = "{result}"
+# ---------------------------------------------------------------------------
+# DiarizationConfig
+# ---------------------------------------------------------------------------
 
-    @classmethod
-    def resolve(
-        cls,
-        config_dict: dict,
-        preset_post: str = "none",
-        cli_post_override: Optional[str] = None,
-        cli_model_override: Optional[str] = None,
-    ) -> PostprocessorConfig:
-        """Resolve post-processor and its backend from CLI override or preset."""
-        post_name = cli_post_override if cli_post_override else preset_post
 
-        if post_name == "none":
-            return cls(
-                name="none",
-                backend_name="none",
-                template="{result}",
-            )
 
-        # Fetch postprocessor definition
-        postprocessors = config_dict.get("postprocessors", {})
-        if post_name not in postprocessors:
-            available = ", ".join(postprocessors.keys())
-            raise ValueError(
-                f"Postprocessor '{post_name}' not found. Available: {available}"
-            )
+# ---------------------------------------------------------------------------
+# LocalAsrConfig
+# ---------------------------------------------------------------------------
 
-        defn = postprocessors[post_name]
+class LocalAsrConfig:
+    """Lazy-resolved settings for the bundled sherpa-onnx HTTP server."""
 
-        # Handle prompt inheritance (extends + extra)
-        # For now, just get the base prompt; full inheritance handled elsewhere
-        backend_name = defn.get("backend")
-        model_override = cli_model_override or defn.get("model")
-        template = defn.get("template", "{result}")
+    def __init__(self, config_dict: dict, args: Any) -> None:
+        self._config_dict = config_dict
+        self._args = args
 
-        if not backend_name:
-            # Use first available backend as default
-            backends = config_dict.get("postprocessor_backends", {})
-            if backends:
-                backend_name = next(iter(backends.keys()))
-            else:
-                backend_name = "none"
+    @functools.cached_property
+    def _raw(self) -> dict:
+        raw = self._config_dict.get("local_asr") or {}
+        return raw if isinstance(raw, dict) else {}
 
-        info(f"  Post-processor backend: {backend_name}")
-        if model_override:
-            info(f"  Post-processor model override: {model_override}")
+    @functools.cached_property
+    def host(self) -> str:
+        return getattr(self._args, "host", None) or self._raw.get("host") or "127.0.0.1"
 
-        return cls(
-            name=post_name,
-            backend_name=backend_name,
-            model_override=model_override,
-            template=template,
+    @functools.cached_property
+    def port(self) -> int:
+        v = getattr(self._args, "port", None)
+        return int(v) if v is not None else int(self._raw.get("port", 8000))
+
+    @functools.cached_property
+    def model_dir(self) -> Optional[str]:
+        v = getattr(self._args, "model_dir", None) or self._raw.get("model_dir")
+        return os.path.expanduser(str(v)) if v else None
+
+    @functools.cached_property
+    def num_threads(self) -> int:
+        v = getattr(self._args, "num_threads", None)
+        return int(v) if v is not None else int(self._raw.get("num_threads", 4))
+
+    @functools.cached_property
+    def models_config_path(self) -> Optional[str]:
+        v = (
+            getattr(self._args, "local_asr_models_config", None)
+            or self._raw.get("models_config")
+            or self._raw.get("models_config_path")
         )
+        return os.path.expanduser(str(v)) if v else None
 
 
-@dataclass(frozen=True)
-class PostprocessorBackendConfig:
-    """Resolved LLM backend for post-processing (Groq, Ollama, Claude Code, etc.)."""
-    name: str
-    type: str  # "openai_compat", "claude_code"
-    # For openai_compat
-    api_base_url: Optional[str] = None
-    api_key: Optional[str] = None
-    model: Optional[str] = None
+# ---------------------------------------------------------------------------
+# Config — master coordinator
+# ---------------------------------------------------------------------------
 
-    @classmethod
-    def resolve(
-        cls,
-        config_dict: dict,
-        backend_name: str,
-        cli_model_override: Optional[str] = None,
-    ) -> PostprocessorBackendConfig:
-        """Resolve LLM backend configuration for post-processing."""
-        if backend_name == "none":
-            return cls(name="none", type="none")
-
-        backends = config_dict.get("postprocessor_backends", {})
-        if backend_name not in backends:
-            available = ", ".join(backends.keys())
-            raise ValueError(
-                f"Post-processor backend '{backend_name}' not found. Available: {available}"
-            )
-
-        defn = backends[backend_name]
-        btype = defn.get("type", "openai_compat")
-
-        if btype == "openai_compat":
-            api_base_url = defn.get("api_base_url")
-            if not api_base_url:
-                raise ValueError(
-                    f"Post-processor backend '{backend_name}' requires api_base_url."
-                )
-
-            api_key = defn.get("api_key") or os.environ.get("OPENAI_API_KEY")
-            if not api_key:
-                raise ValueError(
-                    f"Post-processor backend '{backend_name}' requires api_key or OPENAI_API_KEY env var."
-                )
-
-            model = cli_model_override or defn.get("model")
-            if not model:
-                raise ValueError(
-                    f"Post-processor backend '{backend_name}' requires model."
-                )
-
-            key_source = "config" if defn.get("api_key") else "env var"
-            info(f"  Post-processor backend API key: from {key_source}")
-
-            return cls(
-                name=backend_name,
-                type="openai_compat",
-                api_base_url=api_base_url,
-                api_key=api_key,
-                model=model,
-            )
-
-        elif btype == "claude_code":
-            model = cli_model_override or defn.get("model")
-            if not model:
-                raise ValueError(
-                    f"Post-processor backend '{backend_name}' requires model."
-                )
-            return cls(
-                name=backend_name,
-                type="claude_code",
-                model=model,
-            )
-
-        else:
-            raise ValueError(f"Unknown post-processor backend type: {btype}")
-
-
-@dataclass(frozen=True)
-class OutputConfig:
-    """Resolved output configuration."""
-    clipboard_max_chars: int
-    quiet: bool = False
-
-    @classmethod
-    def resolve(cls, config_dict: dict) -> OutputConfig:
-        """Resolve output configuration."""
-        from .output import _DEFAULT_CLIPBOARD_MAX_CHARS
-
-        clipboard_max_chars = int(
-            config_dict.get("clipboard_max_chars", _DEFAULT_CLIPBOARD_MAX_CHARS)
-        )
-        quiet = bool(config_dict.get("quiet", False))
-        info(f"Clipboard max chars: {clipboard_max_chars}")
-        return cls(clipboard_max_chars=clipboard_max_chars, quiet=quiet)
-
-
-@dataclass(frozen=True)
-class DiarizationConfig:
-    """Resolved speaker diarization configuration."""
-    hf_token: Optional[str] = None
-    min_speakers: Optional[int] = None
-    max_speakers: Optional[int] = None
-
-    @classmethod
-    def resolve(cls, config_dict: dict) -> DiarizationConfig:
-        """Resolve diarization configuration."""
-        hf_token = config_dict.get("diarize_hf_token") or os.environ.get("HF_TOKEN")
-        min_speakers = config_dict.get("diarize_min_speakers")
-        max_speakers = config_dict.get("diarize_max_speakers")
-
-        if hf_token:
-            token_source = (
-                "config" if config_dict.get("diarize_hf_token") else "env var HF_TOKEN"
-            )
-            info(f"Diarization HF token: from {token_source}")
-
-        return cls(
-            hf_token=hf_token,
-            min_speakers=min_speakers,
-            max_speakers=max_speakers,
-        )
-
-
-@dataclass(frozen=True)
-class PresetConfig:
-    """Resolved preset configuration."""
-    preset: Preset
-
-    @classmethod
-    def resolve(
-        cls,
-        config_dict: dict,
-        preset_name: Optional[str] = None,
-    ) -> PresetConfig:
-        """Resolve a preset from config.
-
-        Args:
-            config_dict: Full configuration dictionary.
-            preset_name: Name of preset to load. If None, tries to use default preset.
-
-        Returns:
-            PresetConfig with validated preset.
-
-        Raises:
-            ValueError: If preset not found or invalid.
-        """
-        presets = config_dict.get("presets", {})
-
-        if not presets:
-            raise ValueError(
-                "No 'presets:' section found in config. "
-                "Add one with at least one preset definition."
-            )
-
-        if not preset_name:
-            raise ValueError(
-                "No preset selected and no default specified. "
-                "Use --preset NAME to select a preset, or add 'default_preset: NAME' to config."
-            )
-
-        if preset_name not in presets:
-            available = ", ".join(presets.keys())
-            raise ValueError(
-                f"Preset '{preset_name}' not found in config. "
-                f"Available presets: {available}"
-            )
-
-        defn = presets[preset_name]
-        preset = Preset.from_dict(preset_name, defn)
-
-        info(f"Using preset: {preset_name}")
-        if preset.description:
-            info(f"  {preset.description}")
-
-        return cls(preset=preset)
-
-
-@dataclass
 class Config:
-    """Master config coordinator. Lazy-loads and caches domain-specific configs."""
+    """Master config coordinator. Lazy-loads and caches all configuration.
 
-    _config_dict: dict
-    _preset: Preset
-    _cli_overrides: CliOverrides
+    Single entry point: Config.from_file(config_file, args). Stores the raw
+    argparse Namespace as _args; all defaults live here, not in argparse.
 
-    # Cached resolved configs
-    _asr_backend: Optional[ASRBackendConfig] = field(default=None, init=False)
-    _preprocessor: Optional[PreprocessorConfig] = field(default=None, init=False)
-    _recorder: Optional[RecorderConfig] = field(default=None, init=False)
-    _postprocessor: Optional[PostprocessorConfig] = field(default=None, init=False)
-    _postprocessor_backend: Optional[PostprocessorBackendConfig] = field(
-        default=None, init=False
-    )
-    _output: Optional[OutputConfig] = field(default=None, init=False)
-    _diarization: Optional[DiarizationConfig] = field(default=None, init=False)
-    _local_asr: Optional[LocalAsrConfig] = field(default=None, init=False)
+    Priority (highest to lowest) for component selection (backend, preprocessor, post):
+      1. Direct CLI flag (-b, -p, -P, -M, -d)
+      2. CLI-selected preset component
+      3. config default_preset component
+      4. YAML config definition
+      5. Built-in default defined in this file
+    """
 
-    @property
-    def local_asr(self) -> LocalAsrConfig:
-        """Sherpa-onnx local server bind paths, model dir, and thread count."""
-        if self._local_asr is None:
-            self._local_asr = LocalAsrConfig.resolve(self._config_dict, self._cli_overrides)
-        return self._local_asr
-
-    @property
-    def asr_backend(self) -> ASRBackendConfig:
-        """Lazy-load and cache ASR backend config."""
-        if self._asr_backend is None:
-            if self._cli_overrides.backend:
-                backend_name = self._cli_overrides.backend
-                source = "CLI override -b"
-            else:
-                backend_name = self._preset.asr_backend
-                source = f"from preset '{self._preset.name}'"
-            info(f"Using backend: {backend_name} ({source})")
-            self._asr_backend = ASRBackendConfig.resolve(
-                self._config_dict,
-                backend_name,
-            )
-        return self._asr_backend
-
-    @property
-    def preprocessor(self) -> PreprocessorConfig:
-        """Lazy-load and cache preprocessor config."""
-        if self._preprocessor is None:
-            if self._cli_overrides.preprocessor:
-                source = "CLI override -p"
-            else:
-                source = f"from preset '{self._preset.name}'"
-            self._preprocessor = PreprocessorConfig.resolve(
-                self._config_dict,
-                preset_name=self._preset.preprocessor,
-                cli_override=self._cli_overrides.preprocessor,
-            )
-            info(f"Using preprocessor: {self._preprocessor.name} ({source})")
-        return self._preprocessor
-
-    @property
-    def recorder(self) -> RecorderConfig:
-        """Lazy-load and cache recorder config."""
-        if self._recorder is None:
-            self._recorder = RecorderConfig.resolve(
-                self._config_dict,
-                self._cli_overrides.device,
-            )
-        return self._recorder
-
-    @property
-    def postprocessor(self) -> PostprocessorConfig:
-        """Lazy-load and cache postprocessor config."""
-        if self._postprocessor is None:
-            if self._cli_overrides.post:
-                source = "CLI override -P"
-            else:
-                source = f"from preset '{self._preset.name}'"
-            self._postprocessor = PostprocessorConfig.resolve(
-                self._config_dict,
-                preset_post=self._preset.postprocessor,
-                cli_post_override=self._cli_overrides.post,
-                cli_model_override=self._cli_overrides.post_model,
-            )
-            info(f"Using post-processor: {self._postprocessor.name} ({source})")
-        return self._postprocessor
-
-    @property
-    def postprocessor_backend(self) -> PostprocessorBackendConfig:
-        """Lazy-load and cache postprocessor backend config."""
-        if self._postprocessor_backend is None:
-            self._postprocessor_backend = PostprocessorBackendConfig.resolve(
-                self._config_dict,
-                self.postprocessor.backend_name,
-                self._cli_overrides.post_model,
-            )
-        return self._postprocessor_backend
-
-    @property
-    def output(self) -> OutputConfig:
-        """Lazy-load and cache output config."""
-        if self._output is None:
-            self._output = OutputConfig.resolve(self._config_dict)
-        return self._output
-
-    @property
-    def diarization(self) -> DiarizationConfig:
-        """Lazy-load and cache diarization config."""
-        if self._diarization is None:
-            self._diarization = DiarizationConfig.resolve(self._config_dict)
-        return self._diarization
+    def __init__(self, config_dict: dict, preset: Preset, args: Any) -> None:
+        self._config_dict = config_dict
+        self._preset = preset
+        self._args = args
 
     @classmethod
-    def from_file(
-        cls,
-        config_file: str,
-        preset_name: Optional[str] = None,
-        cli_overrides: Optional[CliOverrides] = None,
-    ) -> Config:
-        """Initialize Config from file with preset resolution (Phase 1 refactoring).
-
-        This is the primary entry point for config initialization at startup.
-        It handles:
-        1. Reading config from file
-        2. Resolving preset (CLI override or config default)
-        3. Creating the master Config coordinator
-
-        Args:
-            config_file: Path to config YAML file.
-            preset_name: Preset to use. If None, uses config's default_preset.
-            cli_overrides: CLI flag overrides (e.g., --backend, --preprocessor).
-
-        Returns:
-            Fully initialized Config instance.
-
-        Raises:
-            ValueError: If preset not found or invalid.
-            SystemExit: If config or preset resolution fails (via PresetConfig.resolve).
-        """
-        import sys
+    def from_file(cls, config_file: str, args: Any) -> "Config":
+        """Primary entry point. Reads YAML, resolves preset, stores args."""
         from .config import read_config
         from .utils import error
 
-        # Step 1: Read config dictionary
+        # Fail fast when the caller explicitly provides a path that doesn't exist,
+        # rather than silently falling back to the user's default config.
+        if config_file and not os.path.exists(config_file):
+            error(f"Config file not found: {config_file}")
+            sys.exit(1)
+
         config_dict = read_config(config_file)
         if not config_dict:
             error("Config file is empty or contains only comments.")
             sys.exit(1)
 
-        # Step 2: Resolve preset name (CLI override takes precedence over config default)
-        resolved_preset_name = preset_name or config_dict.get("default_preset")
-        if not resolved_preset_name:
+        preset_name = getattr(args, "preset", None) or config_dict.get("default_preset")
+        if not preset_name:
             available = ", ".join(config_dict.get("presets", {}).keys())
             error(
                 "No preset selected. Use --preset NAME or set 'default_preset: NAME' in config.\n"
@@ -733,43 +478,113 @@ class Config:
             )
             sys.exit(1)
 
-        # Step 3: Resolve preset and validate
+        presets = config_dict.get("presets", {})
+        if not presets:
+            error("No 'presets:' section found in config.")
+            sys.exit(1)
+        if preset_name not in presets:
+            available = ", ".join(presets.keys())
+            error(f"Preset '{preset_name}' not found. Available: {available}")
+            sys.exit(1)
+
         try:
-            preset_config = PresetConfig.resolve(config_dict, resolved_preset_name)
-            preset = preset_config.preset
+            preset = Preset.from_dict(preset_name, presets[preset_name])
         except ValueError as e:
             error(f"Preset error: {e}")
             sys.exit(1)
 
-        # Step 4: Create Config instance
-        cli_overrides = cli_overrides or CliOverrides()
-        return cls(
-            _config_dict=config_dict,
-            _preset=preset,
-            _cli_overrides=cli_overrides,
-        )
+        info(f"Using preset: {preset_name}")
+        if preset.description:
+            info(f"  {preset.description}")
 
-    @classmethod
-    def resolve(
-        cls,
-        config_dict: dict,
-        preset: Preset,
-        cli_overrides: Optional[CliOverrides] = None,
-    ) -> Config:
-        """Load config and create master Config coordinator.
+        return cls(config_dict, preset, args)
 
-        Args:
-            config_dict: Full configuration dictionary.
-            preset: Preset object defining pipeline stages (required).
-            cli_overrides: CLI flag overrides.
+    # --- sub-config objects (lazy, cached) ---
 
-        Returns:
-            Config instance ready for use.
-        """
-        cli_overrides = cli_overrides or CliOverrides()
+    @functools.cached_property
+    def asr_backend(self) -> ASRBackendConfig:
+        return ASRBackendConfig(self._config_dict, self._preset, self._args)
 
-        return cls(
-            _config_dict=config_dict,
-            _preset=preset,
-            _cli_overrides=cli_overrides,
-        )
+    @functools.cached_property
+    def postprocessor(self) -> PostprocessorConfig:
+        return PostprocessorConfig(self._config_dict, self._preset, self._args)
+
+    @functools.cached_property
+    def recorder(self) -> RecorderConfig:
+        return RecorderConfig(self._config_dict, self._args)
+
+    @functools.cached_property
+    def local_asr(self) -> LocalAsrConfig:
+        return LocalAsrConfig(self._config_dict, self._args)
+
+    # --- inline single-value config (no sub-object needed) ---
+
+    @property
+    def preprocessor(self) -> str:
+        """Preprocessor name: CLI -p > preset > built-in default 'none'."""
+        n = getattr(self._args, "preprocessor", None) or self._preset.preprocessor
+        source = "CLI -p" if getattr(self._args, "preprocessor", None) else f"preset '{self._preset.name}'"
+        return n
+
+    @property
+    def clipboard_max_chars(self) -> int:
+        from .output import _DEFAULT_CLIPBOARD_MAX_CHARS
+        return int(self._config_dict.get("clipboard_max_chars", _DEFAULT_CLIPBOARD_MAX_CHARS))
+
+    @property
+    def quiet(self) -> bool:
+        return bool(self._config_dict.get("quiet", False))
+
+    # --- run-level properties (args pass-through with defaults) ---
+
+    @property
+    def input_file(self) -> Optional[str]:
+        return getattr(self._args, "input", None)
+
+    @property
+    def output_file(self) -> Optional[str]:
+        return getattr(self._args, "output", None)
+
+    @property
+    def language(self) -> Optional[str]:
+        return getattr(self._args, "language", None)
+
+    @property
+    def template(self) -> Optional[str]:
+        """CLI -T output template override."""
+        return getattr(self._args, "template", None)
+
+    @property
+    def num_speakers(self) -> Optional[int]:
+        return getattr(self._args, "speakers", None)
+
+    @property
+    def robust(self) -> bool:
+        return bool(getattr(self._args, "robust", False))
+
+    @property
+    def chunk_duration(self) -> int:
+        """Max chunk duration in seconds for robust mode. Default: 180."""
+        v = getattr(self._args, "chunk_duration", None)
+        return int(v) if v is not None else 180
+
+    @property
+    def interval(self) -> Optional[float]:
+        """Fixed-interval continuous recording in seconds. None = not enabled."""
+        return getattr(self._args, "interval", None)
+
+    @property
+    def vad(self) -> bool:
+        return bool(getattr(self._args, "vad", False))
+
+    @property
+    def silence_threshold(self) -> float:
+        """VAD silence probability threshold. Default: 0.5."""
+        v = getattr(self._args, "silence_threshold", None)
+        return float(v) if v is not None else 0.5
+
+    @property
+    def silence_duration(self) -> float:
+        """Silence duration to trigger transcription. Default: 1.5s."""
+        v = getattr(self._args, "silence_duration", None)
+        return float(v) if v is not None else 1.5

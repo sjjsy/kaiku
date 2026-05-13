@@ -67,14 +67,7 @@ def _estimate_timeout(chunk_duration_s: float) -> float:
     return max(30.0, chunk_duration_s * 4.0)
 
 
-def process_file_robust(
-    config: "Config",
-    input_file: str,
-    output_file: str | None = None,
-    chunk_duration: int = 180,
-    language: str | None = None,
-    template_cli_override: str | None = None,
-):
+def process_file_robust(config: "Config"):
     """Transcribe a long audio file in silence-bounded chunks with quality checks.
 
     Each chunk is written to output_file immediately (tail-f friendly). After all
@@ -82,12 +75,13 @@ def process_file_robust(
     template is applied.
 
     Args:
-        config: Resolved Config instance.
-        input_file: Path to the audio file.
-        output_file: Optional file to append chunks to.
-        chunk_duration: Maximum chunk length in seconds (default 180).
-        template_cli_override: Output template CLI override.
+        config: Resolved Config instance. Reads input_file, output_file,
+                chunk_duration, language, and template from config.
     """
+    input_file = config.input_file
+    output_file = config.output_file
+    chunk_duration = config.chunk_duration
+    language = config.language
     import sys
     from .postprocessors import NonePostProcessor, PostMetadata, format_output, make_postprocessor, resolve_output_template
     from .preprocessors import NonePreprocessor, make_preprocessor
@@ -104,7 +98,7 @@ def process_file_robust(
     total_s = len(audio) / 1000.0
     info(f"Audio loaded: {total_s:.1f}s total ({time.time() - t0:.1f}s to load)")
 
-    preprocessor = make_preprocessor(config.preprocessor.name)
+    preprocessor = make_preprocessor(config.preprocessor)
     if not isinstance(preprocessor, NonePreprocessor):
         log(f"Preprocessing audio with {preprocessor.name}...")
         t_pre = time.time()
@@ -143,6 +137,7 @@ def process_file_robust(
                 candidate = transcribe(
                     tmp_path, config, raise_on_error=True, timeout=timeout,
                     language=language,
+                    num_speakers=config.num_speakers,
                 )
                 if _check_quality(candidate):
                     text = candidate
@@ -202,31 +197,32 @@ def process_file_robust(
     full_text = "\n\n".join(all_text_parts)
 
     transcript = full_text
-    final = transcript
 
-    postprocessor = make_postprocessor(config.postprocessor.name, config)
-    template = resolve_output_template(config, config.postprocessor.template, template_cli_override)
+    from datetime import date
+    postprocessor = make_postprocessor(config)
+    template = resolve_output_template(config)
+    metadata = PostMetadata(
+        date=date.today().isoformat(),
+        duration_s=total_s,
+        language=language or "auto",
+        prompt_name=postprocessor.name,
+        diarized=config.asr_backend.type in ("whisperx", "mock-diarize"),
+        source="file",
+    )
     if not isinstance(postprocessor, NonePostProcessor):
-        from datetime import date
-        metadata = PostMetadata(
-            date=date.today().isoformat(),
-            duration_s=total_s,
-            language=language or "auto",
-            prompt_name=postprocessor.name,
-            diarized=False,
-            source="file",
-        )
         log(f"Post-processing full transcript with '{postprocessor.name}'…")
         t_post = time.time()
         result = postprocessor.process(transcript, metadata=metadata)
         info(f"Post-processing completed in {time.time() - t_post:.1f}s")
-        final = format_output(
-            template, result=result, transcript=transcript,
-            metadata=metadata, model=postprocessor.model,
-            backend=postprocessor.backend_type,
-        )
+    else:
+        result = transcript
+    final = format_output(
+        template, result=result, transcript=transcript,
+        metadata=metadata, model=postprocessor.model,
+        backend=postprocessor.backend_type,
+    )
 
-    copy_transcript_to_clipboard(final, output_file, config.output.clipboard_max_chars)
+    copy_transcript_to_clipboard(final, output_file, config.clipboard_max_chars)
     if output_file:
         log(f"Full transcript written to {output_file}")
 

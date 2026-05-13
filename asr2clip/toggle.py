@@ -41,22 +41,12 @@ def _notify(title: str, body: str):
             pass
 
 
-def toggle_recording(
-    config: "Config",
-    output_file: str | None = None,
-    language: str | None = None,
-    template_cli_override: str | None = None,
-    diarize: bool = False,
-    num_speakers: int | None = None,
-):
+def toggle_recording(config: "Config"):
     """Start or stop toggle-mode recording."""
     lock_path = _lock_path()
 
     if os.path.exists(lock_path):
-        _stop_and_transcribe(
-            lock_path, config, output_file, language,
-            template_cli_override, diarize, num_speakers,
-        )
+        _stop_and_transcribe(lock_path, config)
     else:
         _start_recording(lock_path, config)
 
@@ -84,15 +74,7 @@ def _start_recording(lock_path: str, config: "Config"):
     _notify("asr2clip", f"Recording{device_desc}… (run asr2clip --toggle to stop)")
 
 
-def _stop_and_transcribe(
-    lock_path: str,
-    config: "Config",
-    output_file: str | None,
-    language: str | None = None,
-    template_cli_override: str | None = None,
-    diarize: bool = False,
-    num_speakers: int | None = None,
-):
+def _stop_and_transcribe(lock_path: str, config: "Config"):
     with open(lock_path) as f:
         lock_data = json.load(f)
 
@@ -103,10 +85,7 @@ def _stop_and_transcribe(
         warning(f"Recorder PID {pid} is no longer running (stale lock). Cleaning up.")
         os.unlink(lock_path)
         if audio_path and os.path.exists(audio_path):
-            _transcribe_and_output(
-                audio_path, config, output_file, language,
-                template_cli_override, diarize, num_speakers,
-            )
+            _transcribe_and_output(audio_path, config)
         return
 
     log(f"Stopping recorder (pid {pid})…")
@@ -115,21 +94,10 @@ def _stop_and_transcribe(
 
     time.sleep(0.3)
 
-    _transcribe_and_output(
-        audio_path, config, output_file, language,
-        template_str, diarize, num_speakers,
-    )
+    _transcribe_and_output(audio_path, config)
 
 
-def _transcribe_and_output(
-    audio_path: str,
-    config: "Config",
-    output_file: str | None,
-    language: str | None = None,
-    template_cli_override: str | None = None,
-    diarize: bool = False,
-    num_speakers: int | None = None,
-):
+def _transcribe_and_output(audio_path: str, config: "Config"):
     if not os.path.exists(audio_path) or os.path.getsize(audio_path) < 100:
         log("Audio file is empty or missing — nothing to transcribe.")
         return
@@ -144,7 +112,7 @@ def _transcribe_and_output(
         info("Transcribing recorded audio…")
 
     preprocessed_path: str | None = None
-    preprocessor = make_preprocessor(config.preprocessor.name)
+    preprocessor = make_preprocessor(config.preprocessor)
     if not isinstance(preprocessor, NonePreprocessor):
         try:
             audio_data, sr = load_wav(audio_path)
@@ -162,25 +130,13 @@ def _transcribe_and_output(
 
     t0 = time.time()
     transcript: str = ""
-    is_diarized = False
     try:
-        if diarize:
-            from .diarize import DiarizationError, run_diarization
-            try:
-                log("Running diarization (WhisperX)…")
-                transcript = run_diarization(
-                    transcribe_path, config,
-                    language=language, num_speakers=num_speakers,
-                )
-                is_diarized = True
-            except DiarizationError as e:
-                warning(f"Diarization failed: {e}")
-                _notify("asr2clip", f"Diarization failed: {e}")
-                return
-        else:
-            transcript = transcribe(
-                transcribe_path, config, raise_on_error=True, language=language,
-            )
+        transcript = transcribe(
+            transcribe_path, config,
+            raise_on_error=True,
+            language=config.language,
+            num_speakers=config.num_speakers,
+        )
     except Exception as e:
         warning(f"Transcription failed: {e}")
         _notify("asr2clip", f"Transcription failed: {e}")
@@ -197,32 +153,33 @@ def _transcribe_and_output(
         _notify("asr2clip", "No speech detected.")
         return
 
-    final = transcript
-    postprocessor = make_postprocessor(config.postprocessor.name, config)
+    from datetime import date
     from .postprocessors import resolve_output_template
-    template = resolve_output_template(config, config.postprocessor.template, template_cli_override)
+    postprocessor = make_postprocessor(config)
+    template = resolve_output_template(config)
+    metadata = PostMetadata(
+        date=date.today().isoformat(),
+        duration_s=duration,
+        language=config.language or "auto",
+        prompt_name=postprocessor.name,
+        diarized=config.asr_backend.type in ("whisperx", "mock-diarize"),
+        source="toggle",
+    )
     if not isinstance(postprocessor, NonePostProcessor):
-        from datetime import date
-        metadata = PostMetadata(
-            date=date.today().isoformat(),
-            duration_s=duration,
-            language=language or "auto",
-            prompt_name=postprocessor.name,
-            diarized=is_diarized,
-            source="toggle",
-        )
         log(f"Post-processing with '{postprocessor.name}'…")
         t_post = time.time()
         result = postprocessor.process(transcript, metadata=metadata)
         info(f"Post-processing completed in {time.time() - t_post:.1f}s")
-        final = format_output(
-            template, result=result, transcript=transcript,
-            metadata=metadata, model=postprocessor.model,
-            backend=postprocessor.backend_type,
-        )
+    else:
+        result = transcript
+    final = format_output(
+        template, result=result, transcript=transcript,
+        metadata=metadata, model=postprocessor.model,
+        backend=postprocessor.backend_type,
+    )
 
     output_transcript(
-        final, to_clipboard=True, to_stdout=True, to_file=output_file,
-        max_clipboard_chars=config.output.clipboard_max_chars,
+        final, to_clipboard=True, to_stdout=True, to_file=config.output_file,
+        max_clipboard_chars=config.clipboard_max_chars,
     )
     _notify("asr2clip", final[:100])

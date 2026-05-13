@@ -24,7 +24,7 @@ from .config import (
     open_in_editor,
     read_config,
 )
-from .config_types import CliOverrides, Config
+from .config_types import Config
 from .daemon import continuous_recording
 from .output import (
     _DEFAULT_CLIPBOARD_MAX_CHARS,
@@ -88,7 +88,7 @@ def test_config(config: Config) -> bool:
     print_separator()
     info("Checking preprocessors...")
 
-    preprocessor_name = config.preprocessor.name
+    preprocessor_name = config.preprocessor
     avail, hint = check_preprocessor_available(preprocessor_name)
     if avail:
         print_success(f"Preprocessor: {preprocessor_name}")
@@ -100,7 +100,7 @@ def test_config(config: Config) -> bool:
     return backend_ok and pp_ok
 
 
-def _test_postprocessors(config: Config, post_override: str | None, model_override: str | None) -> bool:
+def _test_postprocessors(config: Config) -> bool:
     """Check that post-processor backends are reachable. Returns True if all OK."""
     import shutil
     from .postprocessors import _resolve_backend, _resolve_prompt
@@ -109,69 +109,49 @@ def _test_postprocessors(config: Config, post_override: str | None, model_overri
     print_separator()
     info("Checking post-processors...")
 
-    ok = True
-    seen: set = set()
-    to_check: list[str] = []
+    name = config.postprocessor.name
+    model_override = config.postprocessor.model_override
 
-    # Collect postprocessors to check: CLI override takes precedence over preset
-    if post_override:
-        to_check.append(post_override)
-    elif config.postprocessor.name and config.postprocessor.name != "none":
-        to_check.append(config.postprocessor.name)
-
-    if not to_check:
+    if not name or name == "none":
         print_success("No post-processors configured to check")
         return True
 
-    for name in to_check:
-        if name in (None, "none"):
-            print_success(f"Post-processor: none")
-            continue
+    try:
+        resolved = _resolve_prompt(name, config._config_dict)
+        backend_cfg = _resolve_backend(config._config_dict, resolved["backend_name"], model_override)
+    except SystemExit:
+        print_error(f"Post-processor '{name}' — config error (see above)")
+        return False
 
-        # Deduplicate: if same processor is checked multiple times, only report once
-        if name in seen:
-            continue
-        seen.add(name)
+    ok = True
+    btype = backend_cfg["type"]
+    model = backend_cfg.get("model", "")
+    model_note = f"  model: {model}" if model else ""
 
-        # Resolve backend type
-        try:
-            resolved = _resolve_prompt(name, config._config_dict)
-            backend_cfg = _resolve_backend(config._config_dict, resolved["backend_name"], model_override)
-        except SystemExit:
-            print_error(f"Post-processor '{name}' — config error (see above)")
-            ok = False
-            continue
-
-        btype = backend_cfg["type"]
-        model = backend_cfg.get("model", "")
-        model_note = f"  model: {model}" if model else ""
-
-        if btype == "claude_code":
-            if shutil.which("claude"):
-                print_success(f"Post-processor '{name}': claude_code{model_note}")
-                print_success("  claude CLI: found")
-            else:
-                print_error(f"Post-processor '{name}': claude_code{model_note}")
-                print_error("  claude CLI: NOT FOUND — install from https://claude.ai/code")
-                ok = False
-
-        elif btype == "openai_compat":
-            from .transcribe import test_transcription
-            api_base = backend_cfg.get("api_base_url", "")
-            api_key = backend_cfg.get("api_key", "sk-none")
-            org_id = None
-            print_success(f"Post-processor '{name}': openai_compat{model_note}")
-            print_key_value("  Endpoint", api_base)
-            reachable = test_transcription(api_key, api_base, model, org_id)
-            if not reachable:
-                ok = False
-
-        elif btype == "mock":
-            print_success(f"Post-processor '{name}': mock (no credentials needed)")
-
+    if btype == "claude_code":
+        if shutil.which("claude"):
+            print_success(f"Post-processor '{name}': claude_code{model_note}")
+            print_success("  claude CLI: found")
         else:
-            print_error(f"Post-processor '{name}' — unknown backend type '{btype}'")
+            print_error(f"Post-processor '{name}': claude_code{model_note}")
+            print_error("  claude CLI: NOT FOUND — install from https://claude.ai/code")
             ok = False
+
+    elif btype == "openai_compat":
+        from .transcribe import test_transcription
+        api_base = backend_cfg.get("api_base_url", "")
+        api_key = backend_cfg.get("api_key", "sk-none")
+        print_success(f"Post-processor '{name}': openai_compat{model_note}")
+        print_key_value("  Endpoint", api_base)
+        if not test_transcription(api_key, api_base, model, None):
+            ok = False
+
+    elif btype == "mock":
+        print_success(f"Post-processor '{name}': mock (no credentials needed)")
+
+    else:
+        print_error(f"Post-processor '{name}' — unknown backend type '{btype}'")
+        ok = False
 
     return ok
 
@@ -209,29 +189,24 @@ def _test_diarization(config: Config) -> None:
 
     if importlib.util.find_spec("whisperx") is None:
         print_warning("whisperx: not installed  →  pip install asr2clip[diarize]")
-        print_warning("  (--diarize will not work until installed)")
+        print_warning("  (backend type 'whisperx' will not work until installed)")
         return
 
     print_success("whisperx: installed")
 
-    hf_token = config.diarization.hf_token
+    hf_token = os.environ.get("HF_TOKEN")
     if hf_token:
         masked = f"{'*' * 8}...{hf_token[-4:]}" if len(hf_token) > 4 else "****"
-        print_success(f"HuggingFace token: {masked}")
+        print_success(f"HuggingFace token (HF_TOKEN): {masked}")
     else:
         print_warning(
             "HuggingFace token: not set\n"
-            "  Set HF_TOKEN env var or add 'diarize_hf_token: hf_...' to config.\n"
-            "  (--diarize will fail until token is provided)"
+            "  Set HF_TOKEN env var or add 'hf_token: hf_...' to the whisperx\n"
+            "  entry in asr_backends."
         )
 
 
-def process_recording(
-    config: Config,
-    output_file: str | None = None,
-    language: str | None = None,
-    template_cli_override: str | None = None,
-):
+def process_recording(config: Config):
     """Record audio, transcribe, and output the result."""
     import time
     from .postprocessors import NonePostProcessor, format_output, PostMetadata, make_postprocessor, resolve_output_template
@@ -241,21 +216,25 @@ def process_recording(
         warning("Clipboard support may not be available.")
         print_clipboard_help()
 
-    setup_signal_handlers(daemon_mode=False)
-    log("Recording... Press Ctrl+C to stop (press twice to cancel)")
+    mock_source = getattr(config.recorder.device, "mock_source", None) if config.recorder.device else None
 
-    device_spec = config.recorder.device.get_spec(config.recorder.name) if config.recorder.device else None
+    if mock_source:
+        audio_data, _sr = load_wav(mock_source)
+        duration = get_audio_duration(audio_data)
+        info(f"Mock device: loaded {duration:.1f}s from {mock_source}")
+    else:
+        setup_signal_handlers(daemon_mode=False)
+        log("Recording... Press Ctrl+C to stop (press twice to cancel)")
+        device_spec = config.recorder.device.get_spec(config.recorder.name) if config.recorder.device else None
+        t0 = time.time()
+        audio_data = record_audio(device=device_spec)
+        duration = get_audio_duration(audio_data)
+        if duration < 0.1:
+            log("Recording too short or empty. Exiting.")
+            sys.exit(0)
+        info(f"Recorded {duration:.1f}s of audio ({time.time() - t0:.1f}s elapsed)")
 
-    t0 = time.time()
-    audio_data = record_audio(device=device_spec)
-    duration = get_audio_duration(audio_data)
-    if duration < 0.1:
-        log("Recording too short or empty. Exiting.")
-        sys.exit(0)
-
-    info(f"Recorded {duration:.1f}s of audio ({time.time() - t0:.1f}s elapsed)")
-
-    preprocessor = make_preprocessor(config.preprocessor.name)
+    preprocessor = make_preprocessor(config.preprocessor)
     if not isinstance(preprocessor, NonePreprocessor):
         log(f"Preprocessing audio with {preprocessor.name}...")
         t_pre = time.time()
@@ -267,62 +246,59 @@ def process_recording(
 
     try:
         t1 = time.time()
-        transcript = transcribe(temp_path, config, language=language)
+        transcript = transcribe(
+            temp_path, config,
+            language=config.language,
+            num_speakers=config.num_speakers,
+        )
         info(f"Transcription completed in {time.time() - t1:.1f}s")
 
         if not transcript.strip():
             log("No speech detected in the recording.")
             return
 
-        result = transcript
-        postprocessor = make_postprocessor(config.postprocessor.name, config)
-        template = resolve_output_template(config, config.postprocessor.template, template_cli_override)
+        is_diarized = config.asr_backend.type in ("whisperx", "mock-diarize")
+        from datetime import date
+        postprocessor = make_postprocessor(config)
+        template = resolve_output_template(config)
+        metadata = PostMetadata(
+            date=date.today().isoformat(),
+            duration_s=duration,
+            language=config.language or "auto",
+            prompt_name=postprocessor.name,
+            diarized=is_diarized,
+            source="recording",
+        )
         if not isinstance(postprocessor, NonePostProcessor):
-            from datetime import date
-            metadata = PostMetadata(
-                date=date.today().isoformat(),
-                duration_s=duration,
-                language=language or "auto",
-                prompt_name=postprocessor.name,
-                diarized=False,
-                source="file",
-            )
             log(f"Post-processing with '{postprocessor.name}'...")
             t_post = time.time()
             result = postprocessor.process(transcript, metadata=metadata)
             info(f"Post-processing completed in {time.time() - t_post:.1f}s")
-            final = format_output(
-                template, result=result, transcript=transcript,
-                metadata=metadata, model=postprocessor.model,
-                backend=postprocessor.backend_type,
-            )
         else:
-            final = result
+            result = transcript
+        final = format_output(
+            template, result=result, transcript=transcript,
+            metadata=metadata, model=postprocessor.model,
+            backend=postprocessor.backend_type,
+        )
 
         output_transcript(
-            final, to_clipboard=True, to_stdout=True, to_file=output_file,
-            max_clipboard_chars=config.output.clipboard_max_chars,
+            final, to_clipboard=True, to_stdout=True, to_file=config.output_file,
+            max_clipboard_chars=config.clipboard_max_chars,
         )
 
     finally:
         safe_unlink(temp_path)
 
 
-def process_file(
-    config: Config,
-    input_file: str,
-    output_file: str | None = None,
-    language: str | None = None,
-    template_cli_override: str | None = None,
-    diarize: bool = False,
-    num_speakers: int | None = None,
-):
+def process_file(config: Config):
     """Transcribe an existing audio or video file."""
     import time
     from .postprocessors import NonePostProcessor, PostMetadata, format_output, make_postprocessor, resolve_output_template
     from .preprocessors import NonePreprocessor, make_preprocessor
 
-    if not os.path.exists(input_file):
+    input_file = config.input_file
+    if not input_file or not os.path.exists(input_file):
         print(f"File not found: {input_file}")
         sys.exit(1)
 
@@ -334,33 +310,32 @@ def process_file(
         if not transcript.strip():
             log("Transcript file is empty.")
             return
-        result = transcript
-        postprocessor = make_postprocessor(config.postprocessor.name, config)
-        template = resolve_output_template(config, config.postprocessor.template, template_cli_override)
+        from datetime import date
+        postprocessor = make_postprocessor(config)
+        template = resolve_output_template(config)
+        metadata = PostMetadata(
+            date=date.today().isoformat(),
+            duration_s=0.0,
+            language=config.language or "auto",
+            prompt_name=postprocessor.name,
+            diarized=False,
+            source="file",
+        )
         if not isinstance(postprocessor, NonePostProcessor):
-            from datetime import date
-            metadata = PostMetadata(
-                date=date.today().isoformat(),
-                duration_s=0.0,
-                language=language or "auto",
-                prompt_name=postprocessor.name,
-                diarized=False,
-                source="file",
-            )
             log(f"Post-processing with '{postprocessor.name}'...")
             t_post = time.time()
             result = postprocessor.process(transcript, metadata=metadata)
             info(f"Post-processing completed in {time.time() - t_post:.1f}s")
-            final = format_output(
-                template, result=result, transcript=transcript,
-                metadata=metadata, model=postprocessor.model,
-                backend=postprocessor.backend_type,
-            )
         else:
-            final = result
+            result = transcript
+        final = format_output(
+            template, result=result, transcript=transcript,
+            metadata=metadata, model=postprocessor.model,
+            backend=postprocessor.backend_type,
+        )
         output_transcript(
-            final, to_clipboard=True, to_stdout=True, to_file=output_file,
-            max_clipboard_chars=config.output.clipboard_max_chars,
+            final, to_clipboard=True, to_stdout=True, to_file=config.output_file,
+            max_clipboard_chars=config.clipboard_max_chars,
         )
         return
 
@@ -374,7 +349,7 @@ def process_file(
         temp_path = input_file
         cleanup_temp = False
 
-    preprocessor = make_preprocessor(config.preprocessor.name)
+    preprocessor = make_preprocessor(config.preprocessor)
     if not isinstance(preprocessor, NonePreprocessor):
         try:
             audio_data, sr = load_wav(temp_path)
@@ -391,20 +366,12 @@ def process_file(
 
     try:
         t1 = time.time()
-        is_diarized = False
-        if diarize:
-            from .diarize import DiarizationError, run_diarization
-            try:
-                log("Running diarization (WhisperX)...")
-                transcript = run_diarization(
-                    temp_path, config, language=language, num_speakers=num_speakers
-                )
-                is_diarized = True
-            except DiarizationError as e:
-                print(f"Diarization error: {e}", file=sys.stderr)
-                sys.exit(1)
-        else:
-            transcript = transcribe(temp_path, config, language=language)
+        transcript = transcribe(
+            temp_path, config,
+            language=config.language,
+            num_speakers=config.num_speakers,
+        )
+        is_diarized = config.asr_backend.type in ("whisperx", "mock-diarize")
         info(f"Transcription completed in {time.time() - t1:.1f}s")
 
         if not transcript.strip():
@@ -418,34 +385,33 @@ def process_file(
         except Exception:
             duration_s = 0.0
 
-        result = transcript
-        postprocessor = make_postprocessor(config.postprocessor.name, config)
-        template = resolve_output_template(config, config.postprocessor.template, template_cli_override)
+        from datetime import date
+        postprocessor = make_postprocessor(config)
+        template = resolve_output_template(config)
+        metadata = PostMetadata(
+            date=date.today().isoformat(),
+            duration_s=duration_s,
+            language=config.language or "auto",
+            prompt_name=postprocessor.name,
+            diarized=is_diarized,
+            source="file",
+        )
         if not isinstance(postprocessor, NonePostProcessor):
-            from datetime import date
-            metadata = PostMetadata(
-                date=date.today().isoformat(),
-                duration_s=duration_s,
-                language=language or "auto",
-                prompt_name=postprocessor.name,
-                diarized=is_diarized,
-                source="file",
-            )
             log(f"Post-processing with '{postprocessor.name}'...")
             t_post = time.time()
             result = postprocessor.process(transcript, metadata=metadata)
             info(f"Post-processing completed in {time.time() - t_post:.1f}s")
-            final = format_output(
-                template, result=result, transcript=transcript,
-                metadata=metadata, model=postprocessor.model,
-                backend=postprocessor.backend_type,
-            )
         else:
-            final = result
+            result = transcript
+        final = format_output(
+            template, result=result, transcript=transcript,
+            metadata=metadata, model=postprocessor.model,
+            backend=postprocessor.backend_type,
+        )
 
         output_transcript(
-            final, to_clipboard=True, to_stdout=True, to_file=output_file,
-            max_clipboard_chars=config.output.clipboard_max_chars,
+            final, to_clipboard=True, to_stdout=True, to_file=config.output_file,
+            max_clipboard_chars=config.clipboard_max_chars,
         )
 
     finally:
@@ -467,7 +433,7 @@ Examples:
   asr2clip --toggle -P solo-restructure       # toggle, and produce AI-structured memo
   asr2clip -i audio.mp3                       # transcribe an existing file
   asr2clip -i m.mp3 -p deepfilter -r          # neural denoising + chunked transcription
-  asr2clip -i m.m4a -D -s 3                   # speaker diarization, 3 speakers
+  asr2clip -i meeting.m4a -b whisperx -s 3    # speaker diarization, 3-speaker hint
   asr2clip --serve                            # start local sherpa-onnx ASR server
   asr2clip --vad -o meeting.txt               # continuous VAD transcription to file
   asr2clip --interval 60                      # fixed-interval continuous recording
@@ -578,7 +544,7 @@ See https://github.com/sjjsy/asr2clip for full documentation and configuration e
     )
     trans_group.add_argument(
         "-C", "--chunk-duration", type=int, metavar="SEC",
-        default=180,
+        default=None,
         help="Max chunk duration in seconds for -r/--robust mode (default: 180)",
     )
     trans_group.add_argument(
@@ -641,32 +607,26 @@ See https://github.com/sjjsy/asr2clip for full documentation and configuration e
     )
     vad_group.add_argument(
         "--silence_threshold", type=float, metavar="PROB",
-        default=0.5,
+        default=None,
         help="VAD speech probability threshold, 0.0-1.0 (default: 0.5)",
     )
     vad_group.add_argument(
         "--silence_duration", type=float, metavar="SEC",
-        default=1.5,
+        default=None,
         help="Silence duration to trigger transcription (default: 1.5 s)",
     )
 
     # Diarization
     diarize_group = parser.add_argument_group("Diarization")
     diarize_group.add_argument(
-        "-D", "--diarize", action="store_true",
-        help=(
-            "Speaker diarization via WhisperX. "
-            "Replaces the configured ASR backend for this run. "
-            "Output: '[HH:MM:SS] SPEAKER_NN: text'. "
-            "Requires: pip install asr2clip[diarize] and HF_TOKEN env var."
-        ),
-    )
-    diarize_group.add_argument(
         "-s", "--speakers", type=int, metavar="N",
         default=None,
         help=(
-            "Expected number of speakers (hint to pyannote for better accuracy). "
-            "If omitted, pyannote infers automatically."
+            "Speaker count hint for diarization backends (type: whisperx, type: mock-diarize). "
+            "Ignored by all other backends. "
+            "Selects a diarization backend in your preset or with -b / --backend; "
+            "see 'asr_backends:' in config. "
+            "If omitted, the backend uses its own default or auto-detects speaker count."
         ),
     )
 
@@ -725,25 +685,7 @@ def main():
         list_audio_devices()
         return
 
-    # Create CLI overrides for config resolution
-    cli_overrides = CliOverrides(
-        preset=args.preset,
-        backend=args.backend,
-        preprocessor=args.preprocessor,
-        device=args.device,
-        post=args.post,
-        post_model=args.post_model,
-        local_asr_host=args.host,
-        local_asr_port=args.port,
-        local_asr_model_dir=args.model_dir,
-        local_asr_num_threads=args.num_threads,
-    )
-
-    try:
-        config = Config.from_file(args.config, preset_name=args.preset, cli_overrides=cli_overrides)
-    except ValueError as e:
-        error(f"Config error: {e}")
-        sys.exit(1)
+    config = Config.from_file(args.config, args)
 
     quiet = args.quiet
     setup_logging(verbose=not quiet)
@@ -751,69 +693,41 @@ def main():
 
     if args.serve:
         from .local_asr import check_deps
-
         check_deps()
         from .local_asr.app import run_server
-
         run_server(config)
         return
 
     if args.download_model:
         from .local_asr import check_deps
-
         check_deps()
         from .local_asr.model_registry import create_registry
-
         la = config.local_asr
         registry = create_registry(config_path=la.models_config_path, model_dir=la.model_dir)
         registry.download_model(registry.get_default_model())
         return
 
     if args.test:
-        # Test preset configuration
         ok_asr = test_config(config)
-
-        ok_post = _test_postprocessors(config, args.post, args.post_model)
+        ok_post = _test_postprocessors(config)
         ok_clip = _test_clipboard()
-        _test_diarization(config)  # informational only; never blocks success
-
+        _test_diarization(config)
         print_separator()
         success = ok_asr and ok_post and ok_clip
-        if success:
-            info("All checks passed.")
-        else:
-            info("Some checks failed — see details above.")
+        info("All checks passed." if success else "Some checks failed — see details above.")
         sys.exit(0 if success else 1)
 
     if args.toggle:
         from .toggle import toggle_recording
-        toggle_recording(
-            config, output_file=args.output,
-            language=args.language,
-            template_cli_override=args.template,
-            diarize=args.diarize,
-            num_speakers=args.speakers,
-        )
+        toggle_recording(config)
         return
 
-    # File transcription takes priority over continuous modes
     if args.input:
         if args.robust:
             from .robust import process_file_robust
-            process_file_robust(
-                config, args.input, args.output,
-                chunk_duration=args.chunk_duration,
-                language=args.language,
-                template_cli_override=args.template,
-            )
+            process_file_robust(config)
         else:
-            process_file(
-                config, args.input, args.output,
-                language=args.language,
-                template_cli_override=args.template,
-                diarize=args.diarize,
-                num_speakers=args.speakers,
-            )
+            process_file(config)
         return
 
     if args.vad or args.interval is not None:
@@ -826,21 +740,10 @@ def main():
                     "Install with: pip install asr2clip[vad]"
                 )
                 sys.exit(1)
-        continuous_recording(
-            config,
-            interval=args.interval if args.interval is not None else 30.0,
-            output_file=args.output,
-            vad_enabled=args.vad,
-            silence_threshold=args.silence_threshold,
-            silence_duration=args.silence_duration,
-        )
+        continuous_recording(config)
         return
 
-    process_recording(
-        config, args.output,
-        language=args.language,
-        template_cli_override=args.template,
-    )
+    process_recording(config)
 
 
 if __name__ == "__main__":

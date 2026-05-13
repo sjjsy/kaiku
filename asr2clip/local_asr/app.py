@@ -290,7 +290,7 @@ def run_server(config: Config) -> None:
 
 def run_server_cli() -> None:
     """CLI entry point for ``asr2clip-serve`` command."""
-    from ..config_types import CliOverrides
+    from ..config_types import LocalAsrConfig
 
     parser = argparse.ArgumentParser(
         description="Start the asr2clip local ASR server (OpenAI-compatible)",
@@ -317,21 +317,14 @@ def run_server_cli() -> None:
     )
 
     args = parser.parse_args()
+    # Map standalone CLI's --config to the attribute name LocalAsrConfig expects
+    args.local_asr_models_config = args.config
 
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s"
     )
 
-    la = LocalAsrConfig.resolve(
-        {},
-        CliOverrides(
-            local_asr_host=args.host,
-            local_asr_port=args.port,
-            local_asr_model_dir=args.model_dir,
-            local_asr_num_threads=args.num_threads,
-            local_asr_models_config=args.config,
-        ),
-    )
+    la = LocalAsrConfig(config_dict={}, args=args)
 
     if args.download_model:
         registry = create_registry(

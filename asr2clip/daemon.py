@@ -315,12 +315,7 @@ def _handle_vad_iteration(
 
 def continuous_recording(
     config: "Config",
-    interval: float = 30.0,
-    output_file: str | None = None,
     sample_rate: int = 16000,
-    vad_enabled: bool = False,
-    silence_threshold: float = 0.5,
-    silence_duration: float = 1.5,
     min_transcribe_interval: float = 0.5,
     max_concurrent_transcriptions: int = 3,
 ):
@@ -334,12 +329,9 @@ def continuous_recording(
 
     Args:
         config: Resolved Config instance (must use an API-type ASR backend).
-        interval: Transcription interval in seconds (used as max interval with VAD).
-        output_file: Optional file to append transcripts to.
+                Reads interval, output_file, vad, silence_threshold,
+                silence_duration from config.
         sample_rate: Sample rate in Hz.
-        vad_enabled: Enable voice activity detection.
-        silence_threshold: Silero speech probability threshold (0.0-1.0).
-        silence_duration: Duration of silence to trigger transcription.
         min_transcribe_interval: Minimum interval between transcription triggers (seconds).
         max_concurrent_transcriptions: Maximum number of concurrent transcription requests.
     """
@@ -356,6 +348,7 @@ def continuous_recording(
 
     setup_signal_handlers(daemon_mode=True)
 
+    interval = config.interval if config.interval is not None else 30.0
     cfg = RecorderConfig(
         api_key=asr.api_key or "",
         api_base_url=asr.api_base_url or "",
@@ -363,15 +356,15 @@ def continuous_recording(
         org_id=asr.org_id,
         device=device_spec,
         interval=interval,
-        output_file=output_file,
+        output_file=config.output_file,
         sample_rate=sample_rate,
-        vad_enabled=vad_enabled,
-        silence_threshold=silence_threshold,
-        silence_duration=silence_duration,
+        vad_enabled=config.vad,
+        silence_threshold=config.silence_threshold,
+        silence_duration=config.silence_duration,
         min_transcribe_interval=min_transcribe_interval,
         max_concurrent_transcriptions=max_concurrent_transcriptions,
     )
-    max_clipboard_chars = config.output.clipboard_max_chars
+    max_clipboard_chars = config.clipboard_max_chars
 
     _log_startup(cfg)
 
@@ -380,13 +373,13 @@ def continuous_recording(
         state.vad = VoiceActivityDetector(
             sample_rate=sample_rate,
             threshold=cfg.silence_threshold,
-            silence_duration=silence_duration,
+            silence_duration=cfg.silence_duration,
         )
 
     executor = ThreadPoolExecutor(max_workers=max_concurrent_transcriptions)
 
     output_thread = threading.Thread(
-        target=_run_output_worker, args=(state, output_file, max_clipboard_chars), daemon=True
+        target=_run_output_worker, args=(state, cfg.output_file, max_clipboard_chars), daemon=True
     )
     output_thread.start()
 

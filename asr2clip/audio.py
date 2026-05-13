@@ -27,6 +27,7 @@ class DeviceInfo:
     channels: int
     sample_rate: int
     is_default: bool = False
+    mock_source: str | None = None  # path to source WAV for mock_devices entries
 
     def get_spec(self, recorder_name: str) -> str | int | None:
         """Return device spec that the given recorder understands."""

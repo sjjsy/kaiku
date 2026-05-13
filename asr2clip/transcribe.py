@@ -124,6 +124,7 @@ def transcribe(
     raise_on_error: bool = False,
     timeout: float | None = None,
     language: str | None = None,
+    num_speakers: int | None = None,
 ) -> str:
     """Transcribe audio using the backend resolved in config.asr_backend.
 
@@ -147,6 +148,47 @@ def transcribe(
             latency_ms=backend.latency_ms or 0,
         )
         return mock_transcribe(audio_file_path, cfg, timeout=timeout)
+
+    if backend.type in ("mock-fwd", "mock-bwd"):
+        from .backends.mock import MockTranscriptConfig, transcribe_from_transcript
+        direction = "forward" if backend.type == "mock-fwd" else "backward"
+        cfg = MockTranscriptConfig(
+            transcript_path=backend.transcript_path or "",
+            direction=direction,
+            latency_ms=backend.latency_ms or 0,
+        )
+        return transcribe_from_transcript(audio_file_path, cfg, timeout=timeout)
+
+    if backend.type == "mock-diarize":
+        from .backends.mock import MockDiarizeConfig, transcribe_mock_diarize
+        cfg = MockDiarizeConfig(
+            transcript_path=backend.transcript_path or "",
+            speaker_count=backend.speaker_count or 2,
+        )
+        return transcribe_mock_diarize(audio_file_path, cfg, num_speakers=num_speakers)
+
+    if backend.type == "whisperx":
+        from .backends.whisperx import WhisperXConfig, transcribe as wx_transcribe
+        hf_token = backend.hf_token
+        if not hf_token:
+            error(
+                "WhisperX requires a HuggingFace token.\n"
+                "Set HF_TOKEN env var or add 'hf_token: hf_...' to the whisperx\n"
+                "entry in asr_backends."
+            )
+            sys.exit(1)
+        cfg = WhisperXConfig(
+            hf_token=hf_token,
+            min_speakers=num_speakers or backend.min_speakers,
+            max_speakers=num_speakers or backend.max_speakers,
+        )
+        try:
+            return wx_transcribe(audio_file_path, cfg, language=language, timeout=timeout)
+        except TranscriptionError as e:
+            if raise_on_error:
+                raise
+            error(f"WhisperX diarization failed: {e}")
+            sys.exit(1)
 
     if backend.type == "whisper_cpp":
         from .backends.whisper_cpp import WhisperCppConfig, transcribe as wc_transcribe

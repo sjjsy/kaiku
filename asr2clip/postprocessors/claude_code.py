@@ -60,7 +60,7 @@ class ClaudeCodePostProcessor(PostProcessor):
         if self._context_text:
             user_content = f"# Context Files\n\n{self._context_text}\n\n# Transcript Processing Instructions\n\n{user_content}"
 
-        cmd = ["claude", "--no-markdown"]
+        cmd = ["claude", "--effort", "low"]
         if self._model:
             cmd += ["--model", self._model]
         cmd += ["-p", self._system_prompt]
