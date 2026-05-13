@@ -69,6 +69,11 @@ def test_config(config: Config) -> bool:
             threads=backend.threads or 4,
         )
         backend_ok = wc_test(cfg)
+    elif backend.type in ("mock", "mock-fwd", "mock-bwd", "mock-diarize"):
+        success(
+            f"Backend '{backend.name}' ({backend.type}) — no API connectivity check"
+        )
+        backend_ok = True
     else:
         api_key = backend.api_key
         api_base_url = backend.api_base_url
@@ -228,7 +233,7 @@ def process_recording(config: Config):
         audio_data = record_audio(device=device_spec)
         duration = get_audio_duration(audio_data)
         if duration < 0.1:
-            info("Recording too short or empty. Exiting.")
+            error("Recording too short or empty. Exiting.")
             sys.exit(0)
         info(f"Recorded {duration:.1f}s of audio ({time.time() - t0:.1f}s elapsed)")
 
@@ -239,7 +244,6 @@ def process_recording(config: Config):
         audio_data = preprocessor.process(audio_data, 16000)
         info(f"Preprocessing completed in {time.time() - t_pre:.2f}s")
 
-    info("Processing...")
     temp_path = save_audio(audio_data)
 
     try:

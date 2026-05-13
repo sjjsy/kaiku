@@ -17,10 +17,14 @@ the subject.
 
 Config resolution *why* lines live in stderr (see CLAUDE.md); we assert those
 substrings end-to-end without importing ``Config``.
+
+Log lines use the coloured formatter (``│  INFO │``, ``│   OK │``, …).  Tests
+match stable message text; level tags may vary in width.
 """
 
 from __future__ import annotations
 
+import importlib.util
 import os
 import struct
 import subprocess
@@ -116,10 +120,11 @@ class TestPresetAndFilePipeline:
         assert why in b.stderr
 
     def test_file_input_dense_primary_contract(self, example_cfg, silent_wav, tmp_path):
-        """One stacked file run exercises backend, template, post, language, ``-o``, logs, clipboard skip."""
+        """Stacked file run: backend, ``-p none``, template, post, language, ``-o``, clipboard skip; template fallback; ``mock-pp2`` extends ``mock-pp``."""
         out = tmp_path / "mega.txt"
         r = _run(
             "-i", str(silent_wav),
+            "-p", "none",
             "-b", "mock",
             "-T", "raw",
             "-P", "mock-pp",
@@ -133,13 +138,16 @@ class TestPresetAndFilePipeline:
         assert "Using post-processor: mock-pp (CLI -P)" in err
         assert "Post-processing with 'mock-pp'" in err
         assert "Mock backend: returning canned transcript" in err
-        assert "nothing was placed on the system clipboard" in err.lower()
+        assert "preprocessing audio with" not in err.lower()
+        assert "clipboard: skipped (--no-clipboard)" in err.lower()
         assert "Transcript analyzed:" in r.stdout
         assert "words=9" in r.stdout
         assert MOCK_FIXED not in r.stdout
         assert out.exists()
         assert "Transcript analyzed:" in out.read_text()
         assert "words=9" in out.read_text()
+        assert "Prompt analyzed:" in r.stdout
+        assert ", lines=1, words=8" in r.stdout
 
         r2 = _run(
             "-i", str(silent_wav), "-b", "mock", "-T", "no_such_template",
@@ -148,12 +156,17 @@ class TestPresetAndFilePipeline:
         assert r2.returncode == 0
         assert MOCK_FIXED in r2.stdout
 
-        r3 = _run("-i", str(silent_wav), "-P", "mock-pp", config=example_cfg)
+        r3 = _run(
+            "-i", str(silent_wav), "-b", "mock", "-P", "mock-pp2",
+            config=example_cfg,
+        )
         assert r3.returncode == 0
-        assert "Using backend: mock-fwd (preset 'mock-fwd')" in r3.stderr
-        assert "Using post-processor: mock-pp (CLI -P)" in r3.stderr
+        assert "Using post-processor: mock-pp2 (CLI -P)" in r3.stderr
+        assert "Post-processing with 'mock-pp2'" in r3.stderr
         assert "Transcript analyzed:" in r3.stdout
         assert MOCK_FIXED not in r3.stdout
+        assert ", lines=3, words=22" in r3.stdout
+        assert "Prompt analyzed:" in r3.stdout
 
     def test_quiet_matches_verbose_transcript_with_fewer_logs(
         self, example_cfg, silent_wav,
@@ -164,7 +177,37 @@ class TestPresetAndFilePipeline:
         assert verbose.returncode == 0
         assert quiet.returncode == 0
         assert verbose.stdout == quiet.stdout
-        assert len(quiet.stderr.splitlines()) <= len(verbose.stderr.splitlines())
+        lines_when_verbose = len(verbose.stderr.splitlines())
+        lines_when_quiet = len(quiet.stderr.splitlines())
+        assert lines_when_quiet < lines_when_verbose
+        assert lines_when_verbose > 5
+        assert lines_when_quiet == 0
+
+
+class TestPlainTextInput:
+    def test_txt_input_skips_asr_and_postprocesses(self, example_cfg, tmp_path):
+        """``.txt`` input bypasses ASR; transcript is read from file then post-processed."""
+        note = tmp_path / "note.txt"
+        note.write_text("Delta echo foxtrot.\n")
+        r = _run("-i", str(note), "-P", "mock-pp2", config=example_cfg)
+        assert r.returncode == 0
+        assert f"Processing file: {note}" in r.stderr
+        assert "Mock backend" not in r.stderr
+        assert "Transcription completed" not in r.stderr
+        assert "Post-processing with 'mock-pp2'" in r.stderr
+        assert "Transcript analyzed:" in r.stdout
+        assert "most_frequent=delta" in r.stdout.lower() or "echo" in r.stdout.lower()
+
+
+class TestSelfCheck:
+    def test_cli_test_mode_passes_with_mock_preset(self, example_cfg):
+        r = _run("--test", config=example_cfg)
+        assert r.returncode == 0
+        e = r.stderr
+        assert "All checks passed" in e
+        assert "no API connectivity check" in e
+        assert "Preprocessor: none" in e
+        assert "No post-processors configured to check" in e or "post-processors" in e.lower()
 
 
 class TestConfigErrors:
@@ -291,13 +334,15 @@ class TestRobustMode:
     def test_chunking_stderr_file_and_chunk_duration_flag(
         self, example_cfg, long_speech, tmp_path,
     ):
-        """With ``-o``, per-chunk text is appended to the file (stdout stays minimal); ``-C`` changes chunk count."""
+        """With ``-o``, chunks go to file; ``-C`` changes chunk count.  Optionally ``-p noisereduce``."""
         out20 = tmp_path / "robust20.txt"
-        r20 = _run(
+        args20: list[str | Path] = [
             "-i", str(long_speech), "-r", "-C", "20", "-b", "mock",
             "-o", str(out20),
-            config=example_cfg,
-        )
+        ]
+        if importlib.util.find_spec("noisereduce") is not None:
+            args20.extend(["-p", "noisereduce"])
+        r20 = _run(*args20, config=example_cfg)
         assert r20.returncode == 0
         assert "Chunk 1/" in r20.stderr
         assert "Chunk 2/" in r20.stderr
@@ -305,6 +350,8 @@ class TestRobustMode:
         assert out20.exists()
         paras20 = _chunk_paragraphs(out20.read_text())
         assert len(paras20) >= 5, out20.read_text()[:800]
+        if importlib.util.find_spec("noisereduce") is not None:
+            assert "preprocessing audio with noisereduce" in r20.stderr.lower()
 
         out10 = tmp_path / "robust10.txt"
         r10 = _run(
