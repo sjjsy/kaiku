@@ -5,11 +5,14 @@ from __future__ import annotations
 import os
 import sys
 import time
-from typing import NoReturn
+from typing import TYPE_CHECKING, NoReturn
 
 from asr2clip._vendor.httpclient import httpclient
 
 from .utils import error, print_error, print_key_value, print_success, warning
+
+if TYPE_CHECKING:
+    from .config_types import Config
 
 
 class TranscriptionError(Exception):
@@ -29,25 +32,13 @@ def _handle_transcription_failure(
     raise_on_error: bool,
     cause: Exception | None = None,
 ) -> NoReturn:
-    """Handle a transcription failure by raising or exiting.
-
-    Args:
-        error_msg: The error message.
-        raise_on_error: If True, raise TranscriptionError.
-        cause: Optional original exception.
-
-    Raises:
-        TranscriptionError: If raise_on_error is True.
-        SystemExit: If raise_on_error is False.
-    """
     if raise_on_error:
         raise TranscriptionError(error_msg) from cause
     error(error_msg)
     sys.exit(1)
 
 
-def _build_api_headers(api_key: str, org_id: str | None) -> tuple[str, dict]:
-    """Normalize the API base URL (ensure trailing slash) and build auth headers."""
+def _build_api_headers(api_key: str, org_id: str | None) -> dict:
     headers = {"Authorization": f"Bearer {api_key}"}
     if org_id:
         headers["OpenAI-Organization"] = org_id
@@ -62,23 +53,6 @@ def _attempt_transcription(
     timeout: float,
     language: str | None = None,
 ) -> str:
-    """Make a single transcription API request.
-
-    Args:
-        audio_file_path: Path to the audio file.
-        url: API endpoint URL.
-        headers: Request headers.
-        model_name: Model name.
-        timeout: Request timeout in seconds.
-
-    Returns:
-        Transcribed text.
-
-    Raises:
-        httpclient.HttpTimeoutError: On request timeout.
-        httpclient.HttpClientError: On request failure.
-        TranscriptionError: On API error response.
-    """
     with open(audio_file_path, "rb") as audio_file:
         files = {"file": (os.path.basename(audio_file_path), audio_file, "audio/wav")}
         data = {"model": model_name}
@@ -108,26 +82,7 @@ def transcribe_audio(
     timeout: float = DEFAULT_TIMEOUT,
     language: str | None = None,
 ) -> str:
-    """Transcribe audio using the ASR API with automatic retry on timeout.
-
-    Args:
-        audio_file_path: Path to the audio file to transcribe.
-        api_key: API key for authentication.
-        api_base_url: Base URL of the API.
-        model_name: Name of the model to use.
-        org_id: Optional organization ID.
-        raise_on_error: If True, raise exception on error instead of sys.exit().
-        max_retries: Maximum number of retry attempts for timeout errors.
-        retry_delay: Delay between retries in seconds.
-        timeout: Request timeout in seconds.
-
-    Returns:
-        Transcribed text.
-
-    Raises:
-        TranscriptionError: If transcription fails and raise_on_error is True.
-        SystemExit: If transcription fails and raise_on_error is False.
-    """
+    """Transcribe audio via OpenAI-compatible API with automatic retry on timeout."""
     if not api_base_url.endswith("/"):
         api_base_url += "/"
     url = f"{api_base_url}audio/transcriptions"
@@ -163,70 +118,43 @@ def transcribe_audio(
     )
 
 
-def _transcribe_with_config_mode(
+def transcribe(
     audio_file_path: str,
-    config_dict: dict,
-    mode: str,
+    config: "Config",
     raise_on_error: bool = False,
     timeout: float | None = None,
     language: str | None = None,
-    backend: str | None = None,
 ) -> str:
-    """Internal: transcribe using specified mode to select backend.
+    """Transcribe audio using the backend resolved in config.asr_backend.
 
     Args:
         audio_file_path: Path to the WAV file.
-        config_dict: Full configuration dictionary.
-        mode: "urgent" or "casual" — determines which backend to use.
-        raise_on_error: If True, raise TranscriptionError on failure.
+        config: Fully resolved Config instance. config.asr_backend determines
+                which backend (API, whisper.cpp, mock) is used.
+        raise_on_error: If True, raise TranscriptionError on failure; else sys.exit.
         timeout: Optional timeout override in seconds.
-        backend: Optional backend override.
+        language: ISO-639-1 language hint, or None for auto-detect.
 
     Returns:
-        Transcribed text.
+        Transcribed text string.
     """
-    from .config_types import Config, CliOverrides, PresetConfig
+    backend = config.asr_backend
 
-    # For backward compatibility in tests, infer a preset from the config
-    # In production, user must specify --preset via CLI
-    preset_name = config_dict.get("_preset_for_testing")
-    if not preset_name:
-        # Try to find a default preset
-        presets = config_dict.get("presets", {})
-        if presets:
-            preset_name = next(iter(presets.keys()))
-        else:
-            raise ValueError(
-                f"Config missing presets. Add 'presets:' section to config or use --preset flag."
-            )
-
-    preset_config = PresetConfig.resolve(config_dict, preset_name)
-    cli_overrides = CliOverrides(preset=preset_name, backend=backend)
-    config = Config.resolve(config_dict, preset=preset_config.preset, cli_overrides=cli_overrides)
-    backend_config = config.asr_backend
-
-    if backend_config.type == "mock":
+    if backend.type == "mock":
         from .backends.mock import MockConfig, transcribe as mock_transcribe
-        mock_wrapper = {
-            "response": backend_config.response if hasattr(backend_config, "response") else None,
-            "latency_ms": backend_config.latency_ms if hasattr(backend_config, "latency_ms") else 0,
-        }
-        # Filter out None values
-        mock_wrapper = {k: v for k, v in mock_wrapper.items() if v is not None}
-        cfg = MockConfig.from_config(mock_wrapper)
+        cfg = MockConfig(
+            response=backend.response,
+            latency_ms=backend.latency_ms or 0,
+        )
         return mock_transcribe(audio_file_path, cfg, timeout=timeout)
 
-    if backend_config.type == "whisper_cpp":
+    if backend.type == "whisper_cpp":
         from .backends.whisper_cpp import WhisperCppConfig, transcribe as wc_transcribe
-        # Create a wrapper config with whisper_cpp at top level for WhisperCppConfig.from_config()
-        wcpp_wrapper = {
-            "whisper_cpp": {
-                "binary": backend_config.binary,
-                "model": backend_config.model,
-                "threads": backend_config.threads,
-            }
-        }
-        cfg = WhisperCppConfig.from_config(wcpp_wrapper)
+        cfg = WhisperCppConfig(
+            binary=backend.binary,
+            model=backend.model,
+            threads=backend.threads or 4,
+        )
         if language:
             cfg.language = language
         try:
@@ -234,81 +162,19 @@ def _transcribe_with_config_mode(
         except TranscriptionError:
             if raise_on_error:
                 raise
-            error(f"whisper.cpp transcription failed")
-            import sys
+            error("whisper.cpp transcription failed")
             sys.exit(1)
 
-    # Use resolved backend config
-    effective_language = language or config_dict.get("language")
+    # API backend (openai-compatible)
     return transcribe_audio(
         audio_file_path,
-        backend_config.api_key,
-        backend_config.api_base_url,
-        backend_config.model_name,
-        backend_config.org_id,
+        backend.api_key,
+        backend.api_base_url,
+        backend.model_name,
+        backend.org_id,
         raise_on_error=raise_on_error,
         timeout=timeout or DEFAULT_TIMEOUT,
-        language=effective_language,
-    )
-
-
-def transcribe_casual(
-    audio_file_path: str,
-    config_dict: dict,
-    raise_on_error: bool = False,
-    timeout: float | None = None,
-    language: str | None = None,
-    backend: str | None = None,
-) -> str:
-    """Transcribe audio using the casual backend.
-
-    For batch/deferred processing (e.g., -i FILE input). Uses asr_backend_casual from config.
-
-    Args:
-        audio_file_path: Path to the WAV file.
-        config_dict: Full configuration dictionary.
-        raise_on_error: If True, raise TranscriptionError on failure.
-        timeout: Optional timeout override in seconds.
-        language: Optional language override.
-        backend: Optional backend override.
-
-    Returns:
-        Transcribed text.
-    """
-    return _transcribe_with_config_mode(
-        audio_file_path, config_dict, mode="casual",
-        raise_on_error=raise_on_error, timeout=timeout,
-        language=language, backend=backend,
-    )
-
-
-def transcribe_urgent(
-    audio_file_path: str,
-    config_dict: dict,
-    raise_on_error: bool = False,
-    timeout: float | None = None,
-    language: str | None = None,
-    backend: str | None = None,
-) -> str:
-    """Transcribe audio using the urgent backend.
-
-    For real-time/interactive modes (toggle recording, VAD). Uses asr_backend_urgent from config.
-
-    Args:
-        audio_file_path: Path to the WAV file.
-        config_dict: Full configuration dictionary.
-        raise_on_error: If True, raise TranscriptionError on failure.
-        timeout: Optional timeout override in seconds.
-        language: Optional language override.
-        backend: Optional backend override.
-
-    Returns:
-        Transcribed text.
-    """
-    return _transcribe_with_config_mode(
-        audio_file_path, config_dict, mode="urgent",
-        raise_on_error=raise_on_error, timeout=timeout,
-        language=language, backend=backend,
+        language=language,
     )
 
 
@@ -318,17 +184,7 @@ def test_transcription(
     model_name: str,
     org_id: str | None = None,
 ) -> bool:
-    """Test the transcription API connection.
-
-    Args:
-        api_key: API key for authentication.
-        api_base_url: Base URL of the API.
-        model_name: Name of the model to use.
-        org_id: Optional organization ID.
-
-    Returns:
-        True if the API is accessible, False otherwise.
-    """
+    """Test the transcription API connection. Returns True if reachable."""
     if not api_base_url.endswith("/"):
         api_base_url += "/"
     url = f"{api_base_url}models"

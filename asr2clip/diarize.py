@@ -15,6 +15,10 @@ from __future__ import annotations
 
 import os
 import sys
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .config_types import Config
 
 
 class DiarizationError(Exception):
@@ -59,7 +63,7 @@ def _format_transcript(segments: list[dict]) -> str:
 
 def run_diarization(
     audio_path: str,
-    config: dict,
+    config: "Config",
     language: str | None = None,
     num_speakers: int | None = None,
 ) -> str:
@@ -70,9 +74,9 @@ def run_diarization(
 
     Args:
         audio_path: Path to a WAV or supported audio file.
-        config: Full asr2clip config dict (for HF token and speaker count hints).
+        config: Resolved Config instance (for HF token and speaker count hints).
         language: ISO-639-1 language code, or None for auto-detect.
-        num_speakers: Expected speaker count (overrides config hints).
+        num_speakers: Expected speaker count; overrides config hints when set.
 
     Returns:
         Formatted speaker-attributed transcript string.
@@ -92,10 +96,8 @@ def run_diarization(
         )
 
     import torch
-    from .config_types import DiarizationConfig
 
-    # Resolve diarization config using centralized config resolution
-    diarization_cfg = DiarizationConfig.resolve(config)
+    diarization_cfg = config.diarization
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     compute_type = "float16" if device == "cuda" else "int8"

@@ -11,15 +11,18 @@ import os
 import shutil
 import tempfile
 import time
+from typing import TYPE_CHECKING
 
 from .audio import load_wav, save_audio
-from .config import resolve_audio_device, resolve_clipboard_max_chars, resolve_recorder_config
 from .output import output_transcript
 from .postprocessors import NonePostProcessor, PostMetadata, PostProcessor, format_output
 from .preprocessors import AudioPreprocessor, NonePreprocessor
 from .recorders import _kill_process, _pid_alive, make_recorder
-from .transcribe import transcribe_urgent
+from .transcribe import transcribe
 from .utils import info, log, run_subprocess, safe_unlink, warning
+
+if TYPE_CHECKING:
+    from .config_types import Config
 
 
 def _lock_path() -> str:
@@ -39,8 +42,7 @@ def _notify(title: str, body: str):
 
 
 def toggle_recording(
-    config: dict,
-    device: str | int | None = None,
+    config: "Config",
     output_file: str | None = None,
     language: str | None = None,
     preprocessor: AudioPreprocessor | None = None,
@@ -48,7 +50,6 @@ def toggle_recording(
     template_str: str = "{result}",
     diarize: bool = False,
     num_speakers: int | None = None,
-    backend: str | None = None,
 ):
     """Start or stop toggle-mode recording."""
     lock_path = _lock_path()
@@ -56,20 +57,20 @@ def toggle_recording(
     if os.path.exists(lock_path):
         _stop_and_transcribe(
             lock_path, config, output_file, language, preprocessor,
-            postprocessor, template_str, diarize, num_speakers, backend,
+            postprocessor, template_str, diarize, num_speakers,
         )
     else:
-        _start_recording(lock_path, device_cli=device, config=config)
+        _start_recording(lock_path, config)
 
 
-def _start_recording(lock_path: str, device_cli: str | None, config: dict):
+def _start_recording(lock_path: str, config: "Config"):
     audio_path = tempfile.NamedTemporaryFile(
         suffix=".wav", prefix="asr2clip_", delete=False
     ).name
 
-    device_info = resolve_audio_device(config, cli_override=device_cli)
-    recorder = make_recorder(resolve_recorder_config(config), device_info=device_info)
-    pid = recorder.start(audio_path, device_info)
+    recorder_cfg = config.recorder
+    recorder = make_recorder(recorder_cfg.name, device_info=recorder_cfg.device)
+    pid = recorder.start(audio_path, recorder_cfg.device)
     if pid is None:
         safe_unlink(audio_path)
         warning("Could not start recorder. Check device availability.")
@@ -80,14 +81,14 @@ def _start_recording(lock_path: str, device_cli: str | None, config: dict):
     with open(lock_path, "w") as f:
         json.dump(lock_data, f)
 
-    device_desc = f" with {device_info.name}" if device_info else " (default device)"
+    device_desc = f" with {recorder_cfg.device.name}" if recorder_cfg.device else " (default device)"
     info(f"Recording started ({recorder.name}, pid {pid}){device_desc}")
-    _notify("asr2clip", f"Recording{device_desc.replace(' with ', ' with ')}… (run asr2clip --toggle to stop)")
+    _notify("asr2clip", f"Recording{device_desc}… (run asr2clip --toggle to stop)")
 
 
 def _stop_and_transcribe(
     lock_path: str,
-    config: dict,
+    config: "Config",
     output_file: str | None,
     language: str | None = None,
     preprocessor: AudioPreprocessor | None = None,
@@ -95,7 +96,6 @@ def _stop_and_transcribe(
     template_str: str = "{result}",
     diarize: bool = False,
     num_speakers: int | None = None,
-    backend: str | None = None,
 ):
     with open(lock_path) as f:
         lock_data = json.load(f)
@@ -109,7 +109,7 @@ def _stop_and_transcribe(
         if audio_path and os.path.exists(audio_path):
             _transcribe_and_output(
                 audio_path, config, output_file, language, preprocessor,
-                postprocessor, template_str, diarize, num_speakers, backend,
+                postprocessor, template_str, diarize, num_speakers,
             )
         return
 
@@ -121,13 +121,13 @@ def _stop_and_transcribe(
 
     _transcribe_and_output(
         audio_path, config, output_file, language, preprocessor,
-        postprocessor, template_str, diarize, num_speakers, backend,
+        postprocessor, template_str, diarize, num_speakers,
     )
 
 
 def _transcribe_and_output(
     audio_path: str,
-    config: dict,
+    config: "Config",
     output_file: str | None,
     language: str | None = None,
     preprocessor: AudioPreprocessor | None = None,
@@ -135,7 +135,6 @@ def _transcribe_and_output(
     template_str: str = "{result}",
     diarize: bool = False,
     num_speakers: int | None = None,
-    backend: str | None = None,
 ):
     if not os.path.exists(audio_path) or os.path.getsize(audio_path) < 100:
         log("Audio file is empty or missing — nothing to transcribe.")
@@ -184,8 +183,8 @@ def _transcribe_and_output(
                 _notify("asr2clip", f"Diarization failed: {e}")
                 return
         else:
-            transcript = transcribe_urgent(
-                transcribe_path, config, raise_on_error=True, language=language, backend=backend
+            transcript = transcribe(
+                transcribe_path, config, raise_on_error=True, language=language,
             )
     except Exception as e:
         warning(f"Transcription failed: {e}")
@@ -226,6 +225,6 @@ def _transcribe_and_output(
 
     output_transcript(
         final, to_clipboard=True, to_stdout=True, to_file=output_file,
-        max_clipboard_chars=resolve_clipboard_max_chars(config),
+        max_clipboard_chars=config.output.clipboard_max_chars,
     )
     _notify("asr2clip", final[:100])

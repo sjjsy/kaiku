@@ -9,6 +9,8 @@ from pathlib import Path
 
 import pytest
 
+from asr2clip.config_types import Config, Preset
+
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
@@ -74,9 +76,9 @@ def jfk_wav() -> str:
 # ---------------------------------------------------------------------------
 
 @pytest.fixture(scope="session")
-def wcpp_config() -> dict:
-    """Minimal config dict for whisper.cpp backend E2E tests."""
-    return {
+def wcpp_config() -> Config:
+    """Minimal Config for whisper.cpp backend E2E tests."""
+    config_dict = {
         "asr_backends": {
             "wcpp": {
                 "type": "whisper_cpp",
@@ -90,5 +92,6 @@ def wcpp_config() -> dict:
         "presets": {
             "test": ["none", "wcpp", "none", "Test preset"],
         },
-        "_preset_for_testing": "test",
     }
+    preset = Preset(name="test", preprocessor="none", asr_backend="wcpp", postprocessor="none")
+    return Config.resolve(config_dict, preset=preset)

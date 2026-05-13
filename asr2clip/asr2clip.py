@@ -32,7 +32,7 @@ from .output import (
     output_transcript,
     print_clipboard_help,
 )
-from .transcribe import test_transcription, transcribe_audio, transcribe_casual
+from .transcribe import test_transcription, transcribe_audio, transcribe
 from .utils import (
     error,
     info,
@@ -234,15 +234,12 @@ def _test_diarization(config: Config) -> None:
 
 
 def process_recording(
-    config: dict,
-    device: str | int | None = None,
+    config: Config,
     output_file: str | None = None,
     language: str | None = None,
     preprocessor=None,
     postprocessor=None,
     template_str: str = "{result}",
-    max_clipboard_chars: int = _DEFAULT_CLIPBOARD_MAX_CHARS,
-    backend: str | None = None,
 ):
     """Record audio, transcribe, and output the result."""
     import time
@@ -256,8 +253,10 @@ def process_recording(
     setup_signal_handlers(daemon_mode=False)
     log("Recording... Press Ctrl+C to stop (press twice to cancel)")
 
+    device_spec = config.recorder.device.get_spec(config.recorder.name) if config.recorder.device else None
+
     t0 = time.time()
-    audio_data = record_audio(device=device)
+    audio_data = record_audio(device=device_spec)
     duration = get_audio_duration(audio_data)
     if duration < 0.1:
         log("Recording too short or empty. Exiting.")
@@ -276,7 +275,7 @@ def process_recording(
 
     try:
         t1 = time.time()
-        transcript = transcribe_casual(temp_path, config, language=language, backend=backend)
+        transcript = transcribe(temp_path, config, language=language)
         info(f"Transcription completed in {time.time() - t1:.1f}s")
 
         if not transcript.strip():
@@ -308,7 +307,7 @@ def process_recording(
 
         output_transcript(
             final, to_clipboard=True, to_stdout=True, to_file=output_file,
-            max_clipboard_chars=max_clipboard_chars,
+            max_clipboard_chars=config.output.clipboard_max_chars,
         )
 
     finally:
@@ -316,7 +315,7 @@ def process_recording(
 
 
 def process_file(
-    config: dict,
+    config: Config,
     input_file: str,
     output_file: str | None = None,
     language: str | None = None,
@@ -325,8 +324,6 @@ def process_file(
     template_str: str = "{result}",
     diarize: bool = False,
     num_speakers: int | None = None,
-    max_clipboard_chars: int = _DEFAULT_CLIPBOARD_MAX_CHARS,
-    backend: str | None = None,
 ):
     """Transcribe an existing audio or video file."""
     import time
@@ -369,7 +366,7 @@ def process_file(
             final = result
         output_transcript(
             final, to_clipboard=True, to_stdout=True, to_file=output_file,
-            max_clipboard_chars=max_clipboard_chars,
+            max_clipboard_chars=config.output.clipboard_max_chars,
         )
         return
 
@@ -412,7 +409,7 @@ def process_file(
                 print(f"Diarization error: {e}", file=sys.stderr)
                 sys.exit(1)
         else:
-            transcript = transcribe_casual(temp_path, config, language=language, backend=backend)
+            transcript = transcribe(temp_path, config, language=language)
         info(f"Transcription completed in {time.time() - t1:.1f}s")
 
         if not transcript.strip():
@@ -451,7 +448,7 @@ def process_file(
 
         output_transcript(
             final, to_clipboard=True, to_stdout=True, to_file=output_file,
-            max_clipboard_chars=max_clipboard_chars,
+            max_clipboard_chars=config.output.clipboard_max_chars,
         )
 
     finally:
@@ -840,7 +837,6 @@ def main():
         config.postprocessor.name, config._config_dict, args.post_model
     )
     template = resolve_output_template(config._config_dict, config.postprocessor.template, args.template)
-    max_clipboard_chars = config.output.clipboard_max_chars
 
     # Create preprocessor for the selected preset (used for all operations)
     from .preprocessors import make_preprocessor
@@ -849,14 +845,13 @@ def main():
     if args.toggle:
         from .toggle import toggle_recording
         toggle_recording(
-            config._config_dict, device=args.device, output_file=args.output,
+            config, output_file=args.output,
             language=args.language,
             preprocessor=preprocessor,
             postprocessor=postprocessor,
             template_str=template,
             diarize=args.diarize,
             num_speakers=args.speakers,
-            backend=args.backend,
         )
         return
 
@@ -865,40 +860,28 @@ def main():
         if args.robust:
             from .robust import process_file_robust
             process_file_robust(
-                config._config_dict, args.input, args.output,
+                config, args.input, args.output,
                 chunk_duration=args.chunk_duration,
                 language=args.language,
                 preprocessor=preprocessor,
                 postprocessor=postprocessor,
                 template_str=template,
-                max_clipboard_chars=max_clipboard_chars,
-                backend=args.backend,
             )
         else:
             process_file(
-                config._config_dict, args.input, args.output,
+                config, args.input, args.output,
                 language=args.language,
                 preprocessor=preprocessor,
                 postprocessor=postprocessor,
                 template_str=template,
                 diarize=args.diarize,
                 num_speakers=args.speakers,
-                max_clipboard_chars=max_clipboard_chars,
-                backend=args.backend,
             )
         return
 
     if args.vad or args.interval is not None:
         asr_cfg = config.asr_backend
-        api_key = asr_cfg.api_key
-        api_base_url = asr_cfg.api_base_url
-        model_name = asr_cfg.model_name
-        org_id = asr_cfg.org_id
-
-        # Get device spec for recorder
-        device_spec = None
-        if config.recorder.device:
-            device_spec = config.recorder.device.get_spec(config.recorder.name)
+        device_spec = config.recorder.device.get_spec(config.recorder.name) if config.recorder.device else None
 
         if args.vad:
             try:
@@ -911,33 +894,26 @@ def main():
                 sys.exit(1)
         interval = args.interval if args.interval is not None else 30.0
         continuous_recording(
-            api_key=api_key,
-            api_base_url=api_base_url,
-            model_name=model_name,
-            org_id=org_id,
+            api_key=asr_cfg.api_key,
+            api_base_url=asr_cfg.api_base_url,
+            model_name=asr_cfg.model_name,
+            org_id=asr_cfg.org_id,
             device=device_spec,
             interval=interval,
             output_file=args.output,
             vad_enabled=args.vad,
             silence_threshold=args.silence_threshold,
             silence_duration=args.silence_duration,
-            max_clipboard_chars=max_clipboard_chars,
+            max_clipboard_chars=config.output.clipboard_max_chars,
         )
         return
 
-    # Get device spec for recorder
-    device_spec = None
-    if config.recorder.device:
-        device_spec = config.recorder.device.get_spec(config.recorder.name)
-
     process_recording(
-        config._config_dict, device_spec, args.output,
+        config, args.output,
         language=args.language,
         preprocessor=preprocessor,
         postprocessor=postprocessor,
         template_str=template,
-        max_clipboard_chars=max_clipboard_chars,
-        backend=args.backend,
     )
 
 

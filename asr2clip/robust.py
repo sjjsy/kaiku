@@ -6,14 +6,18 @@ import os
 import re
 import tempfile
 import time
+from typing import TYPE_CHECKING
 
 from pydub import AudioSegment
 from pydub.silence import detect_silence
 
 from .audio import audiosegment_to_float32, float32_to_audiosegment
-from .output import _DEFAULT_CLIPBOARD_MAX_CHARS, copy_transcript_to_clipboard, append_transcript_to_file
-from .transcribe import TranscriptionError, transcribe_casual
+from .output import copy_transcript_to_clipboard, append_transcript_to_file
+from .transcribe import TranscriptionError, transcribe
 from .utils import info, log, safe_unlink, warning
+
+if TYPE_CHECKING:
+    from .config_types import Config
 
 
 def _find_chunk_boundaries(
@@ -64,7 +68,7 @@ def _estimate_timeout(chunk_duration_s: float) -> float:
 
 
 def process_file_robust(
-    config: dict,
+    config: "Config",
     input_file: str,
     output_file: str | None = None,
     chunk_duration: int = 180,
@@ -72,8 +76,6 @@ def process_file_robust(
     preprocessor=None,
     postprocessor=None,
     template_str: str = "{result}",
-    max_clipboard_chars: int = _DEFAULT_CLIPBOARD_MAX_CHARS,
-    backend: str | None = None,
 ):
     """Transcribe a long audio file in silence-bounded chunks with quality checks.
 
@@ -82,7 +84,7 @@ def process_file_robust(
     template is applied.
 
     Args:
-        config: Full configuration dictionary.
+        config: Resolved Config instance.
         input_file: Path to the audio file.
         output_file: Optional file to append chunks to.
         chunk_duration: Maximum chunk length in seconds (default 180).
@@ -141,9 +143,9 @@ def process_file_robust(
 
         for attempt in range(retries):
             try:
-                candidate = transcribe_casual(
+                candidate = transcribe(
                     tmp_path, config, raise_on_error=True, timeout=timeout,
-                    language=language, backend=backend,
+                    language=language,
                 )
                 if _check_quality(candidate):
                     text = candidate
@@ -225,7 +227,7 @@ def process_file_robust(
             backend=postprocessor.backend_type,
         )
 
-    copy_transcript_to_clipboard(final, output_file, max_clipboard_chars)
+    copy_transcript_to_clipboard(final, output_file, config.output.clipboard_max_chars)
     if output_file:
         log(f"Full transcript written to {output_file}")
 

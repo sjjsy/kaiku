@@ -19,21 +19,21 @@ YAML config + CLI args
               │
               ▼
   main() distributes config to:
-        ├─ toggle_recording(...)    toggle.py
-        ├─ process_file(...)        asr2clip.py
-        ├─ process_recording(...)   asr2clip.py
-        ├─ process_file_robust(...) robust.py
-        └─ continuous_recording(...)daemon.py
+        ├─ toggle_recording(...)     toggle.py
+        ├─ process_file(...)         asr2clip.py
+        ├─ process_recording(...)    asr2clip.py
+        ├─ process_file_robust(...)  robust.py
+        └─ continuous_recording(...) daemon.py
 ```
 
 ## Config system
 
 ### Design
 
-`Config` is a **lazy-loading coordinator** created once at startup from YAML + CLI flags. It is the single authoritative source of truth for all configuration. Downstream functions receive what they need — never the raw config dict.
+`Config` is a **lazy-loading coordinator** created once at startup from YAML + CLI flags. It is the single authoritative source of truth for all configuration. Downstream functions receive the `Config` object — never the raw config dict.
 
 - `Config.from_file(path, preset_name, cli_overrides)` — primary entry point; handles file reading, preset resolution, and error reporting in one place.
-- `Config.resolve(config_dict, preset, cli_overrides)` — lower-level constructor for testing and toggle mode.
+- `Config.resolve(config_dict, preset, cli_overrides)` — lower-level constructor used in tests and toggle mode.
 - Each sub-config class (`ASRBackendConfig`, etc.) has a `resolve(config_dict, ...)` classmethod that owns all defaults, env var fallbacks, validation, and logging for its domain.
 
 ### CLI override precedence
@@ -52,27 +52,27 @@ backend_name = self._cli_overrides.backend or self._preset.asr_backend
 
 ### Current design gap (incomplete migration)
 
-`Config` is created correctly in `main()`, but downstream processing functions (`process_file`, `process_recording`, `process_file_robust`, `toggle_recording`) still accept `config: dict` (raw dict), not `config: Config`. The CLI override is re-injected via an explicit `backend: str | None` parameter threaded through the call chain.
+`Config` is created correctly in `main()`, but downstream processing functions (`process_file`, `process_recording`, `process_file_robust`, `toggle_recording`, `daemon.py`) still accept `config: dict` (raw dict), not `config: Config`. The CLI backend override is re-injected via an explicit `backend: str | None` parameter as a stopgap.
 
-This is a stopgap. The correct final design is to accept `config: Config` everywhere (dependency injection), eliminating both `config_dict` parameters and the redundant `backend` passthrough.
+The core internal function `_transcribe_with_config_mode()` reconstructs a `Config` internally from a raw dict because transcription functions still accept dicts. It should disappear entirely once all callers pass `config: Config`.
 
-**The core internal function** `_transcribe_with_config_mode()` reconstructs a `Config` internally from the raw dict. This exists because transcription functions still accept dicts. It should disappear once all callers pass `config: Config`.
+### Target design
 
-### Target design (next migration)
+Pass the root `Config` object everywhere. No function below `main()` should accept or forward a raw dict or decomposed parameters — they access what they need from `config`:
 
 ```python
 # All processing functions accept Config, not dict
 def process_file(config: Config, input_file: str, ...) -> None:
-    transcript = transcribe_audio(input_file, config.asr_backend, language=language)
+    transcript = transcribe(input_file, config, language=language)
 
-# Transcription functions accept ASRBackendConfig, not a dict or name
-def transcribe_audio(path: str, backend: ASRBackendConfig, ...) -> str:
-    if backend.type == "whisper_cpp":
-        return _transcribe_whisper_cpp(path, backend, ...)
-    return _transcribe_api(path, backend, ...)
+# Transcription functions accept Config and use config.asr_backend internally
+def transcribe(path: str, config: Config, ...) -> str:
+    if config.asr_backend.type == "whisper_cpp":
+        return _transcribe_whisper_cpp(path, config.asr_backend, ...)
+    return _transcribe_api(path, config.asr_backend, ...)
 ```
 
-At this point `_transcribe_with_config_mode` and its internal Config reconstruction disappear entirely.
+At this point `_transcribe_with_config_mode` and its internal Config reconstruction disappear entirely, as do the `backend: str | None` passthrough parameters.
 
 ## Module map
 
@@ -93,22 +93,23 @@ At this point `_transcribe_with_config_mode` and its internal Config reconstruct
 | `diarize.py` | WhisperX diarization wrapper |
 | `output.py` | Clipboard and file output, `_DEFAULT_CLIPBOARD_MAX_CHARS` |
 
-## Known issues and open questions
+## Remaining migration items
 
-### `PreprocessorConfig.resolve()` logging is misleading
+| File | Current state | Target |
+|---|---|---|
+| `transcribe.py` | `transcribe_casual/urgent(path, config_dict, ..., backend=None)` — rebuilds `Config` internally | Accept `config: Config`; delete `_transcribe_with_config_mode` |
+| `asr2clip.py` | `process_file/process_recording(config_dict, ..., backend=None)` | Accept `config: Config`; use `config.asr_backend` directly |
+| `toggle.py` | `toggle_recording(config_dict, ..., backend=None)` | Accept `config: Config` |
+| `robust.py` | `process_file_robust(config_dict, ..., backend=None)` | Accept `config: Config` |
+| `postprocessors/__init__.py` | `make_postprocessor(name, config_dict, ...)` | Accept `PostprocessorConfig + PostprocessorBackendConfig` |
+| `diarize.py` | `run_diarization(path, config_dict, ...)` | Accept `config: Config`, use `config.diarization` |
+| `daemon.py` | `continuous_recording(api_key, api_base_url, ...)` — bypasses Config entirely | Accept `config: Config` |
 
-The method parameter is named `cli_override` but `Config.preprocessor` passes it the value `cli_overrides.preprocessor or preset.preprocessor` — so the preset value comes in through the "CLI override" path and is logged as "CLI override". The method doesn't distinguish between the two sources.
+## Config logging contract
 
-**Fix:** Split the parameter or pass source information so logging says "(CLI override)" vs "(from preset 'quality')".
+Every config decision log line must answer *why* that value was chosen:
 
-### `postprocessors/__init__.py` still uses raw dict
+- `info(f"Using backend: {name} (CLI override -b)")` or `info(f"Using backend: {name} (from preset 'speed')")`
+- Same for preprocessor, postprocessor, device, recorder.
 
-`make_postprocessor()`, `_resolve_backend()`, and `_resolve_prompt()` all accept `config_dict: dict`. They should eventually accept `Config` or at least `PostprocessorConfig + PostprocessorBackendConfig`.
-
-### `diarize.py` still uses raw dict
-
-`run_diarization(audio_path, config, ...)` accepts `config: dict`. Should accept `DiarizationConfig`.
-
-### `daemon.py` bypasses Config entirely
-
-`continuous_recording()` accepts raw API key/URL/model parameters instead of `config: Config`. It was not updated during the config system migration.
+Currently `PreprocessorConfig.resolve()` and `PostprocessorConfig.resolve()` log "(CLI override)" even when called with the preset's value, because `Config` passes `cli_override or preset_value` as a single parameter. Fix: log the source before delegating, remove source-attribution from sub-config resolve methods.

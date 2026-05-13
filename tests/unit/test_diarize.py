@@ -7,7 +7,25 @@ from unittest.mock import patch, MagicMock
 
 import pytest
 
+from asr2clip.config_types import Config, Preset
 from asr2clip.diarize import _fmt_ts, _format_transcript, DiarizationError, run_diarization
+
+
+def _diarize_config(hf_token=None, min_speakers=None, max_speakers=None) -> Config:
+    """Build a minimal Config for diarize tests."""
+    d = {}
+    if hf_token:
+        d["diarize_hf_token"] = hf_token
+    if min_speakers is not None:
+        d["diarize_min_speakers"] = min_speakers
+    if max_speakers is not None:
+        d["diarize_max_speakers"] = max_speakers
+    d.setdefault("asr_backends", {"default": {"type": "mock", "response": ""}})
+    d.setdefault("postprocessor_backends", {})
+    d.setdefault("postprocessors", {})
+    d.setdefault("presets", {"default": ["none", "default", "none", "test"]})
+    preset = Preset(name="default", preprocessor="none", asr_backend="default", postprocessor="none")
+    return Config.resolve(d, preset=preset)
 
 
 # ---------------------------------------------------------------------------
@@ -114,14 +132,14 @@ class TestFormatTranscript:
 
 class TestRunDiarizationErrors:
     def test_whisperx_not_installed_raises_diarization_error(self):
-        config = {"diarize_hf_token": "hf_test"}
+        config = _diarize_config(hf_token="hf_test")
         with patch.dict("sys.modules", {"whisperx": None}):
             with pytest.raises(DiarizationError, match="whisperx is not installed"):
                 run_diarization("/tmp/fake.wav", config)
 
     def test_no_hf_token_raises_diarization_error(self):
         mock_wx = MagicMock()
-        config = {}  # no token in config, no env var
+        config = _diarize_config()  # no token in config
         with patch.dict("sys.modules", {"whisperx": mock_wx, "torch": MagicMock()}):
             import os
             env_backup = os.environ.pop("HF_TOKEN", None)
@@ -150,11 +168,7 @@ class TestRunDiarizationErrors:
         mock_torch = MagicMock()
         mock_torch.cuda.is_available.return_value = False
 
-        config = {
-            "diarize_hf_token": "hf_test",
-            "diarize_min_speakers": 3,
-            "diarize_max_speakers": 6,
-        }
+        config = _diarize_config(hf_token="hf_test", min_speakers=3, max_speakers=6)
 
         with patch.dict("sys.modules", {"whisperx": mock_wx, "torch": mock_torch}):
             result = run_diarization("/tmp/fake.wav", config, num_speakers=2)

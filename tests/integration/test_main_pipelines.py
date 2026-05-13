@@ -15,7 +15,6 @@ import pytest
 from unittest.mock import patch, MagicMock
 
 from asr2clip.config_types import Config, CliOverrides, Preset
-from asr2clip.transcribe import transcribe_urgent, transcribe_casual
 
 
 class TestPresetsDefineBackendSelection:
@@ -267,8 +266,6 @@ class TestDeviceResolution:
         """Config with device settings."""
         return {
             "audio_device": "auto",
-            "asr_backend_urgent": "groq",
-            "asr_backend_casual": "groq",
             "asr_backends": {
                 "groq": {
                     "type": "api",
@@ -277,14 +274,10 @@ class TestDeviceResolution:
                     "model_name": "whisper-turbo",
                 },
             },
-            "preprocessor_urgent": "none",
-            "preprocessor_casual": "none",
-            "postprocessor_urgent": "none",
-            "postprocessor_casual": "none",
             "postprocessor_backends": {},
             "postprocessors": {},
-                    "presets": {
-                "test": ["groq", "none", "none", "Test preset"],
+            "presets": {
+                "test": ["none", "groq", "none", "Test preset"],
             },
         }
 
