@@ -863,9 +863,6 @@ def main():
         return
 
     if args.vad or args.interval is not None:
-        asr_cfg = config.asr_backend
-        device_spec = config.recorder.device.get_spec(config.recorder.name) if config.recorder.device else None
-
         if args.vad:
             try:
                 __import__("sherpa_onnx")
@@ -875,19 +872,13 @@ def main():
                     "Install with: pip install asr2clip[vad]"
                 )
                 sys.exit(1)
-        interval = args.interval if args.interval is not None else 30.0
         continuous_recording(
-            api_key=asr_cfg.api_key,
-            api_base_url=asr_cfg.api_base_url,
-            model_name=asr_cfg.model_name,
-            org_id=asr_cfg.org_id,
-            device=device_spec,
-            interval=interval,
+            config,
+            interval=args.interval if args.interval is not None else 30.0,
             output_file=args.output,
             vad_enabled=args.vad,
             silence_threshold=args.silence_threshold,
             silence_duration=args.silence_duration,
-            max_clipboard_chars=config.output.clipboard_max_chars,
         )
         return
 

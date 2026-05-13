@@ -8,6 +8,7 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 import numpy as np
 
@@ -24,6 +25,9 @@ from .utils import (
     warning,
 )
 from .vad import VoiceActivityDetector
+
+if TYPE_CHECKING:
+    from .config_types import Config
 
 # RMS threshold for silence filtering in interval-only mode (no VAD)
 _INTERVAL_SILENCE_RMS = 0.005
@@ -310,11 +314,7 @@ def _handle_vad_iteration(
 
 
 def continuous_recording(
-    api_key: str,
-    api_base_url: str,
-    model_name: str,
-    org_id: str | None = None,
-    device: str | int | None = None,
+    config: "Config",
     interval: float = 30.0,
     output_file: str | None = None,
     sample_rate: int = 16000,
@@ -323,7 +323,6 @@ def continuous_recording(
     silence_duration: float = 1.5,
     min_transcribe_interval: float = 0.5,
     max_concurrent_transcriptions: int = 3,
-    max_clipboard_chars: int = _DEFAULT_CLIPBOARD_MAX_CHARS,
 ):
     """Run continuous recording mode with periodic transcription.
 
@@ -331,12 +330,10 @@ def continuous_recording(
     when silence is detected (if VAD is enabled).
     Press Ctrl+C once to stop.
 
+    Only API-type backends are supported (daemon mode requires streaming HTTP).
+
     Args:
-        api_key: API key for authentication.
-        api_base_url: Base URL of the API.
-        model_name: Name of the model to use.
-        org_id: Optional organization ID.
-        device: Audio device name or index.
+        config: Resolved Config instance (must use an API-type ASR backend).
         interval: Transcription interval in seconds (used as max interval with VAD).
         output_file: Optional file to append transcripts to.
         sample_rate: Sample rate in Hz.
@@ -346,14 +343,25 @@ def continuous_recording(
         min_transcribe_interval: Minimum interval between transcription triggers (seconds).
         max_concurrent_transcriptions: Maximum number of concurrent transcription requests.
     """
+    asr = config.asr_backend
+    if asr.type not in ("api", "mock"):
+        raise ValueError(
+            f"Continuous recording requires an API backend; got '{asr.type}'. "
+            "Use a preset with an openai-compatible ASR backend."
+        )
+    device_spec = (
+        config.recorder.device.get_spec(config.recorder.name)
+        if config.recorder.device else None
+    )
+
     setup_signal_handlers(daemon_mode=True)
 
     cfg = RecorderConfig(
-        api_key=api_key,
-        api_base_url=api_base_url,
-        model_name=model_name,
-        org_id=org_id,
-        device=device,
+        api_key=asr.api_key or "",
+        api_base_url=asr.api_base_url or "",
+        model_name=asr.model_name or "",
+        org_id=asr.org_id,
+        device=device_spec,
         interval=interval,
         output_file=output_file,
         sample_rate=sample_rate,
@@ -363,6 +371,7 @@ def continuous_recording(
         min_transcribe_interval=min_transcribe_interval,
         max_concurrent_transcriptions=max_concurrent_transcriptions,
     )
+    max_clipboard_chars = config.output.clipboard_max_chars
 
     _log_startup(cfg)
 

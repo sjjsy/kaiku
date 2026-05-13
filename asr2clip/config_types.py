@@ -120,8 +120,6 @@ class ASRBackendConfig:
 
         All logic: env var fallback, defaults, validation, logging.
         """
-        info(f"Using backend: {backend_name}")
-
         # Fetch backend definition
         backends = config_dict.get("asr_backends", {})
         if backend_name not in backends:
@@ -227,13 +225,7 @@ class PreprocessorConfig:
         cli_override: Optional[str] = None,
     ) -> PreprocessorConfig:
         """Resolve preprocessor from CLI override or preset."""
-        if cli_override:
-            name = cli_override
-            source = "CLI override"
-        else:
-            name = preset_name
-            source = "from preset"
-        info(f"Using preprocessor: {name} ({source})")
+        name = cli_override if cli_override else preset_name
         return cls(name=name)
 
 
@@ -304,13 +296,7 @@ class PostprocessorConfig:
         cli_model_override: Optional[str] = None,
     ) -> PostprocessorConfig:
         """Resolve post-processor and its backend from CLI override or preset."""
-        if cli_post_override:
-            post_name = cli_post_override
-            source = "CLI override"
-        else:
-            post_name = preset_post
-            source = "from preset"
-        info(f"Using post-processor: {post_name} ({source})")
+        post_name = cli_post_override if cli_post_override else preset_post
 
         if post_name == "none":
             return cls(
@@ -555,8 +541,13 @@ class Config:
     def asr_backend(self) -> ASRBackendConfig:
         """Lazy-load and cache ASR backend config."""
         if self._asr_backend is None:
-            # Use CLI override if provided, otherwise use preset's backend
-            backend_name = self._cli_overrides.backend or self._preset.asr_backend
+            if self._cli_overrides.backend:
+                backend_name = self._cli_overrides.backend
+                source = "CLI override -b"
+            else:
+                backend_name = self._preset.asr_backend
+                source = f"from preset '{self._preset.name}'"
+            info(f"Using backend: {backend_name} ({source})")
             self._asr_backend = ASRBackendConfig.resolve(
                 self._config_dict,
                 backend_name,
@@ -567,11 +558,16 @@ class Config:
     def preprocessor(self) -> PreprocessorConfig:
         """Lazy-load and cache preprocessor config."""
         if self._preprocessor is None:
+            if self._cli_overrides.preprocessor:
+                source = "CLI override -p"
+            else:
+                source = f"from preset '{self._preset.name}'"
             self._preprocessor = PreprocessorConfig.resolve(
                 self._config_dict,
                 preset_name=self._preset.preprocessor,
                 cli_override=self._cli_overrides.preprocessor,
             )
+            info(f"Using preprocessor: {self._preprocessor.name} ({source})")
         return self._preprocessor
 
     @property
@@ -588,12 +584,17 @@ class Config:
     def postprocessor(self) -> PostprocessorConfig:
         """Lazy-load and cache postprocessor config."""
         if self._postprocessor is None:
+            if self._cli_overrides.post:
+                source = "CLI override -P"
+            else:
+                source = f"from preset '{self._preset.name}'"
             self._postprocessor = PostprocessorConfig.resolve(
                 self._config_dict,
                 preset_post=self._preset.postprocessor,
                 cli_post_override=self._cli_overrides.post,
                 cli_model_override=self._cli_overrides.post_model,
             )
+            info(f"Using post-processor: {self._postprocessor.name} ({source})")
         return self._postprocessor
 
     @property
