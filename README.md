@@ -1,4 +1,4 @@
-# asr2clip -- Speech-to-Text Clipboard Tool + A Lot More :)
+# asr2clip -- Speech-to-Text Clipboard Tool +++ :)
 
 [![PyPI version](https://img.shields.io/pypi/v/asr2clip?color=green)](https://pypi.org/project/asr2clip/)
 [![License](https://img.shields.io/github/license/Oaklight/asr2clip?color=green)](https://github.com/Oaklight/asr2clip/blob/master/LICENSE)
