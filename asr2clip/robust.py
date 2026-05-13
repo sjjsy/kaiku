@@ -73,9 +73,7 @@ def process_file_robust(
     output_file: str | None = None,
     chunk_duration: int = 180,
     language: str | None = None,
-    preprocessor=None,
-    postprocessor=None,
-    template_str: str = "{result}",
+    template_cli_override: str | None = None,
 ):
     """Transcribe a long audio file in silence-bounded chunks with quality checks.
 
@@ -88,13 +86,11 @@ def process_file_robust(
         input_file: Path to the audio file.
         output_file: Optional file to append chunks to.
         chunk_duration: Maximum chunk length in seconds (default 180).
-        preprocessor: AudioPreprocessor instance to apply before chunking.
-        postprocessor: PostProcessor instance to apply to the full transcript.
-        template_str: Output template string (from resolve_output_template).
+        template_cli_override: Output template CLI override.
     """
     import sys
-    from .postprocessors import NonePostProcessor, PostMetadata, format_output
-    from .preprocessors import NonePreprocessor
+    from .postprocessors import NonePostProcessor, PostMetadata, format_output, make_postprocessor, resolve_output_template
+    from .preprocessors import NonePreprocessor, make_preprocessor
 
     if not os.path.exists(input_file):
         print(f"File not found: {input_file}")
@@ -108,7 +104,8 @@ def process_file_robust(
     total_s = len(audio) / 1000.0
     info(f"Audio loaded: {total_s:.1f}s total ({time.time() - t0:.1f}s to load)")
 
-    if preprocessor is not None and not isinstance(preprocessor, NonePreprocessor):
+    preprocessor = make_preprocessor(config.preprocessor.name)
+    if not isinstance(preprocessor, NonePreprocessor):
         log(f"Preprocessing audio with {preprocessor.name}...")
         t_pre = time.time()
         try:
@@ -207,7 +204,9 @@ def process_file_robust(
     transcript = full_text
     final = transcript
 
-    if postprocessor is not None and not isinstance(postprocessor, NonePostProcessor):
+    postprocessor = make_postprocessor(config.postprocessor.name, config)
+    template = resolve_output_template(config, config.postprocessor.template, template_cli_override)
+    if not isinstance(postprocessor, NonePostProcessor):
         from datetime import date
         metadata = PostMetadata(
             date=date.today().isoformat(),
@@ -222,7 +221,7 @@ def process_file_robust(
         result = postprocessor.process(transcript, metadata=metadata)
         info(f"Post-processing completed in {time.time() - t_post:.1f}s")
         final = format_output(
-            template_str, result=result, transcript=transcript,
+            template, result=result, transcript=transcript,
             metadata=metadata, model=postprocessor.model,
             backend=postprocessor.backend_type,
         )

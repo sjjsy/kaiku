@@ -15,8 +15,8 @@ from typing import TYPE_CHECKING
 
 from .audio import load_wav, save_audio
 from .output import output_transcript
-from .postprocessors import NonePostProcessor, PostMetadata, PostProcessor, format_output
-from .preprocessors import AudioPreprocessor, NonePreprocessor
+from .postprocessors import NonePostProcessor, PostMetadata, format_output, make_postprocessor
+from .preprocessors import NonePreprocessor, make_preprocessor
 from .recorders import _kill_process, _pid_alive, make_recorder
 from .transcribe import transcribe
 from .utils import info, log, run_subprocess, safe_unlink, warning
@@ -45,9 +45,7 @@ def toggle_recording(
     config: "Config",
     output_file: str | None = None,
     language: str | None = None,
-    preprocessor: AudioPreprocessor | None = None,
-    postprocessor: PostProcessor | None = None,
-    template_str: str = "{result}",
+    template_cli_override: str | None = None,
     diarize: bool = False,
     num_speakers: int | None = None,
 ):
@@ -56,8 +54,8 @@ def toggle_recording(
 
     if os.path.exists(lock_path):
         _stop_and_transcribe(
-            lock_path, config, output_file, language, preprocessor,
-            postprocessor, template_str, diarize, num_speakers,
+            lock_path, config, output_file, language,
+            template_cli_override, diarize, num_speakers,
         )
     else:
         _start_recording(lock_path, config)
@@ -91,9 +89,7 @@ def _stop_and_transcribe(
     config: "Config",
     output_file: str | None,
     language: str | None = None,
-    preprocessor: AudioPreprocessor | None = None,
-    postprocessor: PostProcessor | None = None,
-    template_str: str = "{result}",
+    template_cli_override: str | None = None,
     diarize: bool = False,
     num_speakers: int | None = None,
 ):
@@ -108,8 +104,8 @@ def _stop_and_transcribe(
         os.unlink(lock_path)
         if audio_path and os.path.exists(audio_path):
             _transcribe_and_output(
-                audio_path, config, output_file, language, preprocessor,
-                postprocessor, template_str, diarize, num_speakers,
+                audio_path, config, output_file, language,
+                template_cli_override, diarize, num_speakers,
             )
         return
 
@@ -120,8 +116,8 @@ def _stop_and_transcribe(
     time.sleep(0.3)
 
     _transcribe_and_output(
-        audio_path, config, output_file, language, preprocessor,
-        postprocessor, template_str, diarize, num_speakers,
+        audio_path, config, output_file, language,
+        template_str, diarize, num_speakers,
     )
 
 
@@ -130,9 +126,7 @@ def _transcribe_and_output(
     config: "Config",
     output_file: str | None,
     language: str | None = None,
-    preprocessor: AudioPreprocessor | None = None,
-    postprocessor: PostProcessor | None = None,
-    template_str: str = "{result}",
+    template_cli_override: str | None = None,
     diarize: bool = False,
     num_speakers: int | None = None,
 ):
@@ -150,7 +144,8 @@ def _transcribe_and_output(
         info("Transcribing recorded audio…")
 
     preprocessed_path: str | None = None
-    if preprocessor is not None and not isinstance(preprocessor, NonePreprocessor):
+    preprocessor = make_preprocessor(config.preprocessor.name)
+    if not isinstance(preprocessor, NonePreprocessor):
         try:
             audio_data, sr = load_wav(audio_path)
             log(f"Preprocessing audio with {preprocessor.name}…")
@@ -203,7 +198,10 @@ def _transcribe_and_output(
         return
 
     final = transcript
-    if postprocessor is not None and not isinstance(postprocessor, NonePostProcessor):
+    postprocessor = make_postprocessor(config.postprocessor.name, config)
+    from .postprocessors import resolve_output_template
+    template = resolve_output_template(config, config.postprocessor.template, template_cli_override)
+    if not isinstance(postprocessor, NonePostProcessor):
         from datetime import date
         metadata = PostMetadata(
             date=date.today().isoformat(),
@@ -218,7 +216,7 @@ def _transcribe_and_output(
         result = postprocessor.process(transcript, metadata=metadata)
         info(f"Post-processing completed in {time.time() - t_post:.1f}s")
         final = format_output(
-            template_str, result=result, transcript=transcript,
+            template, result=result, transcript=transcript,
             metadata=metadata, model=postprocessor.model,
             backend=postprocessor.backend_type,
         )

@@ -230,14 +230,12 @@ def process_recording(
     config: Config,
     output_file: str | None = None,
     language: str | None = None,
-    preprocessor=None,
-    postprocessor=None,
-    template_str: str = "{result}",
+    template_cli_override: str | None = None,
 ):
     """Record audio, transcribe, and output the result."""
     import time
-    from .postprocessors import NonePostProcessor, format_output, PostMetadata
-    from .preprocessors import NonePreprocessor
+    from .postprocessors import NonePostProcessor, format_output, PostMetadata, make_postprocessor, resolve_output_template
+    from .preprocessors import NonePreprocessor, make_preprocessor
 
     if not check_clipboard_support():
         warning("Clipboard support may not be available.")
@@ -257,7 +255,8 @@ def process_recording(
 
     info(f"Recorded {duration:.1f}s of audio ({time.time() - t0:.1f}s elapsed)")
 
-    if preprocessor is not None and not isinstance(preprocessor, NonePreprocessor):
+    preprocessor = make_preprocessor(config.preprocessor.name)
+    if not isinstance(preprocessor, NonePreprocessor):
         log(f"Preprocessing audio with {preprocessor.name}...")
         t_pre = time.time()
         audio_data = preprocessor.process(audio_data, 16000)
@@ -276,7 +275,9 @@ def process_recording(
             return
 
         result = transcript
-        if postprocessor is not None and not isinstance(postprocessor, NonePostProcessor):
+        postprocessor = make_postprocessor(config.postprocessor.name, config)
+        template = resolve_output_template(config, config.postprocessor.template, template_cli_override)
+        if not isinstance(postprocessor, NonePostProcessor):
             from datetime import date
             metadata = PostMetadata(
                 date=date.today().isoformat(),
@@ -291,7 +292,7 @@ def process_recording(
             result = postprocessor.process(transcript, metadata=metadata)
             info(f"Post-processing completed in {time.time() - t_post:.1f}s")
             final = format_output(
-                template_str, result=result, transcript=transcript,
+                template, result=result, transcript=transcript,
                 metadata=metadata, model=postprocessor.model,
                 backend=postprocessor.backend_type,
             )
@@ -312,16 +313,14 @@ def process_file(
     input_file: str,
     output_file: str | None = None,
     language: str | None = None,
-    preprocessor=None,
-    postprocessor=None,
-    template_str: str = "{result}",
+    template_cli_override: str | None = None,
     diarize: bool = False,
     num_speakers: int | None = None,
 ):
     """Transcribe an existing audio or video file."""
     import time
-    from .postprocessors import NonePostProcessor, PostMetadata, format_output
-    from .preprocessors import NonePreprocessor
+    from .postprocessors import NonePostProcessor, PostMetadata, format_output, make_postprocessor, resolve_output_template
+    from .preprocessors import NonePreprocessor, make_preprocessor
 
     if not os.path.exists(input_file):
         print(f"File not found: {input_file}")
@@ -336,7 +335,9 @@ def process_file(
             log("Transcript file is empty.")
             return
         result = transcript
-        if postprocessor is not None and not isinstance(postprocessor, NonePostProcessor):
+        postprocessor = make_postprocessor(config.postprocessor.name, config)
+        template = resolve_output_template(config, config.postprocessor.template, template_cli_override)
+        if not isinstance(postprocessor, NonePostProcessor):
             from datetime import date
             metadata = PostMetadata(
                 date=date.today().isoformat(),
@@ -351,7 +352,7 @@ def process_file(
             result = postprocessor.process(transcript, metadata=metadata)
             info(f"Post-processing completed in {time.time() - t_post:.1f}s")
             final = format_output(
-                template_str, result=result, transcript=transcript,
+                template, result=result, transcript=transcript,
                 metadata=metadata, model=postprocessor.model,
                 backend=postprocessor.backend_type,
             )
@@ -373,7 +374,8 @@ def process_file(
         temp_path = input_file
         cleanup_temp = False
 
-    if preprocessor is not None and not isinstance(preprocessor, NonePreprocessor):
+    preprocessor = make_preprocessor(config.preprocessor.name)
+    if not isinstance(preprocessor, NonePreprocessor):
         try:
             audio_data, sr = load_wav(temp_path)
             log(f"Preprocessing audio with {preprocessor.name}...")
@@ -417,7 +419,9 @@ def process_file(
             duration_s = 0.0
 
         result = transcript
-        if postprocessor is not None and not isinstance(postprocessor, NonePostProcessor):
+        postprocessor = make_postprocessor(config.postprocessor.name, config)
+        template = resolve_output_template(config, config.postprocessor.template, template_cli_override)
+        if not isinstance(postprocessor, NonePostProcessor):
             from datetime import date
             metadata = PostMetadata(
                 date=date.today().isoformat(),
@@ -432,7 +436,7 @@ def process_file(
             result = postprocessor.process(transcript, metadata=metadata)
             info(f"Post-processing completed in {time.time() - t_post:.1f}s")
             final = format_output(
-                template_str, result=result, transcript=transcript,
+                template, result=result, transcript=transcript,
                 metadata=metadata, model=postprocessor.model,
                 backend=postprocessor.backend_type,
             )
@@ -780,8 +784,8 @@ def main():
         error(f"Config error: {e}")
         sys.exit(1)
 
-    # Set up logging (use config's quiet setting if not overridden)
-    quiet = args.quiet or config.output.quiet
+    # Set up logging (use only CLI arg; config.output.quiet accessed later if needed)
+    quiet = args.quiet
     setup_logging(verbose=not quiet)
     set_verbose(not quiet)
 
@@ -807,32 +811,15 @@ def main():
         sys.exit(0 if success else 1)
 
     if not is_toggle_start:
-        # Backend and preprocessor logs already emitted during config resolution
+        # Backend logs already emitted during config resolution
         pass
-
-    # Resolve postprocessors
-    from .postprocessors import (
-        make_postprocessor,
-        resolve_output_template,
-    )
-
-    postprocessor = make_postprocessor(
-        config.postprocessor.name, config, args.post_model
-    )
-    template = resolve_output_template(config, config.postprocessor.template, args.template)
-
-    # Create preprocessor for the selected preset (used for all operations)
-    from .preprocessors import make_preprocessor
-    preprocessor = make_preprocessor(config.preprocessor.name)
 
     if args.toggle:
         from .toggle import toggle_recording
         toggle_recording(
             config, output_file=args.output,
             language=args.language,
-            preprocessor=preprocessor,
-            postprocessor=postprocessor,
-            template_str=template,
+            template_cli_override=args.template,
             diarize=args.diarize,
             num_speakers=args.speakers,
         )
@@ -846,17 +833,13 @@ def main():
                 config, args.input, args.output,
                 chunk_duration=args.chunk_duration,
                 language=args.language,
-                preprocessor=preprocessor,
-                postprocessor=postprocessor,
-                template_str=template,
+                template_cli_override=args.template,
             )
         else:
             process_file(
                 config, args.input, args.output,
                 language=args.language,
-                preprocessor=preprocessor,
-                postprocessor=postprocessor,
-                template_str=template,
+                template_cli_override=args.template,
                 diarize=args.diarize,
                 num_speakers=args.speakers,
             )
@@ -885,9 +868,7 @@ def main():
     process_recording(
         config, args.output,
         language=args.language,
-        preprocessor=preprocessor,
-        postprocessor=postprocessor,
-        template_str=template,
+        template_cli_override=args.template,
     )
 
 
