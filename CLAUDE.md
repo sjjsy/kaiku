@@ -3,6 +3,9 @@
 This is Samuel's fork of [Oaklight/asr2clip](https://github.com/Oaklight/asr2clip), a speech-to-clipboard CLI tool.
 Fork lives at github.com/sjjsy/asr2clip. AGPL-3.0 licensed.
 
+**Scope/Pipeline:** audio capture → optional preprocessor → ASR → optional LLM post-processing → output (clipboard / `-o FILE`).
+- Out of scope: Output routing, prompt engineering, context injection beyond `context_path`, per-speaker naming, and assistant-layer intelligence belong in the calling assistant (ZeroClaw/OpenClaw), not here.
+
 ## What this fork adds over upstream
 
 | Feature | Module | Status |
@@ -16,11 +19,11 @@ Fork lives at github.com/sjjsy/asr2clip. AGPL-3.0 licensed.
 
 ## Architecture
 
-Four-stage pipeline: audio capture → ASR/transcription → optional LLM post-processing → output (clipboard / -o FILE).
-See `architecture.md` for the detailed design and known issues.
+`Config.from_file()` is the single coordinator: lazy properties (`asr_backend`, `preprocessor`, `recorder`, `postprocessor`, `output`, `diarization`, `local_asr`) each own defaults, env fallbacks, and logging for their domain.
 
-**Scope:** asr2clip = audio → accurate transcript + optional minimal LLM passthrough.
-Output routing, prompt engineering, context injection beyond `context_path`, per-speaker naming, and assistant-layer intelligence belong in the calling assistant (ZeroClaw/OpenClaw), not here.
+**CLI vs preset:** per-component flags (`-b`, `-p`, `-P`, `-M`, `-d`, and local-ASR flags under “Local ASR server”) override the selected preset; top-level keys in YAML (e.g. `default_preset`, `audio_device`) apply when no flag overrides that slice.
+
+`main()` in `asr2clip.py` loads `Config` once, then dispatches to recording, file, robust, toggle, VAD/daemon, `--test`, `--serve`, or `--download-model`. The local sherpa-onnx server reads bind address, model dir, and thread count from `config.local_asr` (optional `local_asr:` in YAML, merged with CLI; same config file and preset are required as for any other subcommand).
 
 ## Design decisions
 
@@ -38,7 +41,7 @@ Output routing, prompt engineering, context injection beyond `context_path`, per
 - `asr2clip/postprocessors/` — post-processing package
 - `asr2clip/preprocessors/` — noise-reduction package
 - `asr2clip/diarize.py` — WhisperX diarization
-- `architecture.md` — design decisions and known issues
+- `AGENTS.md` — short pointer for AI agents (see also this file)
 - `now.md` — active work items and upcoming tasks
 - `todo.md` — gitignored future ideas and deferred features
 
@@ -92,7 +95,7 @@ These are strict rules. Follow them always, even under time pressure.
 `Config` is created once in `main()` via `Config.from_file()`. It is the single authoritative configuration object for a run.
 
 - **Do** pass `Config` (or its sub-config properties like `ASRBackendConfig`) as function parameters.
-- **Do not** pass `config._config_dict` downstream, except where the migration is still in progress (noted in `architecture.md`).
+- **Do not** pass `config._config_dict` downstream. Keep YAML-shape knowledge inside `config_types.py` and the postprocessor prompt resolver — not in random call sites.
 - **Do not** call `config_dict.get("some_key")` anywhere outside `config_types.py` to make a behavioral decision. Move that logic into the appropriate Config class.
 - **Do not** create a second `Config` or `PresetConfig` inside a transcription or processing function. Configuration is resolved once at startup.
 
@@ -116,10 +119,11 @@ When changing something, update ALL references immediately and delete the old ve
 
 ### 4. Minimal complexity
 
-- Functions do one thing. If a function is doing config resolution AND transcription AND output, split it.
-- No utility functions unless used in ≥ 3 places.
-- No top-level if/else spaghetti — push branching into classes where it belongs.
-- The `mode: str` parameter pattern (passing "urgent" / "casual" / "live" / "file" strings to control behavior) is a code smell. Replace with typed dispatch or separate functions.
+- Centralize behavioral defaults and overrides in `Config` and related typed configs — keep orchestration functions thin.
+- Prefer **fewer** classes and **fewer** functions when a slightly larger unit still reads clearly; do not split purely for ceremony.
+- Minimize parameter lists: pass `Config` (or the one sub-config a callee needs), not parallel CLI/backend strings.
+- No one-off utilities unless used in ≥ 3 places (then consider a method on the owning type instead).
+- The `mode: str` string-dispatch pattern remains a smell — prefer separate entrypoints or explicit dispatch.
 
 ### 5. Test quality
 

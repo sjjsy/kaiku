@@ -10,6 +10,7 @@ from collections.abc import AsyncIterator
 from fastapi import FastAPI, File, Form, UploadFile
 from fastapi.responses import JSONResponse, PlainTextResponse, StreamingResponse
 
+from ..config_types import Config, LocalAsrConfig
 from .engine import ASREngine, TranscriptionResult
 from .model_registry import ModelRegistry, create_registry
 
@@ -19,25 +20,8 @@ logger = logging.getLogger("asr2clip.local_asr")
 _registry: ModelRegistry | None = None
 _engines: dict[str, ASREngine] = {}
 
-# Configuration passed via module-level setter before app starts
-_config: dict = {}
-
-
-def configure(
-    model_dir: str | None = None,
-    num_threads: int = 4,
-    config_path: str | None = None,
-) -> None:
-    """Set server configuration before startup.
-
-    Args:
-        model_dir: Legacy path to model directory (overrides default model dir).
-        num_threads: Number of inference threads.
-        config_path: Path to ``models.yaml`` config file.
-    """
-    _config["model_dir"] = model_dir
-    _config["num_threads"] = num_threads
-    _config["config_path"] = config_path
+# Set in run_server / standalone CLI before uvicorn starts
+_local_asr_cfg: LocalAsrConfig | None = None
 
 
 @asynccontextmanager
@@ -45,13 +29,16 @@ async def lifespan(app: FastAPI):
     """Initialize the model registry and default engine on startup."""
     global _registry
 
+    if _local_asr_cfg is None:
+        raise RuntimeError("local ASR server not configured (internal error)")
+
     registry = create_registry(
-        config_path=_config.get("config_path"),
-        model_dir=_config.get("model_dir"),
+        config_path=_local_asr_cfg.models_config_path,
+        model_dir=_local_asr_cfg.model_dir,
     )
     _registry = registry
 
-    num_threads = _config.get("num_threads") or registry.num_threads
+    num_threads = _local_asr_cfg.num_threads or registry.num_threads
 
     # Pre-load the default model engine
     default_cfg = registry.get_default_model()
@@ -132,7 +119,7 @@ def _get_engine(model_name: str) -> ASREngine | JSONResponse:
             "server_error",
         )
 
-    num_threads = _config.get("num_threads") or _registry.num_threads
+    num_threads = _local_asr_cfg.num_threads or _registry.num_threads
     model_dir = _registry.model_dir(cfg)
     logger.info("Lazy-loading model '%s' from %s", cfg.name, model_dir)
 
@@ -285,43 +272,38 @@ async def health():
     return JSONResponse({"status": "ok" if _engines else "loading"})
 
 
-def run_server(
-    host: str = "127.0.0.1",
-    port: int = 8000,
-    model_dir: str | None = None,
-    num_threads: int = 4,
-    config_path: str | None = None,
-) -> None:
-    """Start the ASR server.
+def _serve_bind(cfg: LocalAsrConfig) -> None:
+    """Publish resolved local ASR settings and run uvicorn."""
+    global _local_asr_cfg
 
-    Args:
-        host: Bind address.
-        port: Bind port.
-        model_dir: Legacy path to model directory.
-        num_threads: Number of inference threads.
-        config_path: Path to ``models.yaml`` config file.
-    """
+    _local_asr_cfg = cfg
     import uvicorn
 
-    configure(model_dir=model_dir, num_threads=num_threads, config_path=config_path)
-    logger.info("Starting asr2clip local ASR server on %s:%d", host, port)
-    uvicorn.run(app, host=host, port=port, log_level="info")
+    logger.info("Starting asr2clip local ASR server on %s:%d", cfg.host, cfg.port)
+    uvicorn.run(app, host=cfg.host, port=cfg.port, log_level="info")
+
+
+def run_server(config: Config) -> None:
+    """Start the ASR server using ``config.local_asr`` (YAML + CLI merged in Config)."""
+    _serve_bind(config.local_asr)
 
 
 def run_server_cli() -> None:
     """CLI entry point for ``asr2clip-serve`` command."""
+    from ..config_types import CliOverrides
+
     parser = argparse.ArgumentParser(
         description="Start the asr2clip local ASR server (OpenAI-compatible)",
     )
     parser.add_argument(
-        "--host", default="127.0.0.1", help="Bind address (default: 127.0.0.1)"
+        "--host", default=None, help="Bind address (default: 127.0.0.1)"
     )
     parser.add_argument(
-        "--port", type=int, default=8000, help="Bind port (default: 8000)"
+        "--port", type=int, default=None, help="Bind port (default: 8000)"
     )
     parser.add_argument("--model-dir", default=None, help="Path to model directory")
     parser.add_argument(
-        "--num-threads", type=int, default=4, help="Inference threads (default: 4)"
+        "--num-threads", type=int, default=None, help="Inference threads (default: 4)"
     )
     parser.add_argument(
         "--config",
@@ -340,16 +322,24 @@ def run_server_cli() -> None:
         level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s"
     )
 
+    la = LocalAsrConfig.resolve(
+        {},
+        CliOverrides(
+            local_asr_host=args.host,
+            local_asr_port=args.port,
+            local_asr_model_dir=args.model_dir,
+            local_asr_num_threads=args.num_threads,
+            local_asr_models_config=args.config,
+        ),
+    )
+
     if args.download_model:
-        registry = create_registry(config_path=args.config, model_dir=args.model_dir)
+        registry = create_registry(
+            config_path=la.models_config_path,
+            model_dir=la.model_dir,
+        )
         default_cfg = registry.get_default_model()
         registry.download_model(default_cfg)
         return
 
-    run_server(
-        host=args.host,
-        port=args.port,
-        model_dir=args.model_dir,
-        num_threads=args.num_threads,
-        config_path=args.config,
-    )
+    _serve_bind(la)

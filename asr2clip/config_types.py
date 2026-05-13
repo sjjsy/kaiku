@@ -86,6 +86,62 @@ class CliOverrides:
     device: Optional[str] = None
     post: Optional[str] = None
     post_model: Optional[str] = None
+    # local ASR server (--serve / --download-model); None means use YAML / built-in default
+    local_asr_host: Optional[str] = None
+    local_asr_port: Optional[int] = None
+    local_asr_model_dir: Optional[str] = None
+    local_asr_num_threads: Optional[int] = None
+    local_asr_models_config: Optional[str] = None  # path to sherpa models.yaml
+
+
+@dataclass(frozen=True)
+class LocalAsrConfig:
+    """Resolved settings for the bundled sherpa-onnx HTTP server (`--serve`, `--download-model`)."""
+
+    host: str
+    port: int
+    model_dir: Optional[str]
+    num_threads: int
+    models_config_path: Optional[str] = None
+
+    @classmethod
+    def resolve(cls, config_dict: dict, cli: CliOverrides) -> "LocalAsrConfig":
+        """Merge optional ``local_asr:`` YAML block with CLI overrides (CLI wins)."""
+        raw = config_dict.get("local_asr") or {}
+        if not isinstance(raw, dict):
+            raw = {}
+        host = cli.local_asr_host if cli.local_asr_host is not None else raw.get("host") or "127.0.0.1"
+        port = (
+            cli.local_asr_port
+            if cli.local_asr_port is not None
+            else int(raw.get("port", 8000))
+        )
+        model_dir = (
+            cli.local_asr_model_dir
+            if cli.local_asr_model_dir is not None
+            else raw.get("model_dir")
+        )
+        if model_dir:
+            model_dir = os.path.expanduser(str(model_dir))
+        num_threads = (
+            cli.local_asr_num_threads
+            if cli.local_asr_num_threads is not None
+            else int(raw.get("num_threads", 4))
+        )
+        mpath = (
+            cli.local_asr_models_config
+            if cli.local_asr_models_config is not None
+            else (raw.get("models_config") or raw.get("models_config_path"))
+        )
+        if mpath:
+            mpath = os.path.expanduser(str(mpath))
+        return cls(
+            host=host,
+            port=port,
+            model_dir=model_dir,
+            num_threads=num_threads,
+            models_config_path=mpath,
+        )
 
 
 @dataclass(frozen=True)
@@ -536,6 +592,14 @@ class Config:
     )
     _output: Optional[OutputConfig] = field(default=None, init=False)
     _diarization: Optional[DiarizationConfig] = field(default=None, init=False)
+    _local_asr: Optional[LocalAsrConfig] = field(default=None, init=False)
+
+    @property
+    def local_asr(self) -> LocalAsrConfig:
+        """Sherpa-onnx local server bind paths, model dir, and thread count."""
+        if self._local_asr is None:
+            self._local_asr = LocalAsrConfig.resolve(self._config_dict, self._cli_overrides)
+        return self._local_asr
 
     @property
     def asr_backend(self) -> ASRBackendConfig:

@@ -598,13 +598,13 @@ See https://github.com/sjjsy/asr2clip for full documentation and configuration e
     )
     server_group.add_argument(
         "--host",
-        default="127.0.0.1",
-        help="Server bind address (default: 127.0.0.1)",
+        default=None,
+        help="Server bind address (default: 127.0.0.1 or local_asr.host in config)",
     )
     server_group.add_argument(
         "--port",
         type=int,
-        default=8000,
+        default=None,
         help="Server bind port (default: 8000)",
     )
     server_group.add_argument(
@@ -615,7 +615,7 @@ See https://github.com/sjjsy/asr2clip for full documentation and configuration e
     server_group.add_argument(
         "--num-threads",
         type=int,
-        default=4,
+        default=None,
         help="Inference threads (default: 4)",
     )
     server_group.add_argument(
@@ -641,7 +641,7 @@ See https://github.com/sjjsy/asr2clip for full documentation and configuration e
     )
     vad_group.add_argument(
         "--silence_threshold", type=float, metavar="PROB",
-        default=None,
+        default=0.5,
         help="VAD speech probability threshold, 0.0-1.0 (default: 0.5)",
     )
     vad_group.add_argument(
@@ -703,52 +703,10 @@ See https://github.com/sjjsy/asr2clip for full documentation and configuration e
     return parser
 
 
-def _validate_args(args: argparse.Namespace):
-    """Validate and resolve argument defaults.
-
-    Args:
-        args: Parsed arguments namespace (modified in-place).
-
-    Raises:
-        SystemExit: On invalid argument combinations.
-    """
-    if args.silence_threshold is None:
-        args.silence_threshold = 0.5
-
-
 def main():
     """Main entry point for asr2clip."""
     parser = _build_parser()
     args = parser.parse_args()
-
-    # Handle --serve (local ASR server) — before validation
-    if args.serve:
-        from .local_asr import check_deps
-
-        check_deps()
-        from .local_asr.app import run_server
-
-        run_server(
-            host=args.host,
-            port=args.port,
-            model_dir=args.model_dir,
-            num_threads=args.num_threads,
-        )
-        return
-
-    # Handle --download-model — before validation
-    if args.download_model:
-        from .local_asr import check_deps
-
-        check_deps()
-        from .local_asr.model_registry import create_registry
-
-        registry = create_registry(model_dir=args.model_dir)
-        default_cfg = registry.get_default_model()
-        registry.download_model(default_cfg)
-        return
-
-    _validate_args(args)
 
     # Handle --generate_config and --print_config
     if args.print_config:
@@ -775,24 +733,41 @@ def main():
         device=args.device,
         post=args.post,
         post_model=args.post_model,
+        local_asr_host=args.host,
+        local_asr_port=args.port,
+        local_asr_model_dir=args.model_dir,
+        local_asr_num_threads=args.num_threads,
     )
 
-    # Initialize Config from file (Phase 1: moved preset logic into Config.from_file)
     try:
         config = Config.from_file(args.config, preset_name=args.preset, cli_overrides=cli_overrides)
     except ValueError as e:
         error(f"Config error: {e}")
         sys.exit(1)
 
-    # Set up logging (use only CLI arg; config.output.quiet accessed later if needed)
     quiet = args.quiet
     setup_logging(verbose=not quiet)
     set_verbose(not quiet)
 
-    # Skip config logs on first --toggle (starting recording)
-    is_toggle_start = args.toggle and not os.path.exists(os.path.join(
-        os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "asr2clip.lock"
-    ))
+    if args.serve:
+        from .local_asr import check_deps
+
+        check_deps()
+        from .local_asr.app import run_server
+
+        run_server(config)
+        return
+
+    if args.download_model:
+        from .local_asr import check_deps
+
+        check_deps()
+        from .local_asr.model_registry import create_registry
+
+        la = config.local_asr
+        registry = create_registry(config_path=la.models_config_path, model_dir=la.model_dir)
+        registry.download_model(registry.get_default_model())
+        return
 
     if args.test:
         # Test preset configuration
@@ -809,10 +784,6 @@ def main():
         else:
             info("Some checks failed — see details above.")
         sys.exit(0 if success else 1)
-
-    if not is_toggle_start:
-        # Backend logs already emitted during config resolution
-        pass
 
     if args.toggle:
         from .toggle import toggle_recording
