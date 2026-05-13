@@ -159,10 +159,10 @@ def transcribe(
             cfg.language = language
         try:
             return wc_transcribe(audio_file_path, cfg, timeout=timeout)
-        except TranscriptionError:
+        except TranscriptionError as e:
             if raise_on_error:
                 raise
-            error("whisper.cpp transcription failed")
+            error(f"whisper.cpp transcription failed: {e}")
             sys.exit(1)
 
     # API backend (openai-compatible)

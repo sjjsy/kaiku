@@ -18,6 +18,8 @@ from asr2clip.postprocessors.base import PostMetadata
 from asr2clip.postprocessors.none import NonePostProcessor
 from asr2clip.postprocessors import _resolve_prompt, _resolve_backend, _load_context
 
+from conftest import _config_with_postprocessors
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -39,30 +41,30 @@ def _meta(**kw) -> PostMetadata:
 # ---------------------------------------------------------------------------
 
 class TestResolveOutputTemplate:
-    def test_cli_override_takes_precedence(self, postprocessor_config):
+    def test_cli_override_takes_precedence(self, postprocessor_config_obj):
         """CLI override should take priority over postprocessor template."""
         t = resolve_output_template(
-            postprocessor_config,
+            postprocessor_config_obj,
             postprocessor_template="{result}",
             cli_override="full"
         )
         assert "{result}" in t and "{transcript}" in t
 
-    def test_cli_override_missing_warns_and_falls_through(self, postprocessor_config, capsys):
+    def test_cli_override_missing_warns_and_falls_through(self, postprocessor_config_obj, capsys):
         """Missing CLI template should warn and fall back to default."""
         t = resolve_output_template(
-            postprocessor_config,
+            postprocessor_config_obj,
             postprocessor_template="{result}",
             cli_override="nonexistent"
         )
         captured = capsys.readouterr()
         assert "not found" in captured.err
-        assert t == postprocessor_config["output_templates"]["default"]
+        assert t == "{result}"
 
-    def test_uses_postprocessor_template_when_provided(self, postprocessor_config):
+    def test_uses_postprocessor_template_when_provided(self, postprocessor_config_obj):
         """Should use postprocessor_template if it's not the default."""
         t = resolve_output_template(
-            postprocessor_config,
+            postprocessor_config_obj,
             postprocessor_template="{transcript}",
             cli_override=None
         )
@@ -70,17 +72,18 @@ class TestResolveOutputTemplate:
 
     def test_default_template_when_empty(self):
         """Should use fallback when config has no templates."""
-        t = resolve_output_template({}, postprocessor_template="{result}", cli_override=None)
+        config = _config_with_postprocessors({})
+        t = resolve_output_template(config, postprocessor_template="{result}", cli_override=None)
         assert t == "{result}"
 
-    def test_default_from_config_when_no_postprocessor_template(self, postprocessor_config):
+    def test_default_from_config_when_no_postprocessor_template(self, postprocessor_config_obj):
         """Should use config default when postprocessor template is default."""
         t = resolve_output_template(
-            postprocessor_config,
+            postprocessor_config_obj,
             postprocessor_template="{result}",  # default
             cli_override=None
         )
-        assert t == postprocessor_config["output_templates"]["default"]
+        assert t == "{result}"
 
 
 # ---------------------------------------------------------------------------
@@ -311,30 +314,30 @@ class TestLoadContext:
 # ---------------------------------------------------------------------------
 
 class TestMakePostprocessor:
-    def test_none_name_returns_none_processor(self, postprocessor_config):
-        pp = make_postprocessor("none", postprocessor_config)
+    def test_none_name_returns_none_processor(self, postprocessor_config_obj):
+        pp = make_postprocessor("none", postprocessor_config_obj)
         assert isinstance(pp, NonePostProcessor)
 
-    def test_null_name_returns_none_processor(self, postprocessor_config):
-        pp = make_postprocessor(None, postprocessor_config)
+    def test_null_name_returns_none_processor(self, postprocessor_config_obj):
+        pp = make_postprocessor(None, postprocessor_config_obj)
         assert isinstance(pp, NonePostProcessor)
 
-    def test_named_openai_compat(self, postprocessor_config):
+    def test_named_openai_compat(self, postprocessor_config_obj):
         from asr2clip.postprocessors.openai_compat import OpenAICompatPostProcessor
-        pp = make_postprocessor("solo-base", postprocessor_config)
+        pp = make_postprocessor("solo-base", postprocessor_config_obj)
         assert isinstance(pp, OpenAICompatPostProcessor)
 
-    def test_named_claude_code(self, postprocessor_config):
+    def test_named_claude_code(self, postprocessor_config_obj):
         from asr2clip.postprocessors.claude_code import ClaudeCodePostProcessor
-        pp = make_postprocessor("group", postprocessor_config)
+        pp = make_postprocessor("group", postprocessor_config_obj)
         assert isinstance(pp, ClaudeCodePostProcessor)
 
-    def test_raw_prompt_string_dispatches_to_first_backend(self, postprocessor_config):
+    def test_raw_prompt_string_dispatches_to_first_backend(self, postprocessor_config_obj):
         from asr2clip.postprocessors.openai_compat import OpenAICompatPostProcessor
-        pp = make_postprocessor("Summarize this text as bullet points.", postprocessor_config)
+        pp = make_postprocessor("Summarize this text as bullet points.", postprocessor_config_obj)
         assert isinstance(pp, OpenAICompatPostProcessor)
         assert pp.name == "custom"
 
-    def test_model_override_applied(self, postprocessor_config):
-        pp = make_postprocessor("solo-base", postprocessor_config, model_override="llama3:8b")
+    def test_model_override_applied(self, postprocessor_config_obj):
+        pp = make_postprocessor("solo-base", postprocessor_config_obj, model_override="llama3:8b")
         assert pp.model == "llama3:8b"

@@ -10,10 +10,14 @@ import glob
 import os
 import sys
 from datetime import datetime as _datetime
+from typing import TYPE_CHECKING
 
 from .base import PostMetadata, PostProcessor
 from .none import NonePostProcessor
 from .mock import MockPostProcessor
+
+if TYPE_CHECKING:
+    from ..config_types import Config
 
 __all__ = [
     "PostMetadata",
@@ -33,14 +37,14 @@ _FALLBACK_TEMPLATE = "{result}"
 # ---------------------------------------------------------------------------
 
 def resolve_output_template(
-    config_dict: dict,
+    config: "Config",
     postprocessor_template: str = "{result}",
     cli_override: str | None = None,
 ) -> str:
     """Return the output template string to use for this run.
 
     Args:
-        config_dict: Full configuration dictionary (for output_templates section).
+        config: Resolved Config instance.
         postprocessor_template: Template from PostprocessorConfig (already resolved).
         cli_override: -T/--template CLI override (highest priority).
 
@@ -50,7 +54,7 @@ def resolve_output_template(
     3. The 'default' entry in output_templates
     4. Built-in fallback: '{result}'
     """
-    templates = config_dict.get("output_templates", {})
+    templates = config._config_dict.get("output_templates", {})
 
     if cli_override:
         t = templates.get(cli_override)
@@ -314,7 +318,7 @@ def _resolve_backend(
 
 def make_postprocessor(
     name: str,
-    config: dict,
+    config: "Config",
     model_override: str | None = None,
 ) -> PostProcessor:
     """Instantiate a post-processor by name from config.
@@ -322,7 +326,7 @@ def make_postprocessor(
     Args:
         name: Post-processor name (key in config['postprocessors']) or 'none'.
               May also be a raw prompt string (contains spaces / length > 40).
-        config: Full asr2clip configuration dict.
+        config: Resolved Config instance.
         model_override: Model name from -M/--post-model CLI flag (highest priority).
 
     Returns:
@@ -330,6 +334,8 @@ def make_postprocessor(
     """
     if name in (None, "none"):
         return NonePostProcessor()
+
+    config_dict = config._config_dict
 
     # Raw system-prompt string passed directly via --post "Summarize as bullets."
     if " " in name or len(name) > 60:
@@ -342,11 +348,11 @@ def make_postprocessor(
             "template_name": "default",
         }
     else:
-        resolved = _resolve_prompt(name, config)
+        resolved = _resolve_prompt(name, config_dict)
         if model_override:
             resolved["model"] = model_override
 
-    backend_cfg = _resolve_backend(config, resolved["backend_name"], resolved["model"])
+    backend_cfg = _resolve_backend(config_dict, resolved["backend_name"], resolved["model"])
     context_text = _load_context(resolved["context_paths"])
 
     btype = backend_cfg["type"]

@@ -7,6 +7,7 @@ import pytest
 from asr2clip.postprocessors.mock import MockPostProcessor, _analyze_text
 from asr2clip.postprocessors.base import PostMetadata
 from asr2clip.postprocessors import make_postprocessor
+from conftest import _config_with_postprocessors
 
 
 class TestTextAnalysis:
@@ -144,21 +145,14 @@ class TestMockPostProcessorIntegration:
 
     def test_make_postprocessor_with_mock_backend(self):
         """make_postprocessor should create mock postprocessor from config."""
-        config = {
+        config = _config_with_postprocessors({
             "postprocessors": {
-                "test_mock": {
-                    "backend": "mock",
-                    "prompt": "Test prompt",
-                }
+                "test_mock": {"backend": "mock", "prompt": "Test prompt"},
             },
             "postprocessor_backends": {
-                "mock": {
-                    "type": "mock",
-                    "model": "gpt-4",
-                }
+                "mock": {"type": "mock", "model": "gpt-4"},
             },
-        }
-
+        })
         processor = make_postprocessor("test_mock", config)
         assert isinstance(processor, MockPostProcessor)
         assert processor.name == "test_mock"
@@ -166,21 +160,14 @@ class TestMockPostProcessorIntegration:
 
     def test_make_postprocessor_mock_backend_analysis(self):
         """Mock postprocessor should analyze from config."""
-        config = {
+        config = _config_with_postprocessors({
             "postprocessors": {
-                "analyze": {
-                    "backend": "mock",
-                    "prompt": "Analyze this content",
-                }
+                "analyze": {"backend": "mock", "prompt": "Analyze this content"},
             },
             "postprocessor_backends": {
-                "mock": {
-                    "type": "mock",
-                    "model": "test-model",
-                }
+                "mock": {"type": "mock", "model": "test-model"},
             },
-        }
-
+        })
         processor = make_postprocessor("analyze", config)
 
         metadata = PostMetadata(
@@ -197,21 +184,14 @@ class TestMockPostProcessorIntegration:
 
     def test_make_postprocessor_mock_with_model_override(self):
         """Mock postprocessor should accept model override."""
-        config = {
+        config = _config_with_postprocessors({
             "postprocessors": {
-                "mock": {
-                    "backend": "mock",
-                    "prompt": "Test",
-                }
+                "mock": {"backend": "mock", "prompt": "Test"},
             },
             "postprocessor_backends": {
-                "mock": {
-                    "type": "mock",
-                    "model": "default-model",
-                }
+                "mock": {"type": "mock", "model": "default-model"},
             },
-        }
-
+        })
         processor = make_postprocessor("mock", config, model_override="custom-model")
         assert processor.model == "custom-model"
 
@@ -221,32 +201,15 @@ class TestMockPostProcessorE2E:
 
     def test_mock_postprocessor_in_full_config(self):
         """Mock postprocessor should work in full config."""
-        config = {
-            "asr_backends": {
-                "demo": {
-                    "type": "mock",
-                }
-            },
+        config = _config_with_postprocessors({
             "postprocessor_backends": {
-                "mock": {
-                    "type": "mock",
-                    "model": "mock-analyzer",
-                }
+                "mock": {"type": "mock", "model": "mock-analyzer"},
             },
             "postprocessors": {
-                "analyze": {
-                    "backend": "mock",
-                    "prompt": "Analyze the content",
-                }
+                "analyze": {"backend": "mock", "prompt": "Analyze the content"},
             },
-            "output_templates": {
-                "default": "{result}",
-            },
-            "presets": {
-                "demo": ["none", "demo", "analyze", "Full demo"],
-            },
-        }
-
+            "output_templates": {"default": "{result}"},
+        })
         processor = make_postprocessor("analyze", config)
         assert isinstance(processor, MockPostProcessor)
 
@@ -270,21 +233,14 @@ class TestMockPostProcessorE2E:
     def test_mock_postprocessor_analyzes_long_content(self):
         """Mock postprocessor should handle long content."""
         prompt = "Once upon a time there was a very long prompt that went on and on"
-        config = {
+        config = _config_with_postprocessors({
             "postprocessor_backends": {
-                "mock": {
-                    "type": "mock",
-                    "model": "analyzer",
-                }
+                "mock": {"type": "mock", "model": "analyzer"},
             },
             "postprocessors": {
-                "test": {
-                    "backend": "mock",
-                    "prompt": prompt,
-                }
+                "test": {"backend": "mock", "prompt": prompt},
             },
-        }
-
+        })
         processor = make_postprocessor("test", config)
 
         metadata = PostMetadata(

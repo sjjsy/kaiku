@@ -18,6 +18,7 @@ from asr2clip.postprocessors.base import PostMetadata
 from asr2clip.transcribe import transcribe
 
 from .conftest import skip_no_whisper, skip_no_model, JFK_EXPECTED_FRAGMENT
+from conftest import _config_with_postprocessors
 
 
 def _meta(**kw) -> PostMetadata:
@@ -45,7 +46,7 @@ class TestOpenAICompatE2E:
     """Transcribe with real whisper.cpp, post-process with mocked HTTP."""
 
     def _pp_config(self):
-        return {
+        return _config_with_postprocessors({
             "postprocessor_backends": {
                 "local": {
                     "type": "openai_compat",
@@ -60,7 +61,7 @@ class TestOpenAICompatE2E:
                     "prompt": "Clean up this transcript. Output only the corrected text.",
                 }
             },
-        }
+        })
 
     def test_full_pipeline_transcript_in_user_message(self, jfk_wav, wcpp_config):
         """The LLM user message must contain the real transcript."""
@@ -111,7 +112,7 @@ class TestClaudeCodeE2E:
     """Transcribe with real whisper.cpp, post-process with mocked claude CLI."""
 
     def _pp_config(self):
-        return {
+        return _config_with_postprocessors({
             "postprocessor_backends": {
                 "cc": {
                     "type": "claude_code",
@@ -124,7 +125,7 @@ class TestClaudeCodeE2E:
                     "prompt": "Summarize the following transcript in one sentence.",
                 }
             },
-        }
+        })
 
     def test_transcript_passed_to_claude_stdin(self, jfk_wav, wcpp_config):
         """The real transcript must reach claude's stdin input."""

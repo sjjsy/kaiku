@@ -47,38 +47,34 @@ from .utils import (
 )
 
 
-def test_config(
-    backend_config: dict,
-    full_config: dict | None = None,
-    preprocessor_override: str | None = None,
-    mode: str = "both",
-) -> bool:
+def test_config(config: Config) -> bool:
     """Test the configuration by checking backend connectivity and preprocessor availability.
 
     Args:
-        backend_config: Resolved backend configuration dictionary with "backend", "api_key", etc.
-        full_config: Full (unresolved) configuration dictionary (unused).
-        preprocessor_override: Resolved preprocessor name.
-        mode: The mode being tested ("live" or "file").
+        config: Resolved Config instance.
 
     Returns:
         True if all configured components are accessible.
     """
     from .utils import print_error, print_success
 
-    backend = backend_config.get("backend", "api")
-    info(f"Testing configuration (backend: {backend})...")
+    backend = config.asr_backend
+    info(f"Testing configuration (backend: {backend.name})...")
     print_separator()
 
-    if backend == "whisper_cpp":
+    if backend.type == "whisper_cpp":
         from .backends.whisper_cpp import WhisperCppConfig, test as wc_test
-        cfg = WhisperCppConfig.from_config(backend_config)
+        cfg = WhisperCppConfig(
+            binary=backend.binary,
+            model=backend.model,
+            threads=backend.threads or 4,
+        )
         backend_ok = wc_test(cfg)
     else:
-        api_key = backend_config.get("api_key")
-        api_base_url = backend_config.get("api_base_url")
-        model_name = backend_config.get("model_name")
-        org_id = backend_config.get("org_id")
+        api_key = backend.api_key
+        api_base_url = backend.api_base_url
+        model_name = backend.model_name
+        org_id = backend.org_id
         print_key_value("API Base URL", api_base_url)
         print_key_value("Model", model_name)
         masked_key = f"{'*' * 8}...{api_key[-4:] if api_key and len(api_key) > 4 else '****'}"
@@ -86,22 +82,19 @@ def test_config(
         print_separator()
         backend_ok = test_transcription(api_key, api_base_url, model_name, org_id)
 
-    if full_config is None:
-        return backend_ok
-
-    # Check preprocessors
+    # Check preprocessor
     from .preprocessors import check_preprocessor_available
 
     print_separator()
     info("Checking preprocessors...")
 
-    name = preprocessor_override or "none"
-    avail, hint = check_preprocessor_available(name)
+    preprocessor_name = config.preprocessor.name
+    avail, hint = check_preprocessor_available(preprocessor_name)
     if avail:
-        print_success(f"Preprocessor ({mode}): {name}")
+        print_success(f"Preprocessor: {preprocessor_name}")
         pp_ok = True
     else:
-        print_error(f"Preprocessor ({mode}): {name} — NOT AVAILABLE  ({hint})")
+        print_error(f"Preprocessor: {preprocessor_name} — NOT AVAILABLE  ({hint})")
         pp_ok = False
 
     return backend_ok and pp_ok
@@ -788,7 +781,7 @@ def main():
         sys.exit(1)
 
     # Set up logging (use config's quiet setting if not overridden)
-    quiet = args.quiet or config._config_dict.get("quiet", False)
+    quiet = args.quiet or config.output.quiet
     setup_logging(verbose=not quiet)
     set_verbose(not quiet)
 
@@ -799,17 +792,7 @@ def main():
 
     if args.test:
         # Test preset configuration
-        ok_asr = test_config(
-            {
-                "backend": config.asr_backend.type,
-                "api_key": config.asr_backend.api_key,
-                "api_base_url": config.asr_backend.api_base_url,
-                "model_name": config.asr_backend.model_name,
-            },
-            config._config_dict,
-            config.preprocessor.name,
-            mode="preset",
-        )
+        ok_asr = test_config(config)
 
         ok_post = _test_postprocessors(config, args.post, args.post_model)
         ok_clip = _test_clipboard()
@@ -834,9 +817,9 @@ def main():
     )
 
     postprocessor = make_postprocessor(
-        config.postprocessor.name, config._config_dict, args.post_model
+        config.postprocessor.name, config, args.post_model
     )
-    template = resolve_output_template(config._config_dict, config.postprocessor.template, args.template)
+    template = resolve_output_template(config, config.postprocessor.template, args.template)
 
     # Create preprocessor for the selected preset (used for all operations)
     from .preprocessors import make_preprocessor

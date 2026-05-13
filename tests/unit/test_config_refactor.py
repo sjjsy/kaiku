@@ -197,16 +197,16 @@ class TestConfigIntegration:
             "clipboard_max_chars": 50_000,
         }
 
-    def test_live_mode_resolves_correctly(self, integration_config):
-        """Live mode should use live-specific configs."""
-        config = Config.resolve(integration_config, preset=Preset(name="test", preprocessor="none", asr_backend="wcpp", postprocessor="none"))
+    def test_preset_wcpp_resolves_correctly(self, integration_config):
+        """Preset with wcpp backend should resolve correctly."""
+        config = Config.resolve(integration_config, preset=Preset(name="quality", preprocessor="none", asr_backend="wcpp", postprocessor="none"))
         assert config.asr_backend.name == "wcpp"
         assert config.asr_backend.type == "whisper_cpp"
         assert config.preprocessor.name == "none"
 
-    def test_file_mode_resolves_correctly(self, integration_config):
-        """File mode should use file-specific configs."""
-        config = Config.resolve(integration_config, preset=Preset(name="test", preprocessor="noisereduce", asr_backend="groq", postprocessor="none"))
+    def test_preset_groq_resolves_correctly(self, integration_config):
+        """Preset with groq backend should resolve correctly."""
+        config = Config.resolve(integration_config, preset=Preset(name="speed", preprocessor="noisereduce", asr_backend="groq", postprocessor="none"))
         assert config.asr_backend.name == "groq"
         assert config.asr_backend.type == "api"
         assert config.preprocessor.name == "noisereduce"
@@ -218,11 +218,11 @@ class TestConfigIntegration:
         assert config.asr_backend.name == "groq"
         assert config.asr_backend.api_key == "gsk_live"
 
-    def test_toggle_mode_uses_live_backend(self, integration_config):
-        """Preset-based system selects backends atomically per preset.
+    def test_multiple_presets_with_different_backends(self, integration_config):
+        """Preset-based system allows switching backends via preset selection.
 
         With the preset system, the user selects one preset per run.
-        This test verifies that a preset with groq backend resolves correctly.
+        Different presets can have different backends, preprocessors, and postprocessors.
         """
         toggle_config = integration_config.copy()
         toggle_config["asr_backends"]["groq"] = {
@@ -232,12 +232,12 @@ class TestConfigIntegration:
             "model_name": "whisper-turbo",
         }
 
-        # Speed preset: uses groq
+        # Speed preset: uses groq backend for fast cloud transcription
         speed_config = Config.resolve(toggle_config, preset=Preset(name="speed", preprocessor="none", asr_backend="groq", postprocessor="none"))
         assert speed_config.asr_backend.name == "groq"
         assert speed_config.asr_backend.type == "api"
 
-        # Quality preset: uses wcpp for offline quality
+        # Quality preset: uses wcpp for offline quality transcription
         quality_config = Config.resolve(toggle_config, preset=Preset(name="quality", preprocessor="deepfilter", asr_backend="wcpp", postprocessor="none"))
         assert quality_config.asr_backend.name == "wcpp"
         assert quality_config.asr_backend.type == "whisper_cpp"

@@ -81,6 +81,7 @@ diarize = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["tests"]
 addopts = "-ra -q"
 
 [tool.ruff]

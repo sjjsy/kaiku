@@ -170,12 +170,12 @@ class ASRBackendConfig:
             )
 
         elif btype == "whisper_cpp":
-            binary = defn.get("binary")
+            binary = os.path.expanduser(defn.get("binary") or "")
             if not binary:
                 raise ValueError(
                     f"Backend '{backend_name}' requires binary path in config."
                 )
-            model = defn.get("model")
+            model = os.path.expanduser(defn.get("model") or "")
             if not model:
                 raise ValueError(
                     f"Backend '{backend_name}' requires model path in config."
@@ -223,16 +223,17 @@ class PreprocessorConfig:
     def resolve(
         cls,
         config_dict: dict,
+        preset_name: str = "none",
         cli_override: Optional[str] = None,
     ) -> PreprocessorConfig:
         """Resolve preprocessor from CLI override or preset."""
         if cli_override:
             name = cli_override
-            info(f"Using preprocessor: {name} (CLI override)")
+            source = "CLI override"
         else:
-            name = "none"
-            info(f"Using preprocessor: {name} (from preset)")
-
+            name = preset_name
+            source = "from preset"
+        info(f"Using preprocessor: {name} ({source})")
         return cls(name=name)
 
 
@@ -298,17 +299,18 @@ class PostprocessorConfig:
     def resolve(
         cls,
         config_dict: dict,
+        preset_post: str = "none",
         cli_post_override: Optional[str] = None,
         cli_model_override: Optional[str] = None,
     ) -> PostprocessorConfig:
         """Resolve post-processor and its backend from CLI override or preset."""
-        # Determine postprocessor name
         if cli_post_override:
             post_name = cli_post_override
-            info(f"Using post-processor: {post_name} (CLI override)")
+            source = "CLI override"
         else:
-            post_name = "none"
-            info(f"Using post-processor: {post_name} (from preset)")
+            post_name = preset_post
+            source = "from preset"
+        info(f"Using post-processor: {post_name} ({source})")
 
         if post_name == "none":
             return cls(
@@ -434,6 +436,7 @@ class PostprocessorBackendConfig:
 class OutputConfig:
     """Resolved output configuration."""
     clipboard_max_chars: int
+    quiet: bool = False
 
     @classmethod
     def resolve(cls, config_dict: dict) -> OutputConfig:
@@ -443,8 +446,9 @@ class OutputConfig:
         clipboard_max_chars = int(
             config_dict.get("clipboard_max_chars", _DEFAULT_CLIPBOARD_MAX_CHARS)
         )
+        quiet = bool(config_dict.get("quiet", False))
         info(f"Clipboard max chars: {clipboard_max_chars}")
-        return cls(clipboard_max_chars=clipboard_max_chars)
+        return cls(clipboard_max_chars=clipboard_max_chars, quiet=quiet)
 
 
 @dataclass(frozen=True)
@@ -563,11 +567,10 @@ class Config:
     def preprocessor(self) -> PreprocessorConfig:
         """Lazy-load and cache preprocessor config."""
         if self._preprocessor is None:
-            # Use preset's preprocessor as override (CLI override takes precedence)
-            preprocessor_override = self._cli_overrides.preprocessor or self._preset.preprocessor
             self._preprocessor = PreprocessorConfig.resolve(
                 self._config_dict,
-                preprocessor_override,
+                preset_name=self._preset.preprocessor,
+                cli_override=self._cli_overrides.preprocessor,
             )
         return self._preprocessor
 
@@ -585,12 +588,11 @@ class Config:
     def postprocessor(self) -> PostprocessorConfig:
         """Lazy-load and cache postprocessor config."""
         if self._postprocessor is None:
-            # Use preset's postprocessor as override (CLI override takes precedence)
-            postprocessor_override = self._cli_overrides.post or self._preset.postprocessor
             self._postprocessor = PostprocessorConfig.resolve(
                 self._config_dict,
-                postprocessor_override,
-                self._cli_overrides.post_model,
+                preset_post=self._preset.postprocessor,
+                cli_post_override=self._cli_overrides.post,
+                cli_model_override=self._cli_overrides.post_model,
             )
         return self._postprocessor
 

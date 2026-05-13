@@ -10,6 +10,24 @@ import tempfile
 
 import pytest
 
+from asr2clip.config_types import Config, Preset
+
+
+def _config_with_postprocessors(sections: dict) -> Config:
+    """Build a minimal Config wrapping postprocessor-focused config sections.
+
+    Used by postprocessor unit tests that don't care about ASR backends or presets.
+    """
+    full = {
+        "asr_backends": {"default": {"type": "mock", "response": ""}},
+        "presets": {"default": ["none", "default", "none", "test"]},
+        **sections,
+    }
+    full.setdefault("postprocessor_backends", {})
+    full.setdefault("postprocessors", {})
+    preset = Preset(name="default", preprocessor="none", asr_backend="default", postprocessor="none")
+    return Config.resolve(full, preset=preset)
+
 
 # ---------------------------------------------------------------------------
 # Minimal config dicts
@@ -17,10 +35,8 @@ import pytest
 
 @pytest.fixture
 def minimal_config():
-    """Bare-minimum config with per-mode backend selection."""
+    """Bare-minimum config for testing."""
     return {
-        "asr_backend_urgent": "api",
-        "asr_backend_casual": "api",
         "asr_backends": {
             "api": {
                 "type": "api",
@@ -38,53 +54,59 @@ def recorder_config():
     return {"recorder": "auto"}
 
 
+_POSTPROCESSOR_SECTIONS = {
+    "postprocessor_backends": {
+        "local": {
+            "type": "openai_compat",
+            "api_base_url": "http://localhost:11434/v1/",
+            "api_key": "ollama",
+            "model": "qwen3:14b",
+        },
+        "cc": {
+            "type": "claude_code",
+            "model": "claude-sonnet-4-6",
+        },
+    },
+    "postprocessors": {
+        "solo-base": {
+            "backend": "local",
+            "prompt": "Clean up this transcript.",
+        },
+        "solo-enhance": {
+            "extends": "solo-base",
+            "extra": "Also extract key points.",
+        },
+        "group": {
+            "backend": "cc",
+            "prompt": "Summarize this meeting.",
+            "template": "full",
+        },
+    },
+    "output_templates": {
+        "default": "{result}",
+        "full": "# Transcript\n\n{transcript}\n\n# Result\n\n{result}",
+        "bare": "{result}",
+    },
+}
+
+
 @pytest.fixture
 def postprocessor_config():
-    """Config with a full postprocessors section for unit tests."""
-    return {
-        "postprocessor_backends": {
-            "local": {
-                "type": "openai_compat",
-                "api_base_url": "http://localhost:11434/v1/",
-                "api_key": "ollama",
-                "model": "qwen3:14b",
-            },
-            "cc": {
-                "type": "claude_code",
-                "model": "claude-sonnet-4-6",
-            },
-        },
-        "postprocessors": {
-            "solo-base": {
-                "backend": "local",
-                "prompt": "Clean up this transcript.",
-            },
-            "solo-enhance": {
-                "extends": "solo-base",
-                "extra": "Also extract key points.",
-            },
-            "group": {
-                "backend": "cc",
-                "prompt": "Summarize this meeting.",
-                "template": "full",
-            },
-        },
-        "output_templates": {
-            "default": "{result}",
-            "full": "# Transcript\n\n{transcript}\n\n# Result\n\n{result}",
-            "bare": "{result}",
-        },
-        "postprocessor_urgent": "none",
-        "postprocessor_casual": "solo-base",
-    }
+    """Raw postprocessors config dict — for testing internal helpers directly."""
+    import copy
+    return copy.deepcopy(_POSTPROCESSOR_SECTIONS)
+
+
+@pytest.fixture
+def postprocessor_config_obj():
+    """Config object wrapping postprocessors config — for testing public API."""
+    return _config_with_postprocessors(_POSTPROCESSOR_SECTIONS)
 
 
 @pytest.fixture
 def full_backend_config():
     """Full ASR backend config with multiple backend options."""
     return {
-        "asr_backend_urgent": "groq",
-        "asr_backend_casual": "wcpp",
         "asr_backends": {
             "groq": {
                 "type": "api",
@@ -108,13 +130,6 @@ def full_backend_config():
     }
 
 
-@pytest.fixture
-def full_preprocessor_config():
-    """Config with per-mode preprocessor selection."""
-    return {
-        "preprocessor_urgent": "noisereduce",
-        "preprocessor_casual": "deepfilter",
-    }
 
 
 @pytest.fixture
