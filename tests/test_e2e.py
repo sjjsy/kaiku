@@ -351,7 +351,7 @@ class TestRobustMode:
         paras20 = _chunk_paragraphs(out20.read_text())
         assert len(paras20) >= 5, out20.read_text()[:800]
         if importlib.util.find_spec("noisereduce") is not None:
-            assert "preprocessing audio with noisereduce" in r20.stderr.lower()
+            assert "using preprocessor: noisereduce" in r20.stderr.lower()
 
         out10 = tmp_path / "robust10.txt"
         r10 = _run(

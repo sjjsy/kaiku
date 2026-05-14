@@ -115,7 +115,6 @@ def _transcribe_and_output(audio_path: str, config: "Config"):
     if not isinstance(preprocessor, NonePreprocessor):
         try:
             audio_data, sr = load_wav(audio_path)
-            info(f"Preprocessing audio with {preprocessor.name}…")
             t_pre = time.time()
             audio_data = preprocessor.process(audio_data, sr)
             info(f"Preprocessing completed in {time.time() - t_pre:.2f}s")

@@ -540,11 +540,13 @@ class Config:
 
     # --- inline single-value config (no sub-object needed) ---
 
-    @property
+    @functools.cached_property
     def preprocessor(self) -> str:
-        """Preprocessor name: CLI -p > preset > built-in default 'none'."""
-        n = getattr(self._args, "preprocessor", None) or self._preset.preprocessor
-        source = "CLI -p" if getattr(self._args, "preprocessor", None) else f"preset '{self._preset.name}'"
+        """Preprocessor name: CLI ``-p`` overrides the preset's first field."""
+        cli = getattr(self._args, "preprocessor", None)
+        n = (cli if cli else self._preset.preprocessor)
+        source = "CLI -p" if cli else f"preset '{self._preset.name}'"
+        info(f"Using preprocessor: {n} ({source})")
         return n
 
     @property

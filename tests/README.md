@@ -96,7 +96,7 @@ alone write their own minimal YAML inline (see `TestDeviceAbortOnFailure` in
 
 #### `test_file_input_dense_primary_contract` (×3 invocations)
 
-- **Run 1:** `-i` WAV with `-p none`, `-b mock`, `-T raw`, `-P mock-pp`, `-l`, `-o` — backend and post *why* lines, mock ASR logs, **no** `Preprocessing audio with …` (none preprocessor), `Clipboard: skipped (--no-clipboard)`, post-processed stdout/file, `Prompt analyzed` word count for base `mock-pp` (`lines=1, words=8`), transcript analysis includes `words=9` for the fox sentence
+- **Run 1:** `-i` WAV with `-p none`, `-b mock`, `-T raw`, `-P mock-pp`, `-l`, `-o` — backend and post *why* lines, mock ASR logs, `Using preprocessor: none (CLI -p)`, **no** `Preprocessing completed` timing line for preprocessing (none preprocessor), `Clipboard: skipped (--no-clipboard)`, post-processed stdout/file, `Prompt analyzed` word count for base `mock-pp` (`lines=1, words=8`), transcript analysis includes `words=9` for the fox sentence
 - **Run 2:** unknown `-T` name with `-b mock` — fallback still returns canned fox transcript on stdout
 - **Run 3:** `-b mock` + `-P mock-pp2` — `mock-pp2` (`extends: mock-pp` + `extra` in example config) yields a **wider** resolved prompt than `mock-pp` alone (assert `lines=3, words=22` on the `Prompt analyzed:` line)
 
@@ -167,7 +167,7 @@ alone write their own minimal YAML inline (see `TestDeviceAbortOnFailure` in
 
 #### `test_chunking_stderr_file_and_chunk_duration_flag` (×2 invocations)
 
-- First run: `-r` on `long_speech` with `-b mock`, `-C 20`, `-o` — chunk progress in stderr, ≥ 5 chunk paragraphs in the output file; if `noisereduce` is importable, the same invocation adds `-p noisereduce` and stderr must contain `Preprocessing audio with noisereduce`
+- First run: `-r` on `long_speech` with `-b mock`, `-C 20`, `-o` — chunk progress in stderr, ≥ 5 chunk paragraphs in the output file; if `noisereduce` is importable, the same invocation adds `-p noisereduce` and stderr must contain `Using preprocessor: noisereduce`
 - Second run: same file with `-C 10` and `-o` elsewhere — strictly more chunk paragraphs than the 20 s chunk run
 
 ### `TestToggleMode`
@@ -241,8 +241,8 @@ traceability.
 
 ### Covered in the current E2E suite
 
-- `**-p none`** — folded into `test_file_input_dense_primary_contract` (no preprocessing log lines)
-- `**-p noisereduce`** — optional: when `noisereduce` is installed, `TestRobustMode` adds `-p noisereduce` to the long-audio robust run and asserts `Preprocessing audio with noisereduce`
+- `**-p none`** — folded into `test_file_input_dense_primary_contract` (`Using preprocessor: none (CLI -p)`; no `Preprocessing completed` from the preprocessor step)
+- `**-p noisereduce`** — optional: when `noisereduce` is installed, `TestRobustMode` adds `-p noisereduce` to the long-audio robust run and asserts `Using preprocessor: noisereduce`
 - `**postprocessors` `extends` / `extra**` — `mock-pp2` in the example config; prompt-width assertions vs `mock-pp` in the dense file test and `.txt` input test
 - `**--test**` — `TestSelfCheck::test_cli_test_mode_passes_with_mock_preset` (requires mock-class backends to skip the API probe; see `test_config` in `asr2clip.py`)
 - `**-i` `.txt` shortcut** — `TestPlainTextInput::test_txt_input_skips_asr_and_postprocesses`

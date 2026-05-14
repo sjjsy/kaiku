@@ -95,7 +95,6 @@ def process_file_robust(config: "Config"):
 
     preprocessor = make_preprocessor(config)
     if not isinstance(preprocessor, NonePreprocessor):
-        info(f"Preprocessing audio with {preprocessor.name}...")
         t_pre = time.time()
         try:
             audio_np = audiosegment_to_float32(audio)

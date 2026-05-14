@@ -227,7 +227,6 @@ def process_recording(config: Config):
 
     preprocessor = make_preprocessor(config)
     if not isinstance(preprocessor, NonePreprocessor):
-        info(f"Preprocessing audio with {preprocessor.name}...")
         t_pre = time.time()
         audio_data = preprocessor.process(audio_data, 16000)
         info(f"Preprocessing completed in {time.time() - t_pre:.2f}s")
@@ -331,7 +330,6 @@ def process_file(config: Config):
     if not isinstance(preprocessor, NonePreprocessor):
         try:
             audio_data, sr = load_wav(temp_path)
-            info(f"Preprocessing audio with {preprocessor.name}...")
             t_pre = time.time()
             audio_data = preprocessor.process(audio_data, sr)
             info(f"Preprocessing completed in {time.time() - t_pre:.2f}s")
