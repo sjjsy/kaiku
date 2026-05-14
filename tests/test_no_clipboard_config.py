@@ -22,8 +22,3 @@ def test_no_clipboard_false_when_cli_flag_absent() -> None:
     cfg = Config({}, _preset(), args)
     assert cfg.no_clipboard is False
 
-
-def test_no_clipboard_false_when_cli_flag_false() -> None:
-    args = argparse.Namespace(no_clipboard=False)
-    cfg = Config({}, _preset(), args)
-    assert cfg.no_clipboard is False

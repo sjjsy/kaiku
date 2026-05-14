@@ -30,7 +30,7 @@ Fork lives at [sjjsy/asr2clip](https://github.com/sjjsy/asr2clip). AGPL-3.0 lice
 
 - `asr2clip/asr2clip.py` — CLI entry point, `_build_parser()`, `main()`, `process_recording()`, `process_file()`
 - `asr2clip/config_types.py` — all config resolution classes (`Config`, `ASRBackendConfig`, etc.)
-- `asr2clip/config.py` — YAML file reading and `_CONFIG_TEMPLATE` (template shown by `--generate_config`)
+- `asr2clip/config.py` — YAML file reading and `_CONFIG_TEMPLATE` (template shown by `--generate-config`)
 - `asr2clip/toggle.py` — lock-file toggle recording, `_transcribe_and_output()`
 - `asr2clip/robust.py` — chunked transcription, `process_file_robust()`
 - `asr2clip/postprocessors/` — post-processing package
@@ -101,6 +101,15 @@ When changing something, update ALL references immediately and delete the old ve
 Each commit must:
 - Do one thing completely (fix, refactor, feature, or test — not mixed).
 - Have a message that describes the behavioral change, not the file change.
+
+### 8. Important
+
+- Whenever bumping into a comment annotated with `AGENTS`, read it especially carefully!
+  If it says "Do not touch this function!" or similar, honor it!
+  The short form annotation `ADNT!` means the same thing: Agents Do Not Touch!
+- If you consider any instruction or comment in this document or elsewhere unwarranted or
+  counterproductive, write a comment or complaint into `AGENT_COMPLAINTS.md` where you
+  explain your reasoning.
 
 ---
 

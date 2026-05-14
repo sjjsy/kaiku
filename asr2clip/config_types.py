@@ -465,10 +465,10 @@ class Config:
         self._args = args
 
     @classmethod
-    def from_file(cls, config_file: str, args: Any) -> "Config":
+    def from_file(cls, config_file: str | None, args: Any) -> "Config":
         """Primary entry point. Reads YAML, resolves preset, stores args."""
         from .config import read_config
-        from .utils import error
+        from .utils import error, info
 
         # Fail fast when the caller explicitly provides a path that doesn't exist,
         # rather than silently falling back to the user's default config.
@@ -476,7 +476,14 @@ class Config:
             error(f"Config file not found: {config_file}")
             sys.exit(1)
 
-        config_dict = read_config(config_file)
+        resolved_path, config_dict = read_config(config_file)
+        n_params = len(config_dict)
+
+        if config_file:
+            info(f"Using configuration file: {resolved_path} (-c/--config) — Provides {n_params} definitions")
+        else:
+            info(f"Using configuration file: {resolved_path} (default discovery) — Provides {n_params} definitions")
+
         if not config_dict:
             error("Config file is empty or contains only comments.")
             sys.exit(1)

@@ -56,14 +56,19 @@ def find_config_path(config_file: str | None = None) -> str | None:
     return None
 
 
-def read_config(config_file: str) -> dict:
+def read_config(config_file: str | None = None) -> tuple[str, dict]:
     """Read and parse the configuration file.
 
     Args:
-        config_file: Path to the configuration file.
+        config_file: Path from ``-c``/``--config``, or ``None`` to use
+            :data:`CONFIG_PATHS` discovery (first existing file wins).
 
     Returns:
-        Dictionary containing the configuration.
+        ``(absolute_path, config_dict)``. The path is the file that was read;
+        use it in logs so users see which file supplies keys such as
+        ``clipboard_max_chars`` (a common confusion is editing XDG
+        ``~/.config/asr2clip/config.yaml`` while a ``./asr2clip.conf`` in the
+        current working directory takes precedence).
 
     Raises:
         SystemExit: If the config file is not found or cannot be read.
@@ -76,21 +81,21 @@ def read_config(config_file: str) -> dict:
         for path in CONFIG_PATHS:
             print(f"  - {path}")
         print("\nTo create a new configuration file, run:")
-        print("    asr2clip --generate_config")
+        print("    asr2clip --generate-config")
         print("\nOr create and edit directly:")
         print("    asr2clip --edit")
         sys.exit(1)
 
+    resolved_abs = os.path.abspath(config_path)
+
     try:
         with open(config_path) as file:
-            config = yaml.load(file.read())
-            # Handle legacy config format
-            if "asr_model" in config and len(config) == 1:
-                return config["asr_model"]
-            return config
+            raw = yaml.load(file.read())
     except Exception as e:
         print(f"Could not read configuration file {config_path}: {e}")
         sys.exit(1)
+
+    return resolved_abs, raw
 
 
 def open_in_editor(config_file: str | None = None):

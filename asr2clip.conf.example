@@ -39,7 +39,7 @@ presets:
 # Single device (uses system default if device is unavailable):
 #   audio_device: "Snowball"                  # Human-readable name (substring match)
 #   audio_device: "auto"                      # System default input device
-#   audio_device: 3                           # Device index from --list_devices output
+#   audio_device: 3                           # Device index from --list-devices output
 #
 # Preference order (tries first available device; falls back if USB device unplugged):
 #   audio_device: "Snowball,Webcam,auto"     # Try Snowball, fall back to Webcam, then default
@@ -49,7 +49,7 @@ presets:
 #   audio_device: "mock-jfk"                 # Serve test_data/jfk.wav as if recorded live
 #   audio_device: "mock-group"               # Serve test_data/group-4s.wav
 #
-# Run `asr2clip --list_devices` to see available device names and indices.
+# Run `asr2clip --list-devices` to see available device names and indices.
 #
 # audio_device: "auto"                        # Use system default (recommended)
 

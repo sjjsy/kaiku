@@ -218,7 +218,7 @@ alone write their own minimal YAML inline (see `TestDeviceAbortOnFailure` in
 ### Devices
 
 - `**mock-jfk`** — serves `test_data/jfk-11s-1p.wav` (~11 s, one speaker)
-- `**mock-group**` — serves `test_data/group-30s-4p.wav` (~30 s, multi-speaker)
+- `**mock-group`** — serves `test_data/group-30s-4p.wav` (~30 s, multi-speaker)
 
 ### ASR backends
 
@@ -242,7 +242,7 @@ traceability.
 ### Covered in the current E2E suite
 
 - `**-p none`** — folded into `test_file_input_dense_primary_contract` (no preprocessing log lines)
-- `**-p noisereduce**` — optional: when `noisereduce` is installed, `TestRobustMode` adds `-p noisereduce` to the long-audio robust run and asserts `Preprocessing audio with noisereduce`
+- `**-p noisereduce`** — optional: when `noisereduce` is installed, `TestRobustMode` adds `-p noisereduce` to the long-audio robust run and asserts `Preprocessing audio with noisereduce`
 - `**postprocessors` `extends` / `extra**` — `mock-pp2` in the example config; prompt-width assertions vs `mock-pp` in the dense file test and `.txt` input test
 - `**--test**` — `TestSelfCheck::test_cli_test_mode_passes_with_mock_preset` (requires mock-class backends to skip the API probe; see `test_config` in `asr2clip.py`)
 - `**-i` `.txt` shortcut** — `TestPlainTextInput::test_txt_input_skips_asr_and_postprocesses`

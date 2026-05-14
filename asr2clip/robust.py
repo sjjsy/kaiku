@@ -215,6 +215,7 @@ def process_file_robust(config: "Config"):
 
     if config.output_file:
         append_transcript_to_file(final, config.output_file)
+
     copy_transcript_to_clipboard(final, config)
 
     info(f"Done. {n_chunks} chunk(s), {total_s:.0f}s audio transcribed.")

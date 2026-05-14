@@ -144,7 +144,7 @@ def _write_temp_transcript(text: str) -> str:
     return path
 
 
-def copy_transcript_to_clipboard(
+def copy_transcript_to_clipboard(             # AGENTS: Do not touch this function!
     text: str,
     config: Config,
 ) -> bool:
@@ -166,9 +166,8 @@ def copy_transcript_to_clipboard(
         info("Clipboard: skipped (--no-clipboard)")
         return False
 
-    use_path = (config.clipboard_max_chars == 0) or (
-        config.clipboard_max_chars > 0 and len(text) > config.clipboard_max_chars
-    )
+    max_chars = config.clipboard_max_chars
+    use_path = (max_chars == 0) or (max_chars > 0 and len(text) > max_chars)
 
     if not use_path:
         if copy_to_clipboard(text):
@@ -179,18 +178,12 @@ def copy_transcript_to_clipboard(
 
     # Resolve the file path to copy
     if config.output_file:
-        # Note when `config.output_file` is set the transcript is already written to it
+        # Note: With -o/--output, the transcript is appended before (robust.py) or after this returns (see output_transcript).
         path = os.path.abspath(config.output_file)
     else:
-        # ... But here we need to write it to the temp file
+        # ... But here we need to write it to the temp file to honor clipboard_max_chars
         path = os.path.abspath(_write_temp_transcript(text))
-        if config.clipboard_max_chars == 0:
-            info(f"Transcript written to temp file (clipboard_max_chars=0): {path}")
-        else:
-            info(
-                "Transcript written to temp file "
-                f"(len(transcript) > clipboard_max_chars({config.clipboard_max_chars}); No -o FILE): {path}"
-            )
+        info(f"Transcript written to temp file: {path} — {len(transcript)} > {max_chars} & no -o FILE")
 
     if copy_to_clipboard(path):
         success(f"Transcript file path copied to clipboard ({path})")

@@ -22,7 +22,6 @@ from .audio import (
 from .config import (
     generate_config,
     open_in_editor,
-    read_config,
 )
 from .config_types import Config
 from .daemon import continuous_recording
@@ -433,11 +432,11 @@ See https://github.com/sjjsy/asr2clip for full documentation and configuration e
         help="Open configuration file in editor (creates default config if missing)",
     )
     setup_group.add_argument(
-        "--generate_config", action="store_true",
+        "--generate-config", action="store_true",
         help="Write config template to ~/.config/asr2clip/config.yaml",
     )
     setup_group.add_argument(
-        "--print_config", action="store_true",
+        "--print-config", action="store_true",
         help="Print config template to stdout",
     )
     setup_group.add_argument(
@@ -457,7 +456,7 @@ See https://github.com/sjjsy/asr2clip for full documentation and configuration e
     # Audio
     audio_group = parser.add_argument_group("Audio")
     audio_group.add_argument(
-        "--list_devices", action="store_true",
+        "--list-devices", action="store_true",
         help="List available audio input devices",
     )
     audio_group.add_argument(
@@ -572,12 +571,12 @@ See https://github.com/sjjsy/asr2clip for full documentation and configuration e
         help="Continuous recording with fixed interval (seconds)",
     )
     vad_group.add_argument(
-        "--silence_threshold", type=float, metavar="PROB",
+        "--silence-threshold", type=float, metavar="PROB",
         default=None,
         help="VAD speech probability threshold, 0.0-1.0 (default: 0.5)",
     )
     vad_group.add_argument(
-        "--silence_duration", type=float, metavar="SEC",
+        "--silence-duration", type=float, metavar="SEC",
         default=None,
         help="Silence duration to trigger transcription (default: 1.5 s)",
     )
@@ -653,7 +652,7 @@ def main():
     setup_logging(verbose=not quiet)
     set_verbose(not quiet)
 
-    # Handle --generate_config and --print_config
+    # Handle --generate-config and --print-config
     if args.print_config:
         generate_config(print_only=True)
         return

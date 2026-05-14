@@ -14,7 +14,7 @@ Jump to the [Related projects](#related-projects) section at the end to understa
 **Cloud (API) path:**
 ```bash
 pip install asr2clip
-asr2clip --generate_config   # create config with all backend examples
+asr2clip --generate-config   # create config with all backend examples
 asr2clip --edit              # fill in your API key
 asr2clip --test              # verify
 asr2clip                     # record and transcribe
@@ -34,7 +34,7 @@ asr2clip -b sonnx
 ```bash
 pip install asr2clip
 # build whisper.cpp and download a model, then configure it in config
-asr2clip --generate_config   # shows a wcpp backend example
+asr2clip --generate-config   # shows a wcpp backend example
 asr2clip --test -b wcpp
 asr2clip -b wcpp
 ```
@@ -42,14 +42,14 @@ asr2clip -b wcpp
 ## CLI reference
 
 ```
-usage: asr2clip [-h] [-v] [-q] [-c FILE] [--preset NAME] [-e]
-                [--generate_config] [--print_config] [--test] [--list_devices]
-                [-d DEV] [-p NAME] [-b NAME] [-i FILE] [-o FILE] [-l LANG]
-                [-r] [-C SEC] [--toggle] [--serve] [--host HOST] [--port PORT]
-                [--model-dir MODEL_DIR] [--num-threads NUM_THREADS]
-                [--download-model] [--vad] [--interval SEC]
-                [--silence_threshold PROB] [--silence_duration SEC] [-s N]
-                [-P NAME] [-M MODEL] [-T NAME]
+usage: asr2clip [-h] [-v] [-q] [-c FILE] [-e] [--generate-config]
+                [--print-config] [--test] [-x NAME] [--list-devices] [-d DEV]
+                [-i FILE] [-p NAME] [-b NAME] [-l LANG] [-r] [-C SEC] [-g]
+                [--serve] [--host HOST] [--port PORT] [--model-dir MODEL_DIR]
+                [--num-threads NUM_THREADS] [--download-model] [--vad]
+                [--interval SEC] [--silence-threshold PROB]
+                [--silence-duration SEC] [-s N] [-P NAME] [-M MODEL] [-o FILE]
+                [-T NAME] [-z]
 
 Record audio and transcribe to clipboard using ASR API
 
@@ -61,23 +61,28 @@ optional arguments:
 Setup:
   -c FILE, --config FILE
                         Path to configuration file
-  --preset NAME         Pipeline preset name (key under 'presets:' in config).
+  -e, --edit            Open configuration file in editor (creates default
+                        config if missing)
+  --generate-config     Write config template to
+                        ~/.config/asr2clip/config.yaml
+  --print-config        Print config template to stdout
+  --test                Test backend connectivity and configured
+                        preprocessors, then exit
+  -x NAME, --preset NAME
+                        Pipeline preset name (key under 'presets:' in config).
                         Presets define complete pipelines: ASR backend,
                         preprocessor, post-processor. Optional if
                         'default_preset' is set in config; CLI overrides still
                         work (-b, -p, -P).
-  -e, --edit            Open configuration file in editor (creates default
-                        config if missing)
-  --generate_config     Write config template to
-                        ~/.config/asr2clip/config.yaml
-  --print_config        Print config template to stdout
-  --test                Test backend connectivity and configured
-                        preprocessors, then exit
 
 Audio:
-  --list_devices        List available audio input devices
+  --list-devices        List available audio input devices
   -d DEV, --device DEV  Audio input device (name, ALSA name, or index).
                         Overrides config.
+  -i FILE, --input FILE
+                        Transcribe an existing audio or video file instead of
+                        recording. Supported: wav, mp3, m4a, ogg, flac, aac,
+                        opus, wma, mp4, mov, mkv, webm, avi, flv, mvi
   -p NAME, --preprocessor NAME
                         Audio preprocessor: none, noisereduce, pyrnnoise,
                         deepfilter. Overrides the preprocessor in the selected
@@ -87,12 +92,6 @@ Transcription:
   -b NAME, --backend NAME
                         ASR backend to use (key under 'asr_backends:' in
                         config). Overrides the backend in the selected preset.
-  -i FILE, --input FILE
-                        Transcribe an existing audio or video file instead of
-                        recording. Supported: wav, mp3, m4a, ogg, flac, aac,
-                        opus, wma, mp4, mov, mkv, webm, avi, flv, mvi
-  -o FILE, --output FILE
-                        Append transcripts to file
   -l LANG, --language LANG
                         Language hint for transcription (ISO-639-1, e.g. 'fi',
                         'en'). Overrides config. Omit to auto-detect.
@@ -102,7 +101,7 @@ Transcription:
   -C SEC, --chunk-duration SEC
                         Max chunk duration in seconds for -r/--robust mode
                         (default: 180)
-  --toggle              Toggle recording: first call starts, second call stops
+  -g, --toggle          Toggle recording: first call starts, second call stops
                         and transcribes. Designed for keyboard shortcuts.
 
 Local ASR server:
@@ -122,10 +121,10 @@ VAD (continuous recording):
                         after speech. Requires sherpa-onnx: pip install
                         asr2clip[vad].
   --interval SEC        Continuous recording with fixed interval (seconds)
-  --silence_threshold PROB
+  --silence-threshold PROB
                         VAD speech probability threshold, 0.0-1.0 (default:
                         0.5)
-  --silence_duration SEC
+  --silence-duration SEC
                         Silence duration to trigger transcription (default:
                         1.5 s)
 
@@ -146,11 +145,18 @@ Post-processing:
                         AI model used for the post-processing (f. ex. claude-
                         sonnet-4-6). Overrides the post-processor config for
                         this run.
+
+Output:
+  -o FILE, --output FILE
+                        Append transcripts to file
   -T NAME, --template NAME
                         Output template name from 'output_templates:' in
                         config. Controls what is written to clipboard/-o FILE.
                         Overrides the template specified in the prompt
                         definition.
+  -z, --no-clipboard    Do not copy the transcript (or a file path) to the
+                        system clipboard. Stdout and -o output behave as
+                        usual.
 
 Examples:
   asr2clip --edit                             # create/open config in editor
@@ -228,8 +234,8 @@ Setup commands manage your configuration file and verify that configured backend
 |------|-------------|
 | `-c FILE` | Path to a specific configuration file |
 | `-e / --edit` | Open config in editor (creates default if missing) |
-| `--generate_config` | Write the annotated config template to `~/.config/asr2clip/config.yaml` |
-| `--print_config` | Print the config template to stdout |
+| `--generate-config` | Write the annotated config template to `~/.config/asr2clip/config.yaml` |
+| `--print-config` | Print the config template to stdout |
 | `--test` | Test backend connectivity and preprocessor availability, then exit |
 | `-x NAME / --preset NAME` | Pipeline preset (key under `presets:`). Optional if `default_preset` is set in config. |
 | `-q / --quiet` | Suppress informational output; only print the transcript and errors |
@@ -237,9 +243,9 @@ Setup commands manage your configuration file and verify that configured backend
 ### Setup commands
 
 ```bash
-asr2clip --generate_config   # write a fully annotated config with all backend examples
+asr2clip --generate-config   # write a fully annotated config with all backend examples
 asr2clip --edit              # create/open config in your default editor
-asr2clip --print_config      # print the annotated template to stdout
+asr2clip --print-config      # print the annotated template to stdout
 asr2clip --test              # verify backend connectivity and preprocessors
 asr2clip --test -b wcpp      # test a specific backend
 ```
@@ -261,14 +267,14 @@ The following sections tackle some of these in more detail where relevant.
 
 | Flag | Description |
 |------|-------------|
-| `--list_devices` | List available audio input devices with names and indices |
+| `--list-devices` | List available audio input devices with names and indices |
 | `-d DEV / --device DEV` | Audio input device (name, ALSA name, or index). Overrides `audio_device` in config. |
 | `-p NAME / --preprocessor NAME` | Audio preprocessor: `none`, `noisereduce`, `pyrnnoise`, `deepfilter`. Overrides config. |
 
 ### Audio device
 
 ```bash
-asr2clip --list_devices            # list available input devices with names and indices
+asr2clip --list-devices            # list available input devices with names and indices
 asr2clip -d "plughw:Snowball"      # use a specific ALSA device for this run
 ```
 
@@ -284,7 +290,7 @@ audio_device: "pulse"              # PulseAudio routes to whichever mic is set a
 
 ```yaml
 audio_device: "plughw:Snowball"    # ALSA plughw — format conversion included
-audio_device: 3                    # device index from --list_devices
+audio_device: 3                    # device index from --list-devices
 ```
 
 | Value | System | Notes |
@@ -293,7 +299,7 @@ audio_device: 3                    # device index from --list_devices
 | `"pipewire"` | [PipeWire](https://pipewire.org/) (Linux) | Recommended on modern Linux |
 | `"plughw:Snowball"` | [ALSA](https://alsa-project.org/) (Linux) | Direct USB mic access with format conversion |
 | `"hw:2,0"` | ALSA (Linux) | Raw direct access, card 2 device 0 |
-| `3` | Any | Device index from `--list_devices` |
+| `3` | Any | Device index from `--list-devices` |
 | `"BlackHole 2ch"` | macOS | Virtual routing device |
 
 ### Audio preprocessing (noise reduction)
@@ -414,7 +420,7 @@ ASR (Automatic Speech Recognition) converts spoken audio into text. asr2clip sup
 
 #### ASR backend configuration
 
-ASR backends are defined under `asr_backends:` and referenced by name from [presets](#presets) or overridden per-run with `-b NAME`. `asr2clip --generate_config` writes a fully annotated config with every supported backend type.
+ASR backends are defined under `asr_backends:` and referenced by name from [presets](#presets) or overridden per-run with `-b NAME`. `asr2clip --generate-config` writes a fully annotated config with every supported backend type.
 
 ```yaml
 asr_backends:
@@ -579,8 +585,8 @@ VAD (Voice Activity Detection) classifies audio frames as speech or silence, ena
 |------|-------------|
 | `--vad` | Continuous recording with voice activity detection. Transcribes when silence is detected after speech. Requires `pip install asr2clip[vad]`. |
 | `--interval SEC` | Continuous recording with fixed interval (seconds). |
-| `--silence_threshold PROB` | Speech probability threshold, 0.0–1.0 (default: 0.5); lower = more sensitive. |
-| `--silence_duration SEC` | How long silence must last to trigger transcription (default: 1.5 s). |
+| `--silence-threshold PROB` | Speech probability threshold, 0.0–1.0 (default: 0.5); lower = more sensitive. |
+| `--silence-duration SEC` | How long silence must last to trigger transcription (default: 1.5 s). |
 
 ### Continuous recording modes
 
@@ -881,7 +887,7 @@ default_preset: speed
 
 | Problem | Solution |
 |---------|----------|
-| Audio not captured | Run `asr2clip --list_devices` and select a working device |
+| Audio not captured | Run `asr2clip --list-devices` and select a working device |
 | Clipboard not working | Install `xclip` (X11) or `wl-clipboard` (Wayland) |
 | API errors | Check your API key and endpoint in config |
 | whisper.cpp errors | Run `asr2clip --test -b wcpp`; check binary and model paths |

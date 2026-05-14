@@ -102,7 +102,7 @@ asr2clip --test
 如果默认音频设备不工作，列出可用设备并选择一个：
 
 ```bash
-asr2clip --list_devices    # 列出所有音频输入设备
+asr2clip --list-devices    # 列出所有音频输入设备
 asr2clip --device pulse    # 使用指定设备
 ```
 
@@ -123,36 +123,139 @@ asr2clip -i audio.mp3      # 转录音频文件
 
 ### 命令行选项
 
+以下为 `asr2clip --help` 的原文（与当前程序一致）：
+
 ```
-用法: asr2clip [-h] [-v] [-c FILE] [-q] [-i FILE] [-o FILE] [--test]
-               [--list_devices] [--device DEV] [-e] [--generate_config]
-               [--print_config] [--vad] [--interval SEC]
-               [--silence_threshold PROB] [--silence_duration SEC]
+usage: asr2clip [-h] [-v] [-q] [-c FILE] [-e] [--generate-config]
+                [--print-config] [--test] [-x NAME] [--list-devices] [-d DEV]
+                [-i FILE] [-p NAME] [-b NAME] [-l LANG] [-r] [-C SEC] [-g]
+                [--serve] [--host HOST] [--port PORT] [--model-dir MODEL_DIR]
+                [--num-threads NUM_THREADS] [--download-model] [--vad]
+                [--interval SEC] [--silence-threshold PROB]
+                [--silence-duration SEC] [-s N] [-P NAME] [-M MODEL] [-o FILE]
+                [-T NAME] [-z]
 
-录音并使用 ASR API 转录到剪贴板
+Record audio and transcribe to clipboard using ASR API
 
-选项:
-  -h, --help            显示帮助信息并退出
-  -v, --version         显示程序版本号并退出
+optional arguments:
+  -h, --help            show this help message and exit
+  -v, --version         show program's version number and exit
+  -q, --quiet           Quiet mode — only output transcription and errors
+
+Setup:
   -c FILE, --config FILE
-                        配置文件路径
-  -q, --quiet           安静模式 - 仅输出转录结果和错误
+                        Path to configuration file
+  -e, --edit            Open configuration file in editor (creates default
+                        config if missing)
+  --generate-config     Write config template to
+                        ~/.config/asr2clip/config.yaml
+  --print-config        Print config template to stdout
+  --test                Test backend connectivity and configured
+                        preprocessors, then exit
+  -x NAME, --preset NAME
+                        Pipeline preset name (key under 'presets:' in config).
+                        Presets define complete pipelines: ASR backend,
+                        preprocessor, post-processor. Optional if
+                        'default_preset' is set in config; CLI overrides still
+                        work (-b, -p, -P).
+
+Audio:
+  --list-devices        List available audio input devices
+  -d DEV, --device DEV  Audio input device (name, ALSA name, or index).
+                        Overrides config.
   -i FILE, --input FILE
-                        转录音频文件而非录音
+                        Transcribe an existing audio or video file instead of
+                        recording. Supported: wav, mp3, m4a, ogg, flac, aac,
+                        opus, wma, mp4, mov, mkv, webm, avi, flv, mvi
+  -p NAME, --preprocessor NAME
+                        Audio preprocessor: none, noisereduce, pyrnnoise,
+                        deepfilter. Overrides the preprocessor in the selected
+                        preset.
+
+Transcription:
+  -b NAME, --backend NAME
+                        ASR backend to use (key under 'asr_backends:' in
+                        config). Overrides the backend in the selected preset.
+  -l LANG, --language LANG
+                        Language hint for transcription (ISO-639-1, e.g. 'fi',
+                        'en'). Overrides config. Omit to auto-detect.
+  -r, --robust          Robust mode for -i file input: split at silence
+                        boundaries, quality-check chunks, retry failures,
+                        stream output (tail-f friendly).
+  -C SEC, --chunk-duration SEC
+                        Max chunk duration in seconds for -r/--robust mode
+                        (default: 180)
+  -g, --toggle          Toggle recording: first call starts, second call stops
+                        and transcribes. Designed for keyboard shortcuts.
+
+Local ASR server:
+  --serve               Start the local sherpa-onnx ASR API server
+  --host HOST           Server bind address (default: 127.0.0.1 or
+                        local_asr.host in config)
+  --port PORT           Server bind port (default: 8000)
+  --model-dir MODEL_DIR
+                        Path to ASR model directory
+  --num-threads NUM_THREADS
+                        Inference threads (default: 4)
+  --download-model      Download the SenseVoice model and exit
+
+VAD (continuous recording):
+  --vad                 Continuous recording with voice activity detection.
+                        Transcribes automatically when silence is detected
+                        after speech. Requires sherpa-onnx: pip install
+                        asr2clip[vad].
+  --interval SEC        Continuous recording with fixed interval (seconds)
+  --silence-threshold PROB
+                        VAD speech probability threshold, 0.0-1.0 (default:
+                        0.5)
+  --silence-duration SEC
+                        Silence duration to trigger transcription (default:
+                        1.5 s)
+
+Diarization:
+  -s N, --speakers N    Speaker count hint for diarization backends (type:
+                        whisperx, type: mock-diarize). Ignored by all other
+                        backends. Selects a diarization backend in your preset
+                        or with -b / --backend; see 'asr_backends:' in config.
+                        If omitted, the backend uses its own default or auto-
+                        detects speaker count.
+
+Post-processing:
+  -P NAME, --post NAME  AI post-processor name (key in 'postprocessors:'
+                        config) or an inline system-prompt string. Requires
+                        'postprocessor_backends:' in config. Overrides the
+                        post-processor in the selected preset.
+  -M MODEL, --post-model MODEL
+                        AI model used for the post-processing (f. ex. claude-
+                        sonnet-4-6). Overrides the post-processor config for
+                        this run.
+
+Output:
   -o FILE, --output FILE
-                        将转录结果追加到文件
-  --test                测试 API 配置并退出
-  --list_devices        列出可用的音频输入设备
-  --device DEV          音频输入设备（名称或索引）
-  -e, --edit            在编辑器中打开配置文件
-  --generate_config     在 ~/.config/asr2clip/config.yaml 创建配置文件
-  --print_config        打印配置模板到 stdout
-  --vad                 持续录音，启用语音活动检测
-  --interval SEC        持续录音，固定间隔转录（秒）
-  --silence_threshold PROB
-                        VAD 语音概率阈值，0.0-1.0（默认：0.5）
-  --silence_duration SEC
-                        触发转录的静音时长（默认：1.5）
+                        Append transcripts to file
+  -T NAME, --template NAME
+                        Output template name from 'output_templates:' in
+                        config. Controls what is written to clipboard/-o FILE.
+                        Overrides the template specified in the prompt
+                        definition.
+  -z, --no-clipboard    Do not copy the transcript (or a file path) to the
+                        system clipboard. Stdout and -o output behave as
+                        usual.
+
+Examples:
+  asr2clip --edit                             # create/open config in editor
+  asr2clip --test                             # verify backend and preprocessors
+  asr2clip                                    # record, transcribe, copy to clipboard
+  asr2clip --toggle                           # toggle recording (for keyboard shortcuts)
+  asr2clip --toggle -P solo-restructure       # toggle, and produce AI-structured memo
+  asr2clip -i audio.mp3                       # transcribe an existing file
+  asr2clip -i m.mp3 -p deepfilter -r          # neural denoising + chunked transcription
+  asr2clip -i meeting.m4a -b whisperx -s 3    # speaker diarization, 3-speaker hint
+  asr2clip --serve                            # start local sherpa-onnx ASR server
+  asr2clip --vad -o meeting.txt               # continuous VAD transcription to file
+  asr2clip --interval 60                      # fixed-interval continuous recording
+
+See https://github.com/sjjsy/asr2clip for full documentation and configuration examples.
 ```
 
 ### 示例
@@ -207,7 +310,7 @@ pip install asr2clip[vad]
 asr2clip --vad
 
 # 使用自定义设置
-asr2clip --vad --silence_threshold 0.3 --silence_duration 2.0
+asr2clip --vad --silence-threshold 0.3 --silence-duration 2.0
 
 # 保存转录结果到文件
 asr2clip --vad -o ~/meeting.txt
@@ -215,8 +318,8 @@ asr2clip --vad -o ~/meeting.txt
 
 VAD 选项：
 - `--vad`：启用语音活动检测
-- `--silence_threshold`：语音概率阈值，0.0-1.0（默认：0.5）。值越低越敏感。
-- `--silence_duration`：触发转录的静音时长（秒，默认：1.5）
+- `--silence-threshold`：语音概率阈值，0.0-1.0（默认：0.5）。值越低越敏感。
+- `--silence-duration`：触发转录的静音时长（秒，默认：1.5）
 
 启用 VAD 后，转录在以下情况触发：
 1. 检测到语音（音频概率高于阈值）
@@ -228,7 +331,7 @@ Silero VAD 模型（~629 KB）将在首次使用时自动下载。
 
 | 问题 | 解决方案 |
 |------|----------|
-| 音频未捕获 | 运行 `asr2clip --list_devices` 并选择可用设备 |
+| 音频未捕获 | 运行 `asr2clip --list-devices` 并选择可用设备 |
 | 剪贴板不工作 | 安装 `xclip` (X11) 或 `wl-clipboard` (Wayland) |
 | API 错误 | 检查配置中的 API 密钥和端点 |
 | 静音音频 | 使用 `--device` 尝试其他音频设备 |
