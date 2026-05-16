@@ -26,6 +26,7 @@ class WhisperCppConfig:
     model: str
     language: str = "auto"
     threads: int = 4
+    vad_model: str | None = None
     timestamps: bool = False
     timeout_multiplier: float = 5.0
     extra_args: list[str] = field(default_factory=list)
@@ -33,15 +34,26 @@ class WhisperCppConfig:
     @classmethod
     def from_config(cls, config: dict) -> "WhisperCppConfig":
         wc = config.get("whisper_cpp", {})
+        vad = wc.get("vad_model")
         return cls(
             binary=os.path.expanduser(wc.get("binary", "whisper-cli")),
             model=os.path.expanduser(wc.get("model", "")),
             language=wc.get("language", "auto"),
             threads=int(wc.get("threads", 4)),
+            vad_model=os.path.expanduser(vad) if vad else None,
             timestamps=bool(wc.get("timestamps", False)),
             timeout_multiplier=float(wc.get("timeout_multiplier", 4.0)),
             extra_args=list(wc.get("extra_args", [])),
         )
+
+
+def _vad_cli_args(cfg: WhisperCppConfig) -> list[str]:
+    if not cfg.vad_model:
+        return []
+    if not os.path.isfile(cfg.vad_model):
+        raise TranscriptionError(f"whisper.cpp VAD model not found: {cfg.vad_model}")
+    info(f"whisper-cli VAD enabled (model: {cfg.vad_model})")
+    return ["--vad", "--vad-model", cfg.vad_model]
 
 
 def _clean_output(raw: str, strip_timestamps: bool) -> str:
@@ -79,6 +91,7 @@ def transcribe(
         cmd.append("-nt")
     if cfg.language and cfg.language != "auto":
         cmd += ["--language", cfg.language]
+    cmd += _vad_cli_args(cfg)
     cmd += cfg.extra_args
 
     if timeout is None:
@@ -134,6 +147,13 @@ def test(cfg: WhisperCppConfig) -> bool:
     else:
         error("No model path configured (whisper_cpp.model)")
         ok = False
+
+    if cfg.vad_model:
+        if os.path.isfile(cfg.vad_model):
+            success(f"VAD model found: {cfg.vad_model}")
+        else:
+            error(f"VAD model not found: {cfg.vad_model}")
+            ok = False
 
     if ok:
         try:

@@ -127,6 +127,7 @@ asr_backends:
   #   type: whisper_cpp
   #   binary: ~/path/to/whisper.cpp/build/bin/whisper-cli
   #   model:  ~/path/to/whisper.cpp/models/ggml-large-v3-turbo-q8_0.bin
+  #   vad_model: ~/path/to/whisper.cpp/models/ggml-silero-v6.2.0.bin
   #   # language: auto                        # 'auto' or ISO-639-1 (e.g. fi, en)
   #   # threads: 4
   # ── ASR backends for diarization ──

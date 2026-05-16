@@ -164,6 +164,16 @@ class ASRBackendConfig:
         return t
 
     @functools.cached_property
+    def vad_model(self) -> Optional[str]:
+        v = self._defn.get("vad_model")
+        if not v:
+            return None
+        path = os.path.expanduser(v)
+        if self.type == "whisper_cpp":
+            info(f"  VAD model: {path} (whisper-cli --vad)")
+        return path
+
+    @functools.cached_property
     def response(self) -> Optional[str]:
         r = self._defn.get("response")
         if r:

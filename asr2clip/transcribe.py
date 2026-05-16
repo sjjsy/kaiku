@@ -182,6 +182,7 @@ def transcribe(
             binary=config.asr_backend.binary,
             model=config.asr_backend.model,
             threads=config.asr_backend.threads or 4,
+            vad_model=config.asr_backend.vad_model,
         )
         if config.language:
             cfg.language = config.language

@@ -64,6 +64,7 @@ def test_config(config: Config) -> bool:
             binary=config.asr_backend.binary,
             model=config.asr_backend.model,
             threads=config.asr_backend.threads or 4,
+            vad_model=config.asr_backend.vad_model,
         )
         backend_ok = wc_test(cfg)
     elif config.asr_backend.type in ("mock", "mock-fwd", "mock-bwd", "mock-diarize"):
