@@ -167,8 +167,8 @@ alone write their own minimal YAML inline (see `TestDeviceAbortOnFailure` in
 
 #### `test_chunking_stderr_file_and_chunk_duration_flag` (×2 invocations)
 
-- First run: `-r` on `long_speech` with `-b mock`, `-C 20`, `-o` — chunk progress in stderr, ≥ 5 chunk paragraphs in the output file; if `noisereduce` is importable, the same invocation adds `-p noisereduce` and stderr must contain `Using preprocessor: noisereduce`
-- Second run: same file with `-C 10` and `-o` elsewhere — strictly more chunk paragraphs than the 20 s chunk run
+- First run: `-r` on `long_speech` with `-b mock`, `-C 20`, `-o` — chunk progress in stderr (≥ 5 `Chunk n/N` lines), non-empty output file overwritten with final `format_output` text only (no `append_transcript_to_file`); if `noisereduce` is importable, the same invocation adds `-p noisereduce` and stderr must contain `Using preprocessor: noisereduce`
+- Second run: same file with `-C 10` and `-o` elsewhere — strictly more `Chunk n/N` lines in stderr than the 20 s chunk run
 
 ### `TestToggleMode`
 

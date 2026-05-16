@@ -12,7 +12,7 @@ from pydub import AudioSegment
 from pydub.silence import detect_silence
 
 from .audio import audiosegment_to_float32, float32_to_audiosegment
-from .output import append_transcript_to_file, copy_transcript_to_clipboard
+from .output import copy_transcript_to_clipboard
 from .transcribe import TranscriptionError, transcribe
 from .utils import info, safe_unlink, warning
 
@@ -70,9 +70,11 @@ def _estimate_timeout(chunk_duration_s: float) -> float:
 def process_file_robust(config: "Config"):
     """Transcribe a long audio file in silence-bounded chunks with quality checks.
 
-    With ``-o``, each chunk's raw ASR text is appended during the run (tail-friendly).
-    After post-processing and the output template, the same file receives one more
-    append: a timestamped block containing ``final`` (what goes to the clipboard).
+    Chunk ASR text is appended iteratively to ``-o`` FILE or to a temp file (when
+    there is no ``-o``, chunks still print to stdout). The assembly file is then
+    read as ``transcript``, optionally post-processed, passed through
+    ``format_output`` as ``text_output``, and FILE is overwritten with
+    ``text_output`` only (no second timestamped append).
 
     Args:
         config: Resolved run config (``input_file``, ``output_file``, ``chunk_duration``, …).
@@ -109,7 +111,19 @@ def process_file_robust(config: "Config"):
     n_chunks = len(boundaries)
     info(f"Splitting into {n_chunks} chunk(s)")
 
-    all_text_parts: list[str] = []
+    scratch: str | None = None
+    output_file = config.output_file
+    if output_file:
+        d = os.path.dirname(os.path.abspath(output_file))
+        if d:
+            os.makedirs(d, exist_ok=True)
+        chunk_target = output_file
+    else:
+        fd, scratch = tempfile.mkstemp(suffix=".txt", prefix="asr2clip_robust_")
+        os.close(fd)
+        chunk_target = scratch
+
+    had_transcribed = False
 
     for idx, (start_ms, end_ms) in enumerate(boundaries, 1):
         chunk_s = (end_ms - start_ms) / 1000.0
@@ -156,9 +170,8 @@ def process_file_robust(config: "Config"):
 
         if text is None:
             warning(f"Chunk {idx}/{n_chunks} could not be transcribed; skipping.")
-            if config.output_file:
-                with open(config.output_file, "a", encoding="utf-8") as f:
-                    f.write(f"\n# [ERROR: chunk {idx}/{n_chunks} — transcription failed]\n")
+            with open(chunk_target, "a", encoding="utf-8") as f:
+                f.write(f"\n# [ERROR: chunk {idx}/{n_chunks} — transcription failed]\n")
             continue
 
         if not quality_ok:
@@ -167,26 +180,33 @@ def process_file_robust(config: "Config"):
         else:
             warning_line = ""
 
-        all_text_parts.append(text)
+        had_transcribed = True
 
-        if config.output_file:
-            with open(config.output_file, "a", encoding="utf-8") as f:
-                if warning_line:
-                    f.write(warning_line)
-                f.write(text)
-                f.write("\n\n")
-            info(f"Chunk {idx}/{n_chunks} appended to {config.output_file}")
+        with open(chunk_target, "a", encoding="utf-8") as f:
+            if warning_line:
+                f.write(warning_line)
+            f.write(text)
+            f.write("\n\n")
+        if output_file:
+            info(f"Chunk {idx}/{n_chunks} of size {len(text)} appended to {output_file}")
         else:
             print(text)
             print()
 
-    if not all_text_parts:
+    if not had_transcribed:
         info("No speech detected in any chunk.")
+        if scratch:
+            safe_unlink(scratch)
         return
 
-    full_text = "\n\n".join(all_text_parts)
+    with open(chunk_target, encoding="utf-8") as f:
+        transcript = f.read()
+    if scratch:
+        safe_unlink(scratch)
 
-    transcript = full_text
+    if not transcript.strip():
+        info("No speech detected in any chunk.")
+        return
 
     from datetime import date
     postprocessor = make_postprocessor(config)
@@ -206,15 +226,17 @@ def process_file_robust(config: "Config"):
         info(f"Post-processing completed in {time.time() - t_post:.1f}s")
     else:
         result = transcript
-    final = format_output(
+
+    text_output = format_output(
         template, result=result, transcript=transcript,
         metadata=metadata, model=postprocessor.model,
         backend=postprocessor.backend_type,
     )
 
-    if config.output_file:
-        append_transcript_to_file(final, config.output_file)
+    if output_file:
+        with open(output_file, "w", encoding="utf-8") as f:
+            f.write(text_output)
 
-    copy_transcript_to_clipboard(final, config)
+    copy_transcript_to_clipboard(text_output, config)
 
     info(f"Done. {n_chunks} chunk(s), {total_s:.0f}s audio transcribed.")

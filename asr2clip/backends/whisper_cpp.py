@@ -27,7 +27,7 @@ class WhisperCppConfig:
     language: str = "auto"
     threads: int = 4
     timestamps: bool = False
-    timeout_multiplier: float = 4.0
+    timeout_multiplier: float = 5.0
     extra_args: list[str] = field(default_factory=list)
 
     @classmethod

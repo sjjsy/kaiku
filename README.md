@@ -409,7 +409,7 @@ Backend-specific notes:
 `-o FILE` appends each transcript to the specified file, with a timestamp header prepended to each entry. The file is created if it does not exist.
 
 Continuous and chunked modes integrate with `-o` differently:
-- In [robust/chunked mode (`-r`)](#robust-long-file-transcription), chunks are written incrementally as they complete — `tail -f meeting.txt` will show the transcript growing in real time.
+- In [robust/chunked mode (`-r`)](#robust-long-file-transcription), raw chunk text is appended to `-o` FILE as each chunk finishes (`tail -f` shows progress). After all chunks, the file is read back, optionally post-processed, formatted, and **replaced** with that final text only (no timestamped append).
 - In [VAD mode (`--vad`)](#vad-continuous-recording) and [interval mode (`--interval`)](#vad-continuous-recording), each transcribed utterance is written immediately after the silence boundary triggers.
 
 Clipboard size limit: when a transcript exceeds ~4 000 characters and `-o FILE` is specified, the file path is copied to clipboard instead of the full text.
@@ -504,12 +504,12 @@ See [whisper.cpp](https://github.com/ggerganov/whisper.cpp) for build instructio
 
 ### Robust long-file transcription
 
-For long recordings, `-r`/`--robust` splits at silence boundaries, quality-checks each chunk, retries bad chunks, and writes output incrementally:
+For long recordings, `-r`/`--robust` splits at silence boundaries, quality-checks each chunk, retries bad chunks, streams raw chunk text to `-o` FILE as it goes, then overwrites FILE with the post-processed, template-formatted result:
 
 ```bash
 asr2clip -i meeting.mp3 -r                               # chunked, quality-checked
 asr2clip -i m.mp3 -rC 60                                 # 60 s chunks instead of default 180
-asr2clip -i m.mp3 -ro transcript.txt                     # write chunks to file as they complete (tail -f)
+asr2clip -i m.mp3 -ro transcript.txt                     # tail -f during chunks; final file is formatted output only
 asr2clip -i m.mp3 -l fi -o t.txt                         # fully offline, Finnish language
 asr2clip -i m.mp3 -rP group-restructure -T bare -o t.md  # AI meeting memo without the transcript
 ```
@@ -903,8 +903,16 @@ Run `asr2clip --test` (or `asr2clip --test -b <name>`) to diagnose issues.
 
 ## Contributing
 
-Fork the repository and submit a pull request. Any improvements or new features are welcome! :)
+Fork the repository and submit a pull request.
+Any improvements or new features are welcome! :)
 
+### Testing
+
+Development relies on a small but powerful **black-box E2E** suite: the real CLI runs as a subprocess and assertions cover exit codes, stdout, stderr, and files — see [`tests/README.md`](tests/README.md) for the full strategy, log-shape notes, and scenario index.
+
+```bash
+pytest tests/
+```
 ## License
 
 GNU Affero General Public License v3.0. See the [LICENSE](LICENSE) file for details.
