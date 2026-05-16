@@ -1,7 +1,6 @@
 # kaiku — Claude Code context
 
-This is Samuel's fork of [Oaklight/kaiku](https://github.com/Oaklight/kaiku), a speech-to-clipboard CLI tool.
-Fork lives at [sjjsy/kaiku](https://github.com/sjjsy/kaiku). AGPL-3.0 licensed.
+This is a voice pipeline tool that originated as a fork of [Oaklight/asr2clip](https://github.com/Oaklight/asr2clip), a minimalist speech-to-clipboard CLI tool. This project lives at [sjjsy/kaiku](https://github.com/sjjsy/kaiku). Both are AGPL-3.0 licensed.
 
 **Scope/Pipeline:** audio capture → optional preprocessor → ASR → optional LLM post-processing → output (clipboard / `-o FILE`).
 - Out of scope: Output routing, prompt engineering, context injection beyond `context_path`, per-speaker naming, and assistant-layer intelligence belong in the calling assistant (ZeroClaw/OpenClaw), not here.

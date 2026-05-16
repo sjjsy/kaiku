@@ -123,6 +123,8 @@ def process_file_robust(config: "Config"):
         os.close(fd)
         chunk_target = scratch
 
+    info(f"Target file for chunks: {chunk_target}")
+
     had_transcribed = False
 
     for idx, (start_ms, end_ms) in enumerate(boundaries, 1):

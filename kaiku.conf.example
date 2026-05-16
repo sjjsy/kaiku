@@ -45,10 +45,6 @@ presets:
 #   audio_device: "Snowball,Webcam,auto"     # Try Snowball, fall back to Webcam, then default
 #   audio_device: [Snowball, Webcam, auto]   # YAML list syntax (optional alternative)
 #
-# Mock devices (resolved before real hardware; point to a pre-recorded WAV):
-#   audio_device: "mock-jfk"                 # Serve test_data/jfk.wav as if recorded live
-#   audio_device: "mock-group"               # Serve test_data/group-4s.wav
-#
 # Run `kaiku --list-devices` to see available device names and indices.
 #
 # audio_device: "auto"                        # Use system default (recommended)
@@ -60,9 +56,9 @@ presets:
 # reproducible audio without needing a microphone.
 mock_devices:
   mock-jfk:                                  # 11s solo speech (test_data/jfk-11s-1p.wav)
-    source_file: "test_data/jfk-11s-1p.wav"
+    source_file: "~/path/to/kaiku/test_data/jfk-11s-1p.wav"
   mock-group:                                # 30s group discussion (test_data/group-30s-4p.wav)
-    source_file: "test_data/group-30s-4p.wav"
+    source_file: "~/path/to/kaiku/test_data/group-30s-4p.wav"
 
 ## ── Toggle-mode recorder ──────────────────────────────────────────────────────
 # Controls which backend captures audio during --toggle mode.

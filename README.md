@@ -1,8 +1,8 @@
 # kaiku -- Modular Voice (SST) Pipeline Prototype :)
 
-Originally forked from the elegant but minimalist ASR to clipboard tool [asr2clip](https://github.com/Oaklight/asr2clip) which is also available from [![PyPI](https://img.shields.io/pypi/v/asr2clip?color=green)](https://pypi.org/project/asr2clip/).
+Record speech, transcribe it, and copy the result to clipboard or a file. Supports cloud and fully local [ASR backends](#asr-backends), [VAD](#vad-continuous-recording) (for background daemons) and [toggle](#toggle-mode) (for keyboard shortcuts), [noise reduction](#audio-preprocessing-noise-reduction), [speaker diarization](#diarization) (as an ASR backend), and [AI post-processing](#post-processing-with-ai-models).
 
-Record speech, transcribe it, and copy the result to clipboard or a file. Supports cloud and fully-local [ASR backends](#asr-backends), [VAD](#vad-continuous-recording) (for background daemons) and [toggle](#toggle-mode) (for keyboard shortcuts), [noise reduction](#audio-preprocessing-noise-reduction), [speaker diarization](#diarization) (as an ASR backend), and [AI post-processing](#post-processing-with-ai-models).
+Originally forked from the elegant but minimalist speech to clipboard tool [asr2clip](https://github.com/Oaklight/asr2clip) which is also available from [![PyPI](https://img.shields.io/pypi/v/asr2clip?color=green)](https://pypi.org/project/asr2clip/).
 
 Jump to the [Related projects](#related-projects) section at the end to understand the landscape of ASR related tooling and why this project was developed for the open source community.
 
@@ -988,6 +988,19 @@ These are end-user tools that combine audio capture, ASR, and transcript output 
 | [Superwhisper](https://superwhisper.com/) | GUI | macOS, Windows, iOS | Proprietary | ✓ | ✓ | ✓ | ✗ | ✓ | ✗ | Partial | Premium dictation app; polished UX; no Linux |
 | [Meetily](https://github.com/Zackriya-Solutions/meetily) | Desktop app | macOS, Windows | MIT | ✓ | ✓ | ✗ | ✗ | ✓ | ✓ | ✓ | 11.9k★; Rust backend; Ollama summaries; no Linux |
 | [Screenpipe](https://github.com/screenpipe/screenpipe) | Agent layer | Any | MIT | ✓ (always-on) | ✓ | ✗ | ✓ | ✓ | ✗ | Via MCP | 18.6k★; ambient 24/7 recording; MCP server; not a CLI tool |
+
+### Agentic voice-to-text frameworks
+
+For AI agents a streaming architecture is often preferred: continuous listening, local wake-word detection, and real-time VAD. This allows hands-free triggering of agentic actions and conversation that feels natural. In contrast, `kaiku` serves as a **high-precision bridge**: It is currently the most complete CLI-native pipeline for when an agent (or developer) needs to process a specific audio file or a manual "push-to-talk" segment with maximum control over all the processing stages. The table below lists some of the most notable choices for AI assistants:
+
+| Project | Primary Tech | Wake Word | VAD | Agent Integration | vs. **kaiku** |
+| --- | --- | --- | --- | --- | --- |
+| [LiveKit Agents](https://github.com/livekit/agents) | Python / Rust | Optional | Silero | WebSocket / WebRTC | **Full Agent Framework:** High-performance streaming for voice-to-voice; `kaiku` is a CLI tool for text generation. |
+| [Wyoming Satellite](https://www.google.com/search?q=https://github.com/home-assistant/wyoming-satellite) | Python | open-wakeword | Silero | Wyoming Protocol | **Smart Home Focus:** Designed as a background daemon for Home Assistant; `kaiku` is a foreground productivity tool. |
+| [Rhasspy 3](https://github.com/rhasspy/rhasspy3) | Modular (C++/Python) | Porcupine / Snowboy | WebRTC / Silero | MQTT / Unix Sockets | **Deeply Modular:** Can swap every component; `kaiku` is more integrated and opinionated for CLI users. |
+| [LocalAI](https://github.com/mudler/LocalAI) | Go / C++ | Yes (via API) | Yes | OpenAI-compatible API | **The Server Hub:** Acts as an all-in-one local API server; `kaiku` acts as a client that can call such servers. |
+| [Whisper Mic](https://www.google.com/search?q=https://github.com/davabase/whisper_mic) | Python | No | Silero | Stdout / Text stream | **Simple Loop:** A continuous transcription script; lacks `kaiku`’s noise reduction, diarization, and post-processing. |
+| [Leon](https://github.com/leon-ai/leon) | Node.js / Python | Yes | Yes | Custom SDK / Web | **Full Assistant:** Includes skills, memory, and UI; `kaiku` is a specialized "sensor" for such an assistant. |
 
 ### SaaS meeting assistants
 
