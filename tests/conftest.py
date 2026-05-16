@@ -1,6 +1,6 @@
-"""Shared pytest fixtures for asr2clip E2E tests.
+"""Shared pytest fixtures for kaiku E2E tests.
 
-The primary fixture `example_cfg` reads the repo's asr2clip.conf.example,
+The primary fixture `example_cfg` reads the repo's kaiku.conf.example,
 injects `default_preset: mock-fwd`, resolves test_data/ paths to absolute, and
 writes the result to a session-scoped temp file. Every change to the example
 config is therefore automatically exercised by the test suite.
@@ -18,7 +18,7 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).parent.parent
-EXAMPLE_CONFIG = REPO_ROOT / "asr2clip.conf.example"
+EXAMPLE_CONFIG = REPO_ROOT / "kaiku.conf.example"
 TEST_DATA = REPO_ROOT / "test_data"
 
 # Remote sources for test audio fixtures.
@@ -59,7 +59,7 @@ def _ensure_audio(filename: str) -> Path:
     try:
         req = urllib.request.Request(
             url,
-            headers={"User-Agent": "asr2clip-tests/1.0 (https://github.com/sjjsy/asr2clip)"},
+            headers={"User-Agent": "kaiku-tests/1.0 (https://github.com/sjjsy/kaiku)"},
         )
         with urllib.request.urlopen(req) as resp:
             path.write_bytes(resp.read())
@@ -93,7 +93,7 @@ def long_speech() -> Path:
     """~3.5-minute George W. Bush radio address (auto-downloaded from Wikimedia Commons).
 
     Used for robust-mode (-r) tests that require multi-chunk splitting.
-    The file is an OGG/Vorbis audio file (.oga); asr2clip's process_file_robust
+    The file is an OGG/Vorbis audio file (.oga); kaiku's process_file_robust
     loads it via pydub which uses ffmpeg to decode it.
     """
     return _ensure_audio("gb0-3min.oga")
@@ -109,7 +109,7 @@ def example_cfg(
     group_wav: Path,  # noqa: ARG001
     tmp_path_factory: pytest.TempPathFactory,
 ) -> Path:
-    """Session-scoped config derived from asr2clip.conf.example.
+    """Session-scoped config derived from kaiku.conf.example.
 
     Patches applied:
       - Prepends `default_preset: mock-fwd` so tests run without --preset

@@ -1,7 +1,7 @@
-# asr2clip — Claude Code context
+# kaiku — Claude Code context
 
-This is Samuel's fork of [Oaklight/asr2clip](https://github.com/Oaklight/asr2clip), a speech-to-clipboard CLI tool.
-Fork lives at [sjjsy/asr2clip](https://github.com/sjjsy/asr2clip). AGPL-3.0 licensed.
+This is Samuel's fork of [Oaklight/kaiku](https://github.com/Oaklight/kaiku), a speech-to-clipboard CLI tool.
+Fork lives at [sjjsy/kaiku](https://github.com/sjjsy/kaiku). AGPL-3.0 licensed.
 
 **Scope/Pipeline:** audio capture → optional preprocessor → ASR → optional LLM post-processing → output (clipboard / `-o FILE`).
 - Out of scope: Output routing, prompt engineering, context injection beyond `context_path`, per-speaker naming, and assistant-layer intelligence belong in the calling assistant (ZeroClaw/OpenClaw), not here.
@@ -20,7 +20,7 @@ Fork lives at [sjjsy/asr2clip](https://github.com/sjjsy/asr2clip). AGPL-3.0 lice
 ## Design decisions
 
 - **The Config object** from `Config.from_file()` is the single coordinator: lazy properties (`asr_backend`, `preprocessor`, `recorder`, `postprocessor`, `output`, `diarization`, `local_asr`) each own defaults, env fallbacks, and logging for their domain. Avoid defaults and parameter definition outside Config classes.
-- `main()` in `asr2clip.py` loads `Config` once, then dispatches to recording, file, robust, toggle, VAD/daemon, `--test`, `--serve`, or `--download-model`. The local sherpa-onnx server reads bind address, model dir, and thread count from `config.local_asr` (optional `local_asr:` in YAML, merged with CLI; same config file and preset are required as for any other subcommand).
+- `main()` in `kaiku.py` loads `Config` once, then dispatches to recording, file, robust, toggle, VAD/daemon, `--test`, `--serve`, or `--download-model`. The local sherpa-onnx server reads bind address, model dir, and thread count from `config.local_asr` (optional `local_asr:` in YAML, merged with CLI; same config file and preset are required as for any other subcommand).
 - **Config resolution lives in `config_types.py` only.** No `config.get()` for behavioral decisions anywhere else in the codebase. If you need a config value in a function, accept `Config` or the appropriate sub-config object as a parameter.
 - **CLI vs preset:** per-component flags (`-b`, `-p`, `-P`, `-M`, `-d`, and local-ASR flags under “Local ASR server”) override the selected preset; top-level keys in YAML (e.g. `default_preset`, `audio_device`) apply when no flag overrides that slice.
 - **Preset system:** Presets are atomic combinations of all pipeline stages (ASR backend, preprocessor, postprocessor). All stages must be explicitly specified. One preset per run. No mode-based fallback logic.
@@ -28,14 +28,14 @@ Fork lives at [sjjsy/asr2clip](https://github.com/sjjsy/asr2clip). AGPL-3.0 lice
 
 ## Key files
 
-- `asr2clip/asr2clip.py` — CLI entry point, `_build_parser()`, `main()`, `process_recording()`, `process_file()`
-- `asr2clip/config_types.py` — all config resolution classes (`Config`, `ASRBackendConfig`, etc.)
-- `asr2clip/config.py` — YAML file reading and `_CONFIG_TEMPLATE` (template shown by `--generate-config`)
-- `asr2clip/toggle.py` — lock-file toggle recording, `_transcribe_and_output()`
-- `asr2clip/robust.py` — chunked transcription, `process_file_robust()`
-- `asr2clip/postprocessors/` — post-processing package
-- `asr2clip/preprocessors/` — noise-reduction package
-- `asr2clip/diarize.py` — WhisperX diarization
+- `kaiku/kaiku.py` — CLI entry point, `_build_parser()`, `main()`, `process_recording()`, `process_file()`
+- `kaiku/config_types.py` — all config resolution classes (`Config`, `ASRBackendConfig`, etc.)
+- `kaiku/config.py` — YAML file reading and `_CONFIG_TEMPLATE` (template shown by `--generate-config`)
+- `kaiku/toggle.py` — lock-file toggle recording, `_transcribe_and_output()`
+- `kaiku/robust.py` — chunked transcription, `process_file_robust()`
+- `kaiku/postprocessors/` — post-processing package
+- `kaiku/preprocessors/` — noise-reduction package
+- `kaiku/diarize.py` — WhisperX diarization
 - `AGENTS.md` — short pointer for AI agents (see also this file)
 - `now.md` — active work items and upcoming tasks
 - `todo.md` — gitignored future ideas and deferred features
@@ -139,7 +139,7 @@ Examples:
 
 ## Documentation and maintainer conventions
 
-- **CLI reference in README:** Always run `asr2clip --help` and paste the exact output verbatim.
+- **CLI reference in README:** Always run `kaiku --help` and paste the exact output verbatim.
 - **Argument group order in `_build_parser()` also followed in README.md:** Setup → Audio → Transcription → Local ASR server → VAD → Diarization → Post-processing → Output.
   - Each of these have a section of their own: brief motivation → CLI options table → relevant config excerpt. Rather than duplicating content, refer and link to it.
 - **Inline comments in bash code blocks:** Pad to column 46 before `#`. Apply to epilog in `_build_parser()` and all bash example blocks in README.

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 
-from asr2clip.config_types import Config, Preset
+from kaiku.config_types import Config, Preset
 
 
 def _preset() -> Preset:

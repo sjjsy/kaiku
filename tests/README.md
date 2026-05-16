@@ -1,4 +1,4 @@
-# asr2clip test suite
+# kaiku test suite
 
 ## Running the tests
 
@@ -17,7 +17,7 @@ Project-wide principles (config contract, commits, **when agents may change E2E 
 
 ## Testing strategy
 
-All tests treat asr2clip as a **black box**.  E2E tests call the CLI as a
+All tests treat kaiku as a **black box**.  E2E tests call the CLI as a
 subprocess and assert on **exit code**, **stdout**, **stderr**, and **written
 files**.  No internal module is imported; no mocks are injected into the
 process.
@@ -193,7 +193,7 @@ alone write their own minimal YAML inline (see `TestDeviceAbortOnFailure` in
 
 ### `example_cfg` (session)
 
-- Sourced from `asr2clip.conf.example` with absolute `test_data/` paths and `default_preset: mock-fwd` prepended
+- Sourced from `kaiku.conf.example` with absolute `test_data/` paths and `default_preset: mock-fwd` prepended
 
 ### `jfk_wav` (session)
 
@@ -213,7 +213,7 @@ alone write their own minimal YAML inline (see `TestDeviceAbortOnFailure` in
 
 ---
 
-## Mock pipeline inventory (from `asr2clip.conf.example`)
+## Mock pipeline inventory (from `kaiku.conf.example`)
 
 ### Devices
 
@@ -244,7 +244,7 @@ traceability.
 - `**-p none`** — folded into `test_file_input_dense_primary_contract` (`Using preprocessor: none (CLI -p)`; no `Preprocessing completed` from the preprocessor step)
 - `**-p noisereduce`** — optional: when `noisereduce` is installed, `TestRobustMode` adds `-p noisereduce` to the long-audio robust run and asserts `Using preprocessor: noisereduce`
 - `**postprocessors` `extends` / `extra**` — `mock-pp2` in the example config; prompt-width assertions vs `mock-pp` in the dense file test and `.txt` input test
-- `**--test**` — `TestSelfCheck::test_cli_test_mode_passes_with_mock_preset` (requires mock-class backends to skip the API probe; see `test_config` in `asr2clip.py`)
+- `**--test**` — `TestSelfCheck::test_cli_test_mode_passes_with_mock_preset` (requires mock-class backends to skip the API probe; see `test_config` in `kaiku.py`)
 - `**-i` `.txt` shortcut** — `TestPlainTextInput::test_txt_input_skips_asr_and_postprocesses`
 
 ### Still missing (E2E or integration)

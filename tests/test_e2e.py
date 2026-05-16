@@ -1,8 +1,8 @@
-"""End-to-end CLI tests for asr2clip.
+"""End-to-end CLI tests for kaiku.
 
 # Testing strategy
 
-Tests treat asr2clip as a black box: each scenario runs the CLI as a subprocess
+Tests treat kaiku as a black box: each scenario runs the CLI as a subprocess
 and asserts a *checklist* of independent predicates (exit code, stdout shape,
 multiple stderr substrings, files on disk).  No internal imports, no mocks.
 
@@ -49,12 +49,12 @@ def _run(
     env: Optional[dict] = None,
     clipboard: bool = False,
 ) -> subprocess.CompletedProcess:
-    """Run ``asr2clip`` as a subprocess (black-box E2E).
+    """Run ``kaiku`` as a subprocess (black-box E2E).
 
     Unless ``clipboard=True``, ``--no-clipboard`` is inserted after
     ``--config`` so the suite does not spawn wl-copy / copykitten helpers.
     """
-    cmd = ["asr2clip", "--config", str(config)]
+    cmd = ["kaiku", "--config", str(config)]
     if not clipboard:
         cmd.append("--no-clipboard")
     cmd.extend(args)
@@ -90,7 +90,7 @@ def toggle_runtime(tmp_path: Path, example_cfg: Path):
     """Per-test XDG_RUNTIME_DIR for --toggle E2E tests."""
     env = {**os.environ, "XDG_RUNTIME_DIR": str(tmp_path)}
     yield tmp_path, env
-    if (tmp_path / "asr2clip.lock").exists():
+    if (tmp_path / "kaiku.lock").exists():
         _run(
             "--toggle", "--preset", "mock-fwd", "--device", "mock-jfk",
             config=example_cfg, env=env,
@@ -372,13 +372,13 @@ class TestToggleMode:
         )
         r1 = _run(*args, config=example_cfg, env=env)
         assert r1.returncode == 0
-        assert (runtime_dir / "asr2clip.lock").exists()
+        assert (runtime_dir / "kaiku.lock").exists()
         assert r1.stdout.strip() == ""
         assert "Recording started" in r1.stderr
 
         r2 = _run(*args, config=example_cfg, env=env)
         assert r2.returncode == 0
-        assert not (runtime_dir / "asr2clip.lock").exists()
+        assert not (runtime_dir / "kaiku.lock").exists()
         assert len(r2.stdout.strip()) > 0
         assert "Stopping recorder" in r2.stderr or "Transcribing" in r2.stderr
         assert out.exists()

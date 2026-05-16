@@ -1,9 +1,6 @@
-# asr2clip -- Speech-to-Text Clipboard Tool +++ :)
+# kaiku -- Modular Voice (SST) Pipeline Prototype :)
 
-[![PyPI version](https://img.shields.io/pypi/v/asr2clip?color=green)](https://pypi.org/project/asr2clip/)
-[![License](https://img.shields.io/github/license/Oaklight/asr2clip?color=green)](https://github.com/Oaklight/asr2clip/blob/master/LICENSE)
-
-[中文](README_zh.md)
+Originally forked from the elegant but minimalist ASR to clipboard tool [asr2clip](https://github.com/Oaklight/asr2clip) which is also available from [![PyPI](https://img.shields.io/pypi/v/asr2clip?color=green)](https://pypi.org/project/asr2clip/).
 
 Record speech, transcribe it, and copy the result to clipboard or a file. Supports cloud and fully-local [ASR backends](#asr-backends), [VAD](#vad-continuous-recording) (for background daemons) and [toggle](#toggle-mode) (for keyboard shortcuts), [noise reduction](#audio-preprocessing-noise-reduction), [speaker diarization](#diarization) (as an ASR backend), and [AI post-processing](#post-processing-with-ai-models).
 
@@ -13,36 +10,36 @@ Jump to the [Related projects](#related-projects) section at the end to understa
 
 **Cloud (API) path:**
 ```bash
-pip install asr2clip
-asr2clip --generate-config   # create config with all backend examples
-asr2clip --edit              # fill in your API key
-asr2clip --test              # verify
-asr2clip                     # record and transcribe
+pip install kaiku
+kaiku --generate-config   # create config with all backend examples
+kaiku --edit              # fill in your API key
+kaiku --test              # verify
+kaiku                     # record and transcribe
 ```
 
 **Local offline path — sherpa-onnx with VAD support (model auto-downloads):**
 ```bash
-pip install asr2clip[vad]
-asr2clip --download-model    # download SenseVoice model on first use
-asr2clip --serve &           # start local ASR API server
+pip install kaiku[vad]
+kaiku --download-model    # download SenseVoice model on first use
+kaiku --serve &           # start local ASR API server
 # configure a backend pointing to http://127.0.0.1:8000/v1/ — see Local ASR server below
-asr2clip --test -b sonnx
-asr2clip -b sonnx
+kaiku --test -b sonnx
+kaiku -b sonnx
 ```
 
 **Local offline path — whisper.cpp (no VAD):**
 ```bash
-pip install asr2clip
+pip install kaiku
 # build whisper.cpp and download a model, then configure it in config
-asr2clip --generate-config   # shows a wcpp backend example
-asr2clip --test -b wcpp
-asr2clip -b wcpp
+kaiku --generate-config   # shows a wcpp backend example
+kaiku --test -b wcpp
+kaiku -b wcpp
 ```
 
 ## CLI reference
 
 ```
-usage: asr2clip [-h] [-v] [-q] [-c FILE] [-e] [--generate-config]
+usage: kaiku [-h] [-v] [-q] [-c FILE] [-e] [--generate-config]
                 [--print-config] [--test] [-x NAME] [--list-devices] [-d DEV]
                 [-i FILE] [-p NAME] [-b NAME] [-l LANG] [-r] [-C SEC] [-g]
                 [--serve] [--host HOST] [--port PORT] [--model-dir MODEL_DIR]
@@ -64,7 +61,7 @@ Setup:
   -e, --edit            Open configuration file in editor (creates default
                         config if missing)
   --generate-config     Write config template to
-                        ~/.config/asr2clip/config.yaml
+                        ~/.config/kaiku/config.yaml
   --print-config        Print config template to stdout
   --test                Test backend connectivity and configured
                         preprocessors, then exit
@@ -119,7 +116,7 @@ VAD (continuous recording):
   --vad                 Continuous recording with voice activity detection.
                         Transcribes automatically when silence is detected
                         after speech. Requires sherpa-onnx: pip install
-                        asr2clip[vad].
+                        kaiku[vad].
   --interval SEC        Continuous recording with fixed interval (seconds)
   --silence-threshold PROB
                         VAD speech probability threshold, 0.0-1.0 (default:
@@ -159,26 +156,26 @@ Output:
                         usual.
 
 Examples:
-  asr2clip --edit                             # create/open config in editor
-  asr2clip --test                             # verify backend and preprocessors
-  asr2clip                                    # record, transcribe, copy to clipboard
-  asr2clip --toggle                           # toggle recording (for keyboard shortcuts)
-  asr2clip --toggle -P solo-restructure       # toggle, and produce AI-structured memo
-  asr2clip -i audio.mp3                       # transcribe an existing file
-  asr2clip -i m.mp3 -p deepfilter -r          # neural denoising + chunked transcription
-  asr2clip -i meeting.m4a -b whisperx -s 3    # speaker diarization, 3-speaker hint
-  asr2clip --serve                            # start local sherpa-onnx ASR server
-  asr2clip --vad -o meeting.txt               # continuous VAD transcription to file
-  asr2clip --interval 60                      # fixed-interval continuous recording
+  kaiku --edit                             # create/open config in editor
+  kaiku --test                             # verify backend and preprocessors
+  kaiku                                    # record, transcribe, copy to clipboard
+  kaiku --toggle                           # toggle recording (for keyboard shortcuts)
+  kaiku --toggle -P solo-restructure       # toggle, and produce AI-structured memo
+  kaiku -i audio.mp3                       # transcribe an existing file
+  kaiku -i m.mp3 -p deepfilter -r          # neural denoising + chunked transcription
+  kaiku -i meeting.m4a -b whisperx -s 3    # speaker diarization, 3-speaker hint
+  kaiku --serve                            # start local sherpa-onnx ASR server
+  kaiku --vad -o meeting.txt               # continuous VAD transcription to file
+  kaiku --interval 60                      # fixed-interval continuous recording
 
-See https://github.com/sjjsy/asr2clip for full documentation and configuration examples.
+See https://github.com/sjjsy/kaiku for full documentation and configuration examples.
 ```
 
 ## Prerequisites
 
 **Python 3.8+** and one of:
 - Cloud API key ([OpenAI Whisper](https://platform.openai.com/docs/guides/speech-to-text), [Groq](https://console.groq.com/), [SiliconFlow](https://siliconflow.cn/), [xinference](https://inference.readthedocs.io/en/latest/), or any OpenAI-compatible endpoint)
-- Local [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) server (`pip install asr2clip[vad]`, model auto-downloads)
+- Local [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) server (`pip install kaiku[vad]`, model auto-downloads)
 - Local [whisper.cpp](https://github.com/ggerganov/whisper.cpp) binary + model file (fully offline, no key needed)
 
 ### System packages
@@ -192,28 +189,28 @@ See https://github.com/sjjsy/asr2clip for full documentation and configuration e
 
 | Extra | Install | Purpose |
 |-------|---------|---------|
-| `vad` | `pip install asr2clip[vad]` | VAD continuous recording + local sherpa-onnx ASR server |
-| `deepfilter` | `pip install asr2clip[deepfilter]` | DeepFilterNet3 best-quality noise reduction |
-| `noisereduce` | `pip install asr2clip[noisereduce]` | Spectral noise reduction (scipy) |
-| `pyrnnoise` | `pip install asr2clip[pyrnnoise]` | RNNoise GRU noise reduction (scipy) |
-| `enhance` | `pip install asr2clip[enhance]` | All three noise reduction options |
-| `diarize` | `pip install asr2clip[diarize]` | Speaker diarization via WhisperX |
+| `vad` | `pip install kaiku[vad]` | VAD continuous recording + local sherpa-onnx ASR server |
+| `deepfilter` | `pip install kaiku[deepfilter]` | DeepFilterNet3 best-quality noise reduction |
+| `noisereduce` | `pip install kaiku[noisereduce]` | Spectral noise reduction (scipy) |
+| `pyrnnoise` | `pip install kaiku[pyrnnoise]` | RNNoise GRU noise reduction (scipy) |
+| `enhance` | `pip install kaiku[enhance]` | All three noise reduction options |
+| `diarize` | `pip install kaiku[diarize]` | Speaker diarization via WhisperX |
 
 ## Installation
 
 ```bash
-pip install asr2clip
+pip install kaiku
 
 # or in an isolated environment
-pipx install asr2clip
+pipx install kaiku
 
 # upgrade
-pip install --upgrade asr2clip
+pip install --upgrade kaiku
 ```
 
 All extras: Noise reduction options + VAD and the local sherpa-onnx ASR server:
 ```bash
-pip install asr2clip[enhance,vad]
+pip install kaiku[enhance,vad]
 ```
 
 Note: Audio preprocessing (`-p`) is not (yet) applied in VAD/interval continuous mode.
@@ -221,8 +218,8 @@ Note: Audio preprocessing (`-p`) is not (yet) applied in VAD/interval continuous
 ### From source
 
 ```bash
-git clone https://github.com/Oaklight/asr2clip.git
-cd asr2clip
+git clone https://github.com/Oaklight/kaiku.git
+cd kaiku
 pip install -e .
 ```
 
@@ -234,7 +231,7 @@ Setup commands manage your configuration file and verify that configured backend
 |------|-------------|
 | `-c FILE` | Path to a specific configuration file |
 | `-e / --edit` | Open config in editor (creates default if missing) |
-| `--generate-config` | Write the annotated config template to `~/.config/asr2clip/config.yaml` |
+| `--generate-config` | Write the annotated config template to `~/.config/kaiku/config.yaml` |
 | `--print-config` | Print the config template to stdout |
 | `--test` | Test backend connectivity and preprocessor availability, then exit |
 | `-x NAME / --preset NAME` | Pipeline preset (key under `presets:`). Optional if `default_preset` is set in config. |
@@ -243,23 +240,23 @@ Setup commands manage your configuration file and verify that configured backend
 ### Setup commands
 
 ```bash
-asr2clip --generate-config   # write a fully annotated config with all backend examples
-asr2clip --edit              # create/open config in your default editor
-asr2clip --print-config      # print the annotated template to stdout
-asr2clip --test              # verify backend connectivity and preprocessors
-asr2clip --test -b wcpp      # test a specific backend
+kaiku --generate-config   # write a fully annotated config with all backend examples
+kaiku --edit              # create/open config in your default editor
+kaiku --print-config      # print the annotated template to stdout
+kaiku --test              # verify backend connectivity and preprocessors
+kaiku --test -b wcpp      # test a specific backend
 ```
 
 ### Config file
 
-Config file is created at `~/.config/asr2clip/config.yaml`. Locations searched in order:
-1. `./asr2clip.conf`
-2. `~/.config/asr2clip/config.yaml`
-3. `~/.config/asr2clip.conf`
-4. `~/.asr2clip.conf`
+Config file is created at `~/.config/kaiku/config.yaml`. Locations searched in order:
+1. `./kaiku.conf`
+2. `~/.config/kaiku/config.yaml`
+3. `~/.config/kaiku.conf`
+4. `~/.kaiku.conf`
 
 Note: The created config file embeds partially commented-out configuration options along with brief explanations for most features.
-See [`asr2clip.conf.example`](asr2clip.conf.example) in the repo for a complete, current example with all backend and feature documentation.
+See [`kaiku.conf.example`](kaiku.conf.example) in the repo for a complete, current example with all backend and feature documentation.
 The config file template is **not usable immediately**: You must update it based on your setup and needs.
 The following sections tackle some of these in more detail where relevant.
 
@@ -274,8 +271,8 @@ The following sections tackle some of these in more detail where relevant.
 ### Audio device
 
 ```bash
-asr2clip --list-devices            # list available input devices with names and indices
-asr2clip -d "plughw:Snowball"      # use a specific ALSA device for this run
+kaiku --list-devices            # list available input devices with names and indices
+kaiku -d "plughw:Snowball"      # use a specific ALSA device for this run
 ```
 
 ### System audio routing (recommended)
@@ -307,7 +304,7 @@ audio_device: 3                    # device index from --list-devices
 Audio preprocessing enhances a recording before transcription by filtering unwanted signal content.
 **Noise reduction** is a key preprocessing technique that removes background sound — café chatter, fan hum, keyboard clicks — while preserving speech intelligibility.
 Preprocessing is useful in noisy environments or when your [ASR backend](#asr-backends) struggles with poor signal quality, producing errors or hallucinations.
-asr2clip provides three noise reduction libraries, each with different strengths depending on noise type and available compute resources.
+kaiku provides three noise reduction libraries, each with different strengths depending on noise type and available compute resources.
 
 ### Available preprocessors
 
@@ -340,15 +337,15 @@ asr2clip provides three noise reduction libraries, each with different strengths
 
 ### Loudness normalisation
 
-To complete the audio enhancement after noise reduction with any of the three preprocessors, `asr2clip` applies a loudnorm pass (RMS → −20 dBFS, peak ceiling −0.1 dBFS) to ensure the ASR backend receives a consistently strong, unclipped signal.
+To complete the audio enhancement after noise reduction with any of the three preprocessors, `kaiku` applies a loudnorm pass (RMS → −20 dBFS, peak ceiling −0.1 dBFS) to ensure the ASR backend receives a consistently strong, unclipped signal.
 
 ### Installing preprocessors
 
 ```bash
-pip install asr2clip[noisereduce]   # spectral subtraction
-pip install asr2clip[pyrnnoise]     # RNNoise GRU
-pip install asr2clip[deepfilter]    # DeepFilterNet3
-pip install asr2clip[enhance]       # all three
+pip install kaiku[noisereduce]   # spectral subtraction
+pip install kaiku[pyrnnoise]     # RNNoise GRU
+pip install kaiku[deepfilter]    # DeepFilterNet3
+pip install kaiku[enhance]       # all three
 ```
 
 ### Preprocessor configuration
@@ -358,10 +355,10 @@ The preprocessor choice is determined using the first field of each [preset](#pr
 ### Preprocessor usage
 
 ```bash
-asr2clip -p deepfilter              # denoise live recording with DeepFilterNet
-asr2clip -p noisereduce             # spectral denoising
-asr2clip -p deepfilter -i talk.mp4  # denoise video file before transcription
-asr2clip --test                     # also checks that configured preprocessors are available
+kaiku -p deepfilter              # denoise live recording with DeepFilterNet
+kaiku -p noisereduce             # spectral denoising
+kaiku -p deepfilter -i talk.mp4  # denoise video file before transcription
+kaiku --test                     # also checks that configured preprocessors are available
 ```
 
 ## Transcription
@@ -378,11 +375,11 @@ asr2clip --test                     # also checks that configured preprocessors 
 | `-z / --no-clipboard` | Do not copy transcript (or file path) to the system clipboard; stdout and `-o` unchanged. |
 
 ```bash
-asr2clip                  # record until Ctrl+C, transcribe, copy to clipboard
-asr2clip -l fi         # Finnish, using local whisper.cpp backend (privacy preset)
-asr2clip -i audio.mp3  # transcribe an existing audio file
-asr2clip -i meeting.mp4  # transcribe from a video file (audio extracted automatically)
-asr2clip -x speed -o transcript.txt   # preset + append transcript to a file
+kaiku                  # record until Ctrl+C, transcribe, copy to clipboard
+kaiku -l fi         # Finnish, using local whisper.cpp backend (privacy preset)
+kaiku -i audio.mp3  # transcribe an existing audio file
+kaiku -i meeting.mp4  # transcribe from a video file (audio extracted automatically)
+kaiku -x speed -o transcript.txt   # preset + append transcript to a file
 ```
 
 ### Supported input formats
@@ -416,11 +413,11 @@ Clipboard size limit: when a transcript exceeds ~4 000 characters and `-o FILE` 
 
 ### ASR backends
 
-ASR (Automatic Speech Recognition) converts spoken audio into text. asr2clip supports several ASR backends, from cloud APIs to fully offline local inference. Speaker diarization backends (`type: whisperx`) live here too — they replace the regular transcription step and produce speaker-attributed output.
+ASR (Automatic Speech Recognition) converts spoken audio into text. kaiku supports several ASR backends, from cloud APIs to fully offline local inference. Speaker diarization backends (`type: whisperx`) live here too — they replace the regular transcription step and produce speaker-attributed output.
 
 #### ASR backend configuration
 
-ASR backends are defined under `asr_backends:` and referenced by name from [presets](#presets) or overridden per-run with `-b NAME`. `asr2clip --generate-config` writes a fully annotated config with every supported backend type.
+ASR backends are defined under `asr_backends:` and referenced by name from [presets](#presets) or overridden per-run with `-b NAME`. `kaiku --generate-config` writes a fully annotated config with every supported backend type.
 
 ```yaml
 asr_backends:
@@ -437,8 +434,8 @@ asr_backends:
 ```
 
 ```bash
-asr2clip -b groq -i audio.wav          # use groq backend for this run
-asr2clip --test -b openai              # test a specific backend
+kaiku -b groq -i audio.wav          # use groq backend for this run
+kaiku --test -b openai              # test a specific backend
 ```
 
 #### Supported backend types
@@ -447,7 +444,7 @@ asr2clip --test -b openai              # test a specific backend
 |--------|-------------|---------|
 | `api` | Any OpenAI-compatible HTTP endpoint ([OpenAI](https://platform.openai.com/docs/guides/speech-to-text), [Groq](https://console.groq.com/), [SiliconFlow](https://siliconflow.cn/), [xinference](https://inference.readthedocs.io/en/latest/), etc.) | API key or local server |
 | `whisper_cpp` | whisper.cpp binary via subprocess | whisper.cpp build + `.bin` model file |
-| `whisperx` | WhisperX speaker diarization — ASR + word alignment + speaker attribution in one pass; output: `[HH:MM:SS] SPEAKER_NN: text` | `pip install asr2clip[diarize]`, HF token |
+| `whisperx` | WhisperX speaker diarization — ASR + word alignment + speaker attribution in one pass; output: `[HH:MM:SS] SPEAKER_NN: text` | `pip install kaiku[diarize]`, HF token |
 | `mock` | Fixed-response mock for testing and demos | None — no credentials needed |
 | `mock-fwd` | Duration-proportional transcript mock (forward word order) | None |
 | `mock-bwd` | Duration-proportional transcript mock (reverse word order) | None |
@@ -473,10 +470,10 @@ asr_backends:
 ```
 
 ```bash
-asr2clip -b demo -i dummy_audio.wav         # Returns mock transcript instantly
-asr2clip --test -b demo                     # No credentials needed
-asr2clip -i audio.wav -b mock-fwd           # Duration-proportional words from transcript
-asr2clip -i audio.wav -b mock-dia-2         # Mock diarization, 2 speakers
+kaiku -b demo -i dummy_audio.wav         # Returns mock transcript instantly
+kaiku --test -b demo                     # No credentials needed
+kaiku -i audio.wav -b mock-fwd           # Duration-proportional words from transcript
+kaiku -i audio.wav -b mock-dia-2         # Mock diarization, 2 speakers
 ```
 
 #### Local ASR: whisper.cpp vs. sherpa-onnx
@@ -491,14 +488,14 @@ Both provide fully offline, no-API-key ASR. Here is how to choose:
 | **Multilingual quality** | Best local option for European and other non-English languages; `large-v3-turbo` recommended | SenseVoice leads for Chinese, Japanese, Korean and handles emotion/event detection; weaker for many European languages |
 | **Python ML deps** | None — single binary + model file | Yes — ONNX runtime and sherpa-onnx Python packages |
 | **Integration** | Subprocess call to external C++ binary | Python-native; exposes a local HTTP API |
-| **Setup** | Build C++ from source; download `.bin` model manually | `pip install asr2clip[vad]` + `asr2clip --download-model` |
+| **Setup** | Build C++ from source; download `.bin` model manually | `pip install kaiku[vad]` + `kaiku --download-model` |
 | **Model auto-download** | No | Yes |
 | **VAD support** | No | Yes (built-in via sherpa-onnx) |
 | **Dev activity** | Mature, stable | Very active (k2-fsa / Next-gen Kaldi team) |
 
 **When to choose whisper.cpp:** Your primary language is non-English — especially European languages (Finnish, German, French, etc.) where `ggml-large-v3-turbo` delivers the best local accuracy of any backend. Also the right choice when you want no Python ML package dependencies: the binary and model file are self-contained, with nothing added to your Python environment.
 
-**When to choose sherpa-onnx:** You are transcribing Chinese, Japanese, or Korean (SenseVoice is the stronger choice there), you want model auto-download and zero C++ build steps, you already installed `asr2clip[vad]` (sherpa-onnx is already present), or you need VAD support or access to models beyond the Whisper family.
+**When to choose sherpa-onnx:** You are transcribing Chinese, Japanese, or Korean (SenseVoice is the stronger choice there), you want model auto-download and zero C++ build steps, you already installed `kaiku[vad]` (sherpa-onnx is already present), or you need VAD support or access to models beyond the Whisper family.
 
 See [whisper.cpp](https://github.com/ggerganov/whisper.cpp) for build instructions and [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) for its model zoo.
 
@@ -507,11 +504,11 @@ See [whisper.cpp](https://github.com/ggerganov/whisper.cpp) for build instructio
 For long recordings, `-r`/`--robust` splits at silence boundaries, quality-checks each chunk, retries bad chunks, streams raw chunk text to `-o` FILE as it goes, then overwrites FILE with the post-processed, template-formatted result:
 
 ```bash
-asr2clip -i meeting.mp3 -r                               # chunked, quality-checked
-asr2clip -i m.mp3 -rC 60                                 # 60 s chunks instead of default 180
-asr2clip -i m.mp3 -ro transcript.txt                     # tail -f during chunks; final file is formatted output only
-asr2clip -i m.mp3 -l fi -o t.txt                         # fully offline, Finnish language
-asr2clip -i m.mp3 -rP group-restructure -T bare -o t.md  # AI meeting memo without the transcript
+kaiku -i meeting.mp3 -r                               # chunked, quality-checked
+kaiku -i m.mp3 -rC 60                                 # 60 s chunks instead of default 180
+kaiku -i m.mp3 -ro transcript.txt                     # tail -f during chunks; final file is formatted output only
+kaiku -i m.mp3 -l fi -o t.txt                         # fully offline, Finnish language
+kaiku -i m.mp3 -rP group-restructure -T bare -o t.md  # AI meeting memo without the transcript
 ```
 
 Long transcripts often exceed the clipboard size limit; using `-o FILE` is recommended.
@@ -521,17 +518,17 @@ Long transcripts often exceed the clipboard size limit; using `-o FILE` is recom
 Toggle mode lets you bind a single keyboard shortcut to start and stop recording. The recording runs as a background process; the second invocation stops it, transcribes, and copies to clipboard. A desktop notification is shown on start and finish (requires [`notify-send`](https://man.archlinux.org/man/notify-send.1) on Linux).
 
 ```bash
-asr2clip --toggle                        # first press: start recording in background
-asr2clip --toggle                        # second press: stop, transcribe, copy to clipboard
-asr2clip --toggle                      # toggle with fully offline transcription
-asr2clip --toggle -P solo-restructure    # toggle → structured personal memo
+kaiku --toggle                        # first press: start recording in background
+kaiku --toggle                        # second press: stop, transcribe, copy to clipboard
+kaiku --toggle                      # toggle with fully offline transcription
+kaiku --toggle -P solo-restructure    # toggle → structured personal memo
 ```
 
 Example awesome WM keybinding:
 
 ```lua
 awful.key({ modkey }, "r", function()
-    awful.spawn("asr2clip --toggle")
+    awful.spawn("kaiku --toggle")
 end)
 ```
 
@@ -551,7 +548,7 @@ If you want direct ALSA access, set `recorder: arecord` in config.
 
 ## Local ASR server
 
-`asr2clip` can run a local OpenAI-compatible ASR API server backed by [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx).
+`kaiku` can run a local OpenAI-compatible ASR API server backed by [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx).
 
 | Flag | Description |
 |------|-------------|
@@ -563,9 +560,9 @@ If you want direct ALSA access, set `recorder: arecord` in config.
 | `--num-threads N` | Inference threads (default: 4) |
 
 ```bash
-pip install asr2clip[vad]
-asr2clip --download-model                     # download SenseVoice model (~1 GB, once)
-asr2clip --serve                              # start server at 127.0.0.1:8000
+pip install kaiku[vad]
+kaiku --download-model                     # download SenseVoice model (~1 GB, once)
+kaiku --serve                              # start server at 127.0.0.1:8000
 ```
 
 Corresponding config backend:
@@ -583,7 +580,7 @@ VAD (Voice Activity Detection) classifies audio frames as speech or silence, ena
 
 | Flag | Description |
 |------|-------------|
-| `--vad` | Continuous recording with voice activity detection. Transcribes when silence is detected after speech. Requires `pip install asr2clip[vad]`. |
+| `--vad` | Continuous recording with voice activity detection. Transcribes when silence is detected after speech. Requires `pip install kaiku[vad]`. |
 | `--interval SEC` | Continuous recording with fixed interval (seconds). |
 | `--silence-threshold PROB` | Speech probability threshold, 0.0–1.0 (default: 0.5); lower = more sensitive. |
 | `--silence-duration SEC` | How long silence must last to trigger transcription (default: 1.5 s). |
@@ -596,14 +593,14 @@ VAD (Voice Activity Detection) classifies audio frames as speech or silence, ena
 | Fixed interval | `--interval SEC` | Every N seconds | Lectures, podcasts with predictable pauses |
 
 ```bash
-asr2clip --vad -o ~/meeting.txt          # auto-transcribe when silence is detected
-asr2clip --interval 60 -o ~/meeting.txt  # transcribe every 60 seconds
+kaiku --vad -o ~/meeting.txt          # auto-transcribe when silence is detected
+kaiku --interval 60 -o ~/meeting.txt  # transcribe every 60 seconds
 ```
 
 VAD requires [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx):
 
 ```bash
-pip install asr2clip[vad]
+pip install kaiku[vad]
 ```
 
 VAD uses the [Silero VAD](https://github.com/snakers4/silero-vad) model (~629 KB, downloads automatically on first use). No internet connection required after the first run.
@@ -624,7 +621,7 @@ Speaker name substitution (SPEAKER_00 → real names) is intentionally left to t
 ### Diarization setup
 
 ```bash
-pip install asr2clip[diarize]
+pip install kaiku[diarize]
 # Accept the pyannote licence at https://huggingface.co/pyannote/speaker-diarization-3.1
 # then set your HuggingFace token:
 export HF_TOKEN=hf_...
@@ -648,9 +645,9 @@ asr_backends:
 ### Diarization usage
 
 ```bash
-asr2clip -i meeting.m4a -b whisperx           # diarize: SPEAKER_NN-attributed transcript
-asr2clip -i meeting.m4a -b whisperx -s 3      # hint: 3 speakers (improves accuracy)
-asr2clip -i meeting.m4a -b whisperx -P group  # diarize + LLM meeting notes
+kaiku -i meeting.m4a -b whisperx           # diarize: SPEAKER_NN-attributed transcript
+kaiku -i meeting.m4a -b whisperx -s 3      # hint: 3 speakers (improves accuracy)
+kaiku -i meeting.m4a -b whisperx -P group  # diarize + LLM meeting notes
 ```
 
 ## Post-processing (with AI models)
@@ -701,8 +698,8 @@ Each analysis includes:
 Usage:
 
 ```bash
-asr2clip -P analyze -i audio.mp3         # Analyze with mock
-asr2clip --test -P analyze                              # Test without credentials
+kaiku -P analyze -i audio.mp3         # Analyze with mock
+kaiku --test -P analyze                              # Test without credentials
 ```
 
 ### Post-processors (prompt templates)
@@ -737,10 +734,10 @@ Tips:
 #### Post-processor usage examples
 
 ```bash
-asr2clip --toggle -P solo-enhance          # toggle → improved personal transcript
-asr2clip --toggle -P solo-restructure      # toggle → structured personal memo
-asr2clip -i meeting.m4a -b whisperx -P group-restructure  # diarize + meeting memo
-asr2clip --toggle -P "List action items."   # inline system prompt
+kaiku --toggle -P solo-enhance          # toggle → improved personal transcript
+kaiku --toggle -P solo-restructure      # toggle → structured personal memo
+kaiku -i meeting.m4a -b whisperx -P group-restructure  # diarize + meeting memo
+kaiku --toggle -P "List action items."   # inline system prompt
 ```
 
 ### Supported AI backends
@@ -791,7 +788,7 @@ postprocessors:
     prompt: |
       You are a professional transcript scribe ...
     context_path:
-      - "~/.asr2clip/context/personal.md"     # Context file to help the LLM "read between the lines"
+      - "~/.kaiku/context/personal.md"     # Context file to help the LLM "read between the lines"
 
   solo-enhance:
     extends: solo-base            # inherits backend, prompt
@@ -802,7 +799,7 @@ postprocessors:
     extends: solo-enhance        # inherits backend, prompt + extra
     backend: ollama               # override: use local model for privacy
     context_path:
-      - "~/.asr2clip/context/private-*.md"  # accumulates with parent's context
+      - "~/.kaiku/context/private-*.md"  # accumulates with parent's context
 ```
 
 Note: The `solo-base` and `group-base` are not intended to be used directly. Instead, they provide definitions that are shared by other single-speaker and group discussion post-processors, respectively, through inheritance.
@@ -821,7 +818,7 @@ output_templates:
     {result}
 
     ---
-    *Transcript from {duration_s:.0f}s recording post-processed at {datetime} with asr2clip ({backend}, {prompt_name}, {model})*
+    *Transcript from {duration_s:.0f}s recording post-processed at {datetime} with kaiku ({backend}, {prompt_name}, {model})*
 
     ## Original transcript
 
@@ -829,7 +826,7 @@ output_templates:
 ```
 
 ```bash
-asr2clip -i m.mp3 -r -P group -T full      # meeting notes + full transcript appended
+kaiku -i m.mp3 -r -P group -T full      # meeting notes + full transcript appended
 ```
 
 Available placeholders: `{result}` `{transcript}` `{date}` `{datetime}` `{prompt_name}` `{model}` `{backend}` `{duration_s}`
@@ -838,7 +835,7 @@ Set `postprocessor_urgent` / `postprocessor_casual` to apply a prompt automatica
 
 ## Presets
 
-Presets are atomic pipeline definitions — each specifies exactly which preprocessor, ASR backend, and post-processor to use. Pick one preset per run; asr2clip handles the rest.
+Presets are atomic pipeline definitions — each specifies exactly which preprocessor, ASR backend, and post-processor to use. Pick one preset per run; kaiku handles the rest.
 
 **Format:** `preset_name: [preprocessor, asr_backend, postprocessor, description]`
 
@@ -870,11 +867,11 @@ presets:
 ```
 
 ```bash
-asr2clip --preset speed                  # record & transcribe, copied to clipboard
-asr2clip --preset privacy --toggle       # toggle mode with fully offline transcription
-asr2clip --preset quality -i audio.mp3   # transcribe file
-asr2clip --preset speed -b wcpp          # override backend for this run
-asr2clip --preset memo -P group-enhance  # override post-processor for this run
+kaiku --preset speed                  # record & transcribe, copied to clipboard
+kaiku --preset privacy --toggle       # toggle mode with fully offline transcription
+kaiku --preset quality -i audio.mp3   # transcribe file
+kaiku --preset speed -b wcpp          # override backend for this run
+kaiku --preset memo -P group-enhance  # override post-processor for this run
 ```
 
 **Default preset:** set `default_preset: speed` in config to omit `--preset` on every invocation. Flags `-b`, `-p`, and `-P` still override individual stages.
@@ -887,19 +884,19 @@ default_preset: speed
 
 | Problem | Solution |
 |---------|----------|
-| Audio not captured | Run `asr2clip --list-devices` and select a working device |
+| Audio not captured | Run `kaiku --list-devices` and select a working device |
 | Clipboard not working | Install `xclip` (X11) or `wl-clipboard` (Wayland) |
 | API errors | Check your API key and endpoint in config |
-| whisper.cpp errors | Run `asr2clip --test -b wcpp`; check binary and model paths |
+| whisper.cpp errors | Run `kaiku --test -b wcpp`; check binary and model paths |
 | Silent audio | Try a different audio device with `--device` |
 | Video/audio format rejected | Ensure `ffmpeg` is installed (`apt install ffmpeg` / `brew install ffmpeg`) |
-| Preprocessor not found | Run `asr2clip --test` to see which are available and their install commands |
+| Preprocessor not found | Run `kaiku --test` to see which are available and their install commands |
 | Preprocessing too slow | Switch `preprocessor_urgent` to `noisereduce` or `none` in config |
 | Post-processor not found | Check `postprocessors:` in config; name must match exactly |
 | Post-processor backend error | Check `postprocessor_backends:` in config; verify API key and URL |
-| Diarization fails | Ensure `pip install asr2clip[diarize]`, `HF_TOKEN` is set, pyannote licence accepted, and backend `type: whisperx` is in `asr_backends:` |
+| Diarization fails | Ensure `pip install kaiku[diarize]`, `HF_TOKEN` is set, pyannote licence accepted, and backend `type: whisperx` is in `asr_backends:` |
 
-Run `asr2clip --test` (or `asr2clip --test -b <name>`) to diagnose issues.
+Run `kaiku --test` (or `kaiku --test -b <name>`) to diagnose issues.
 
 ## Contributing
 
@@ -919,32 +916,32 @@ GNU Affero General Public License v3.0. See the [LICENSE](LICENSE) file for deta
 
 ## Related projects
 
-asr2clip operates within a four-stage pipeline:
+kaiku operates within a four-stage pipeline:
 
 ```
 [Audio capture] → [ASR / transcription] → [Post-processing] → [Output: clipboard / file]
      stage 1            stage 2                stage 3                 stage 4
 ```
 
-The tables below cover the ecosystem at each pipeline stage and compare competing end-user tools. asr2clip covers the whole pipeline in a single powerful CLI.
+The tables below cover the ecosystem at each pipeline stage and compare competing end-user tools. kaiku covers the whole pipeline in a single powerful CLI.
 
 ### Audio preprocessing (noise reduction)
 
-Audio preprocessing cleans the signal before transcription. asr2clip integrates all three libraries below as optional extras (`pip install asr2clip[enhance]`); they run in a pipeline with loudness normalisation applied after cleaning.
+Audio preprocessing cleans the signal before transcription. kaiku integrates all three libraries below as optional extras (`pip install kaiku[enhance]`); they run in a pipeline with loudness normalisation applied after cleaning.
 
-| Project | Technology | License | Best for | In asr2clip |
+| Project | Technology | License | Best for | In kaiku |
 |---------|-----------|---------|----------|-------------|
-| [noisereduce](https://github.com/timsainb/noisereduce) | Spectral subtraction | MIT | Stationary noise: fans, AC, electrical hum | **Yes** — `pip install asr2clip[noisereduce]` |
-| [pyrnnoise](https://github.com/g-node/pyrnnoise) | Mozilla RNNoise GRU | GPL-3 | Non-stationary noise: crowd, babble, footsteps | **Yes** — `pip install asr2clip[pyrnnoise]` |
-| [DeepFilterNet](https://github.com/Rikorose/DeepFilterNet) | DeepFilterNet3 neural net | MIT | Best quality overall; speech naturalness; medium CPU | **Yes** — `pip install asr2clip[deepfilter]` |
+| [noisereduce](https://github.com/timsainb/noisereduce) | Spectral subtraction | MIT | Stationary noise: fans, AC, electrical hum | **Yes** — `pip install kaiku[noisereduce]` |
+| [pyrnnoise](https://github.com/g-node/pyrnnoise) | Mozilla RNNoise GRU | GPL-3 | Non-stationary noise: crowd, babble, footsteps | **Yes** — `pip install kaiku[pyrnnoise]` |
+| [DeepFilterNet](https://github.com/Rikorose/DeepFilterNet) | DeepFilterNet3 neural net | MIT | Best quality overall; speech naturalness; medium CPU | **Yes** — `pip install kaiku[deepfilter]` |
 | [RNNoise](https://github.com/xiph/rnnoise) | Xiph GRU | BSD | Original Mozilla RNNoise (C library) | No — pyrnnoise wraps this at the Python layer |
 | [SpeechBrain enhance](https://github.com/speechbrain/speechbrain) | Encoder-decoder neural | Apache-2 | Research-grade speech separation and denoising | No — heavy ML framework dependency; not practical as a live preprocessor |
 
 ### Voice Activity Detection
 
-VAD classifies audio frames as speech or silence, enabling automatic segment boundaries without user interaction. asr2clip uses Silero VAD (bundled in sherpa-onnx) for both the `--vad` continuous mode and the silence-split inside `--robust`.
+VAD classifies audio frames as speech or silence, enabling automatic segment boundaries without user interaction. kaiku uses Silero VAD (bundled in sherpa-onnx) for both the `--vad` continuous mode and the silence-split inside `--robust`.
 
-| Project | License | Stars | Notes | In asr2clip |
+| Project | License | Stars | Notes | In kaiku |
 |---------|---------|-------|-------|-------------|
 | [Silero VAD](https://github.com/snakers4/silero-vad) | MIT | 14k+ | 629 KB model; enterprise-grade; ONNX + PyTorch; auto-downloads | **Yes** — via sherpa-onnx in `--vad` and `--robust` |
 | [WebRTC VAD](https://github.com/wiseman/py-webrtcvad) | BSD | 1k+ | Google's classic GMM-based VAD; very fast, lower accuracy | No — less accurate than Silero; not integrated |
@@ -952,15 +949,15 @@ VAD classifies audio frames as speech or silence, enabling automatic segment bou
 
 ### ASR engines
 
-ASR engines convert audio to text. asr2clip is a frontend: it delegates transcription to an ASR backend, supporting two locally-run backends (whisper.cpp, sherpa-onnx) and any OpenAI-compatible HTTP endpoint for cloud or self-hosted services. The engines listed as integrated below are ones asr2clip directly calls or supports as backends; the others are libraries or specialized tools that require custom wrappers to use.
+ASR engines convert audio to text. kaiku is a frontend: it delegates transcription to an ASR backend, supporting two locally-run backends (whisper.cpp, sherpa-onnx) and any OpenAI-compatible HTTP endpoint for cloud or self-hosted services. The engines listed as integrated below are ones kaiku directly calls or supports as backends; the others are libraries or specialized tools that require custom wrappers to use.
 
-| Project | License | Stars | Best for | In asr2clip |
+| Project | License | Stars | Best for | In kaiku |
 |---------|---------|-------|----------|-------------|
 | [OpenAI Whisper](https://github.com/openai/whisper) | MIT | 80k+ | Gold standard; 99 languages; most widely reproduced | Via API (`whisper-1`) or indirectly through sherpa-onnx and whisper.cpp |
 | [whisper.cpp](https://github.com/ggerganov/whisper.cpp) | MIT | 80k+ | Fully offline; best CPU performance; GGML-quantised models | **Yes** — `type: whisper_cpp` backend; subprocess call |
 | [faster-whisper](https://github.com/SYSTRAN/faster-whisper) | MIT | 15k+ | 4× faster than Whisper; identical accuracy; INT8/FP16 via CTranslate2 | Not directly; used internally by WhisperX and Meetily |
 | [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) | Apache-2 | 4k+ | ONNX inference; multi-model-family; model auto-download; Python-native | **Yes** — `--serve` local server; `type: api` backend |
-| [WhisperX](https://github.com/m-bain/whisperX) | BSD | 13k+ | Whisper + word-level timestamps + speaker diarization in one pipeline | **Yes** — `type: whisperx` backend (`pip install asr2clip[diarize]`) |
+| [WhisperX](https://github.com/m-bain/whisperX) | BSD | 13k+ | Whisper + word-level timestamps + speaker diarization in one pipeline | **Yes** — `type: whisperx` backend (`pip install kaiku[diarize]`) |
 | [SenseVoice](https://github.com/FunAudioLLM/SenseVoice) | Apache-2 | 6k+ | Emotion + language event detection; excellent CJK | Via sherpa-onnx default model; also SiliconFlow API |
 | [Vosk](https://github.com/alphacep/vosk-api) | Apache-2 | 8k+ | Lightweight; 20+ languages; embedded and low-RAM devices | No — lower accuracy than Whisper family |
 | [NVIDIA Parakeet TDT](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2) | Apache-2 | (NeMo) | 3 380× faster than real-time; English only; GPU | No — English-only; GPU-dependent; no multilingual support |
@@ -970,22 +967,22 @@ ASR engines convert audio to text. asr2clip is a frontend: it delegates transcri
 
 ### Speaker diarization
 
-Speaker diarization labels each segment with a speaker identity ("who said what"). asr2clip treats diarization as an ASR backend (`type: whisperx`); select it with `-b whisperx` or via a preset. WhisperX handles transcription and speaker attribution in one pass; pyannote.audio is used internally for speaker embedding and clustering.
+Speaker diarization labels each segment with a speaker identity ("who said what"). kaiku treats diarization as an ASR backend (`type: whisperx`); select it with `-b whisperx` or via a preset. WhisperX handles transcription and speaker attribution in one pass; pyannote.audio is used internally for speaker embedding and clustering.
 
-| Project | License | Stars | Notes | In asr2clip |
+| Project | License | Stars | Notes | In kaiku |
 |---------|---------|-------|-------|-------------|
 | [pyannote.audio](https://github.com/pyannote/pyannote-audio) | MIT | 6k+ | De-facto OSS standard; speaker embedding + clustering; requires HF token for model download | Via WhisperX (`type: whisperx`) |
-| [WhisperX](https://github.com/m-bain/whisperX) | BSD | 13k+ | faster-whisper + word alignment + pyannote; all-in-one | **Yes** — `type: whisperx` backend (`pip install asr2clip[diarize]`) |
+| [WhisperX](https://github.com/m-bain/whisperX) | BSD | 13k+ | faster-whisper + word alignment + pyannote; all-in-one | **Yes** — `type: whisperx` backend (`pip install kaiku[diarize]`) |
 | [whisper-diarization](https://github.com/MahmoudAshraf97/whisper-diarization) | MIT | 2k+ | faster-whisper + pyannote script pipeline | No — WhisperX provides equivalent functionality with an active upstream |
 | [NVIDIA NeMo](https://github.com/NVIDIA/NeMo) | Apache-2 | 13k+ | Fastest GPU diarization; English and enterprise focus | No — GPU-heavy; no practical CLI integration path |
 
 ### Desktop audio capture and transcription tools
 
-These are end-user tools that combine audio capture, ASR, and transcript output — the closest category to asr2clip itself.
+These are end-user tools that combine audio capture, ASR, and transcript output — the closest category to kaiku itself.
 
 | Project | Type | Platform | License | Live | File | Toggle | VAD | Offline | Diarize | LLM post | Notes |
 |---------|------|----------|---------|------|------|--------|-----|---------|---------|----------|-------|
-| **asr2clip** (this) | CLI | Linux, macOS | AGPL-3 | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | Full pipeline; scriptable; multi-backend; video input |
+| **kaiku** (this) | CLI | Linux, macOS | AGPL-3 | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | Full pipeline; scriptable; multi-backend; video input |
 | [Turbo Whisper](https://github.com/knowall-ai/turbo-whisper) | GUI | Linux | MIT | ✓ | ✗ | ✓ | ✗ | ✓ | ✗ | ✗ | faster-whisper-large-v3-turbo; global hotkey; no casual mode; PPA install |
 | [Whispering](https://github.com/braden-w/whispering) | GUI/tray | Any | MIT | ✓ | ✗ | ✓ | ✗ | ✓ | ✗ | ✗ | Cross-platform (snap/exe); local or cloud API; minimal UI |
 | [Superwhisper](https://superwhisper.com/) | GUI | macOS, Windows, iOS | Proprietary | ✓ | ✓ | ✓ | ✗ | ✓ | ✗ | Partial | Premium dictation app; polished UX; no Linux |
@@ -996,7 +993,7 @@ These are end-user tools that combine audio capture, ASR, and transcript output 
 
 Commercial cloud services that join calls automatically or process uploaded recordings. Included for context — these require trusting a third party with your audio.
 
-| Service | Platform | Bot-less | Offline | Privacy | Notable | vs asr2clip |
+| Service | Platform | Bot-less | Offline | Privacy | Notable | vs kaiku |
 |---------|----------|----------|---------|---------|---------|-------------|
 | [Fathom](https://fathom.video/) | Web (Zoom/Meet/Teams) | No | No | Cloud (US) | Free tier; calendar-integrated; good UX | Cloud-only; no file processing; no Linux CLI |
 | [Jamie](https://meetjamie.ai/) | macOS, Windows | Yes | No | GDPR (EU) | Best Finnish quality; bot-free desktop app | €24+/mo; macOS/Windows only |
@@ -1006,10 +1003,10 @@ Commercial cloud services that join calls automatically or process uploaded reco
 | [Soniox](https://soniox.com/) | API | — | No | Cloud (US) | Best Finnish WER (10.6%); 56 languages; developer API | API service, not an end-user tool |
 | [Krisp](https://krisp.ai/) | App + SDK | Yes | Partial | Cloud for AI | Industry-leading noise suppression + transcription | Proprietary; subscription; not scriptable |
 
-### asr2clip as an open source contribution
+### kaiku as an open source contribution
 
-The speech-to-text tool landscape in 2026 has a sharp divide: powerful Python libraries (faster-whisper, WhisperX, pyannote) that require programming to use, and polished end-user apps (Superwhisper, Meetily, Granola) that are macOS/Windows-only or cloud-dependent. Linux users who want local, private, keyboard-shortcut-driven transcription with the full power of the Whisper ecosystem face a gap. Turbo Whisper and Whispering address the simplest dictation case but lack file transcription, noise reduction, robustness for long recordings, and any programmable post-processing. asr2clip fills this gap as a single composable CLI that exposes the full four-stage pipeline without requiring the user to write any code.
+The speech-to-text tool landscape in 2026 has a sharp divide: powerful Python libraries (faster-whisper, WhisperX, pyannote) that require programming to use, and polished end-user apps (Superwhisper, Meetily, Granola) that are macOS/Windows-only or cloud-dependent. Linux users who want local, private, keyboard-shortcut-driven transcription with the full power of the Whisper ecosystem face a gap. Turbo Whisper and Whispering address the simplest dictation case but lack file transcription, noise reduction, robustness for long recordings, and any programmable post-processing. kaiku fills this gap as a single composable CLI that exposes the full four-stage pipeline without requiring the user to write any code.
 
-Beyond Linux, asr2clip's value is its scriptability and composability. Every feature — backend, preprocessor, language, diarization, post-processor, output template — is a flag or config key. This makes it naturally callable from shell scripts, Makefiles, cron jobs, and AI coding agents: one invocation covers the full audio → transcript → structured-memo pipeline that would otherwise require stitching together three or four Python libraries. The support for both local (whisper.cpp, sherpa-onnx) and cloud (OpenAI, Groq, SiliconFlow) backends with a unified interface means the same command works offline on a laptop and in a cloud pipeline on a headless server.
+Beyond Linux, kaiku's value is its scriptability and composability. Every feature — backend, preprocessor, language, diarization, post-processor, output template — is a flag or config key. This makes it naturally callable from shell scripts, Makefiles, cron jobs, and AI coding agents: one invocation covers the full audio → transcript → structured-memo pipeline that would otherwise require stitching together three or four Python libraries. The support for both local (whisper.cpp, sherpa-onnx) and cloud (OpenAI, Groq, SiliconFlow) backends with a unified interface means the same command works offline on a laptop and in a cloud pipeline on a headless server.
 
-The most capable competing open-source project, Meetily, is architecturally similar in ambition — local-first, offline, Whisper-backed, with LLM summaries — but is a GUI-only desktop app for macOS and Windows with no Linux support and no CLI surface. Screenpipe is a different paradigm (always-on ambient capture) rather than a competing tool. This leaves asr2clip as currently the most complete open-source, Linux-native, CLI-accessible speech processing pipeline — a category with no direct competition and clear utility for developers, power users, and autonomous AI agents that need to process human speech.
+The most capable competing open-source project, Meetily, is architecturally similar in ambition — local-first, offline, Whisper-backed, with LLM summaries — but is a GUI-only desktop app for macOS and Windows with no Linux support and no CLI surface. Screenpipe is a different paradigm (always-on ambient capture) rather than a competing tool. This leaves kaiku as currently the most complete open-source, Linux-native, CLI-accessible speech processing pipeline — a category with no direct competition and clear utility for developers, power users, and autonomous AI agents that need to process human speech.

@@ -1,4 +1,4 @@
-name: asr2clip
+name: kaiku
 dependencies:
   - pip=24.3.1=pyh8b19718_0
   - python=3.8.20=h4a871b0_2_cpython

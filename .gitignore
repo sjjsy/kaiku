@@ -175,7 +175,7 @@ docs_en/
 docs_zh/
 
 # project specific
-asr2clip.conf
+kaiku.conf
 now.md
 todo.md
 done.md

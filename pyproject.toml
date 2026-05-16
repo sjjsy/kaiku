@@ -3,13 +3,13 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["asr2clip", "asr2clip.backends", "asr2clip.preprocessors", "asr2clip.postprocessors", "asr2clip.recorders", "asr2clip.local_asr", "asr2clip._vendor", "asr2clip._vendor.yaml", "asr2clip._vendor.httpclient"]
+packages = ["kaiku", "kaiku.backends", "kaiku.preprocessors", "kaiku.postprocessors", "kaiku.recorders", "kaiku.local_asr", "kaiku._vendor", "kaiku._vendor.yaml", "kaiku._vendor.httpclient"]
 
 [tool.setuptools.dynamic]
-version = { attr = "asr2clip.__version__" }
+version = { attr = "kaiku.__version__" }
 
 [project]
-name = "asr2clip"
+name = "kaiku"
 dynamic = ["version"]
 authors = [{ name = "Oaklight", email = "oaklight@gmx.com" }]
 description = "A real-time speech-to-text clipboard tool."
@@ -36,11 +36,11 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/Oaklight/asr2clip"
+Homepage = "https://github.com/Oaklight/kaiku"
 
 [project.scripts]
-asr2clip = "asr2clip.asr2clip:main"
-asr2clip-serve = "asr2clip.local_asr:cli_main"
+kaiku = "kaiku.kaiku:main"
+kaiku-serve = "kaiku.local_asr:cli_main"
 
 [project.optional-dependencies]
 dev = [
@@ -73,7 +73,7 @@ deepfilter = [
     # resampling done via torchaudio (already a deepfilternet dependency)
 ]
 enhance = [
-    "asr2clip[noisereduce,pyrnnoise,deepfilter]",
+    "kaiku[noisereduce,pyrnnoise,deepfilter]",
 ]
 diarize = [
     "whisperx>=3.1.0",
@@ -92,7 +92,7 @@ select = ["E", "F", "UP", "C901"]
 ignore = ["UP007", "E501"]
 
 [tool.ruff.lint.per-file-ignores]
-"asr2clip/_vendor/*" = ["E", "F", "UP", "C901"]
+"kaiku/_vendor/*" = ["E", "F", "UP", "C901"]
 
 [tool.ruff.lint.mccabe]
 max-complexity = 15
@@ -101,10 +101,10 @@ max-complexity = 15
 python-version = "3.10"
 
 [tool.ty.src]
-include = ["asr2clip"]
-exclude = ["asr2clip/local_asr", "asr2clip/_vendor", "asr2clip/vad.py"]
+include = ["kaiku"]
+exclude = ["kaiku/local_asr", "kaiku/_vendor", "kaiku/vad.py"]
 
 [tool.complexipy]
-paths = ["asr2clip"]
+paths = ["kaiku"]
 exclude = ["_vendor"]
 max-complexity-allowed = 15

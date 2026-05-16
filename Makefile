@@ -1,7 +1,7 @@
-# Makefile for asr2clip pip package
+# Makefile for kaiku pip package
 
 # Variables
-PACKAGE_NAME := asr2clip
+PACKAGE_NAME := kaiku
 DIST_DIR := dist
 BUILD_DIR := build
 
