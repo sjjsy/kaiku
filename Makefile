@@ -17,7 +17,7 @@ build:
 # Push the package to PyPI
 push:
 	@echo "Pushing $(PACKAGE_NAME) to PyPI..."
-	twine upload $(DIST_DIR)/*
+	twine upload --repository-url https://upload.pypi.org/legacy/ $(DIST_DIR)/*
 	@echo "Package pushed to PyPI."
 
 # Clean up build and distribution files
