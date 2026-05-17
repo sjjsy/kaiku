@@ -12,69 +12,23 @@ clear message if the download fails (no network, broken URL).
 
 from __future__ import annotations
 
-import urllib.request
 from pathlib import Path
 
 import pytest
+
+from kaiku.fixtures import FixtureDownloadError, ensure_fixture
 
 REPO_ROOT = Path(__file__).parent.parent
 EXAMPLE_CONFIG = REPO_ROOT / "kaiku" / "kaiku.conf.example"
 TEST_DATA = REPO_ROOT / "test_data"
 
-# Remote sources for test audio fixtures.
-# Keys are the local filenames; values are stable public URLs.
-_AUDIO_URLS: dict[str, str] = {
-    "jfk-11s-1p.wav": (
-        "https://github.com/ggerganov/whisper.cpp/raw/master/samples/jfk.wav"
-    ),
-    "group-30s-4p.wav": (
-        "https://raw.githubusercontent.com/nikhilraghav29/diarizen-tutorial"
-        "/main/example/EN2002a_30s.wav"
-    ),
-    # George W. Bush weekly radio address, Nov 1 2008 (~3.5 min, 1 speaker).
-    # Same source used by whisper.cpp's own test suite (Makefile: gb0.ogg).
-    # Wikimedia Commons URLs are permanent — files are never moved or deleted.
-    "gb0-3min.oga": (
-        "https://upload.wikimedia.org/wikipedia/commons/2/22/"
-        "George_W._Bush%27s_weekly_radio_address_%28November_1%2C_2008%29.oga"
-    ),
-}
-
 
 def _ensure_audio(filename: str) -> Path:
-    """Return path to a test audio file, downloading it from the known URL if absent.
-
-    Calls pytest.fail() with a clear message if the download fails, so the
-    error surfaces as a collection-time failure rather than a confusing
-    FileNotFoundError mid-test.
-
-    A User-Agent header is sent; Wikimedia Commons (and many other hosts)
-    return 403 for requests that omit it.
-    """
-    path = TEST_DATA / filename
-    if path.exists():
-        return path
-    url = _AUDIO_URLS[filename]
-    TEST_DATA.mkdir(exist_ok=True)
     try:
-        req = urllib.request.Request(
-            url,
-            headers={"User-Agent": "kaiku-tests/1.0 (https://github.com/sjjsy/kaiku)"},
-        )
-        with urllib.request.urlopen(req) as resp:
-            path.write_bytes(resp.read())
-    except Exception as exc:
-        pytest.fail(
-            f"Cannot download test fixture '{filename}' from:\n  {url}\n"
-            f"Error: {exc}\n"
-            "Check network connectivity or place the file manually in test_data/."
-        )
-    return path
+        return ensure_fixture(filename, TEST_DATA)
+    except FixtureDownloadError as exc:
+        pytest.fail(str(exc))
 
-
-# ---------------------------------------------------------------------------
-# Audio fixtures
-# ---------------------------------------------------------------------------
 
 @pytest.fixture(scope="session")
 def jfk_wav() -> Path:
@@ -98,10 +52,6 @@ def long_speech() -> Path:
     """
     return _ensure_audio("gb0-3min.oga")
 
-
-# ---------------------------------------------------------------------------
-# Config fixture
-# ---------------------------------------------------------------------------
 
 @pytest.fixture(scope="session")
 def example_cfg(

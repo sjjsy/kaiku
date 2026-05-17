@@ -8,6 +8,16 @@ Jump to the [Related projects](#related-projects) section at the end to understa
 
 ## TL;DR
 
+**Try mock backends first (no API keys, no whisper.cpp build):**
+```bash
+pip3 install kaiku
+kaiku --download-fixtures # ~1.3 MB: demo WAVs + transcripts; prints config paths
+kaiku --generate-config   # create config with all backend examples
+# paste fixture paths from download output into mock_devices / mock-fwd in config
+kaiku --test
+kaiku -d mock-jfk -b mock-fwd                 # both mock audio and mock transcription
+```
+
 **Cloud (API) path:**
 ```bash
 pip3 install kaiku

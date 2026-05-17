@@ -52,13 +52,12 @@ presets:
 ## ── Mock audio devices ────────────────────────────────────────────────────────
 # Mock devices simulate microphone recording by serving a pre-recorded WAV file.
 # Any name defined here can be used as audio_device or via --device on the CLI.
-# Useful for testing the full pipeline (recording → ASR → post-processing) with
-# reproducible audio without needing a microphone.
+# Run `kaiku --download-fixtures` and paste the printed paths below.
 mock_devices:
-  mock-jfk:                                  # 11s solo speech (test_data/jfk-11s-1p.wav)
-    source_file: "~/path/to/kaiku/test_data/jfk-11s-1p.wav"
-  mock-group:                                # 30s group discussion (test_data/group-30s-4p.wav)
-    source_file: "~/path/to/kaiku/test_data/group-30s-4p.wav"
+  mock-jfk:                                  # 11s solo speech
+    source_file: "test_data/jfk-11s-1p.wav"   # absolute path from kaiku --download-fixtures
+  mock-group:                                # 30s group discussion
+    source_file: "test_data/group-30s-4p.wav"
 
 ## ── Toggle-mode recorder ──────────────────────────────────────────────────────
 # Controls which backend captures audio during --toggle mode.
@@ -85,9 +84,9 @@ asr_backends:
     type: mock
     response: "The quick brown fox jumps over the lazy dog"
     latency_ms: 100
-  mock-fwd:                               # Returns N words from transcript (N = audio_s / 2, forward)
+  mock-fwd:                                   # Returns N words from transcript (N = audio_s / 2, forward)
     type: mock-fwd
-    transcript_path: "test_data/group-2p-2.txt"
+    transcript_path: "test_data/group-2p-2.txt"   # use path from `kaiku --download-fixtures`
     latency_ms: 50
   mock-bwd:                               # Same as mock-fwd, words in reverse
     type: mock-bwd
