@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import os
+import re
 import sys
 
 from kaiku._vendor.yaml import yaml
-from kaiku.utils import run_subprocess
+from kaiku.utils import run_subprocess, warning
 
 # Default paths to search for config file (in order of priority)
 CONFIG_PATHS = [
@@ -85,12 +86,24 @@ def read_config(config_file: str | None = None) -> tuple[str, dict]:
     resolved_abs = os.path.abspath(config_path)
 
     try:
-        with open(config_path) as file:
-            raw = yaml.load(file.read())
+        with open(config_path, encoding="utf-8") as file:
+            source = file.read()
+        raw = yaml.load(source)
+        if not isinstance(raw, dict):
+            raw = {}
     except Exception as e:
         print(f"Could not read configuration file {config_path}: {e}")
         sys.exit(1)
 
+    # Verify whether all top level keys were parsed by YAML, because a comment breaking a
+    # text block can break the document, and this check might save the user some headache
+    top_level_keys: set[str] = set()
+    for line in source.splitlines():
+        if line and line[0] not in " \t#" and (m := re.match(r"^([A-Za-z_][\w-]*)\s*:", line)):
+            top_level_keys.add(m.group(1))
+    if missing := sorted(top_level_keys - raw.keys()):
+        warning(f"Config {resolved_abs}: top-level key(s) in file but not loaded by YAML: {', '.join(missing)}")
+        warning(f"The issue might be a comment line '# ...' breaking a text block ': |'. Double check recommended!")
     return resolved_abs, raw
 
 

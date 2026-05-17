@@ -60,6 +60,7 @@ def test_config(config: Config) -> bool:
 
     if config.asr_backend.type == "whisper_cpp":
         from .backends.whisper_cpp import WhisperCppConfig, test as wc_test
+
         cfg = WhisperCppConfig(
             binary=config.asr_backend.binary,
             model=config.asr_backend.model,
@@ -114,10 +115,14 @@ def _test_postprocessors(config: Config) -> bool:
     try:
         resolved = _resolve_prompt(config.postprocessor.name, config._config_dict)
         backend_cfg = _resolve_backend(
-            config._config_dict, resolved["backend_name"], config.postprocessor.model_override
+            config._config_dict,
+            resolved["backend_name"],
+            config.postprocessor.model_override,
         )
     except SystemExit:
-        error(f"Post-processor '{config.postprocessor.name}' — config error (see above)")
+        error(
+            f"Post-processor '{config.postprocessor.name}' — config error (see above)"
+        )
         return False
 
     ok = True
@@ -127,26 +132,36 @@ def _test_postprocessors(config: Config) -> bool:
 
     if btype == "claude_code":
         if shutil.which("claude"):
-            success(f"Post-processor '{config.postprocessor.name}': claude_code{model_note}")
+            success(
+                f"Post-processor '{config.postprocessor.name}': claude_code{model_note}"
+            )
             success("  claude CLI: found")
         else:
-            error(f"Post-processor '{config.postprocessor.name}': claude_code{model_note}")
+            error(
+                f"Post-processor '{config.postprocessor.name}': claude_code{model_note}"
+            )
             error("  claude CLI: NOT FOUND — install from https://claude.ai/code")
             ok = False
 
     elif btype == "openai_compat":
         api_base = backend_cfg.get("api_base_url", "")
         api_key = backend_cfg.get("api_key", "sk-none")
-        success(f"Post-processor '{config.postprocessor.name}': openai_compat{model_note}")
+        success(
+            f"Post-processor '{config.postprocessor.name}': openai_compat{model_note}"
+        )
         print_key_value("  Endpoint", api_base)
         if not test_openai_compat_connection(api_key, api_base, model, None):
             ok = False
 
     elif btype == "mock":
-        success(f"Post-processor '{config.postprocessor.name}': mock (no credentials needed)")
+        success(
+            f"Post-processor '{config.postprocessor.name}': mock (no credentials needed)"
+        )
 
     else:
-        error(f"Post-processor '{config.postprocessor.name}' — unknown backend type '{btype}'")
+        error(
+            f"Post-processor '{config.postprocessor.name}' — unknown backend type '{btype}'"
+        )
         ok = False
 
     return ok
@@ -155,7 +170,8 @@ def _test_postprocessors(config: Config) -> bool:
 def _test_clipboard() -> bool:
     """Check clipboard availability. Returns True if OK."""
     from .utils import error, success
-    import shutil, os
+    import shutil
+    import os
 
     print_separator()
     info("Checking clipboard...")
@@ -165,6 +181,7 @@ def _test_clipboard() -> bool:
         return True
     try:
         import copykitten
+
         copykitten.copy("")
         success("copykitten available (X11 / fallback)")
         return True
@@ -204,7 +221,13 @@ def _test_diarization(config: Config) -> None:
 def process_recording(config: Config):
     """Record audio, transcribe, and output the result."""
     import time
-    from .postprocessors import NonePostProcessor, format_output, PostMetadata, make_postprocessor, resolve_output_template
+    from .postprocessors import (
+        NonePostProcessor,
+        format_output,
+        PostMetadata,
+        make_postprocessor,
+        resolve_output_template,
+    )
     from .preprocessors import NonePreprocessor, make_preprocessor
 
     if not check_clipboard_support():
@@ -214,12 +237,16 @@ def process_recording(config: Config):
     if config.recorder.device.mock_source:
         audio_data, _sr = load_wav(config.recorder.device.mock_source)
         duration = get_audio_duration(audio_data)
-        info(f"Mock device: loaded {duration:.1f}s from {config.recorder.device.mock_source}")
+        info(
+            f"Mock device: loaded {duration:.1f}s from {config.recorder.device.mock_source}"
+        )
     else:
         setup_signal_handlers(daemon_mode=False)
         info("Recording... Press Ctrl+C to stop (press twice to cancel)")
         t0 = time.time()
-        audio_data = record_audio(device=config.recorder.device.get_spec(config.recorder.name))
+        audio_data = record_audio(
+            device=config.recorder.device.get_spec(config.recorder.name)
+        )
         duration = get_audio_duration(audio_data)
         if duration < 0.1:
             error("Recording too short or empty. Exiting.")
@@ -244,6 +271,7 @@ def process_recording(config: Config):
             return
 
         from datetime import date
+
         postprocessor = make_postprocessor(config)
         template = resolve_output_template(config)
         metadata = PostMetadata(
@@ -262,8 +290,11 @@ def process_recording(config: Config):
         else:
             result = transcript
         final = format_output(
-            template, result=result, transcript=transcript,
-            metadata=metadata, model=postprocessor.model,
+            template,
+            result=result,
+            transcript=transcript,
+            metadata=metadata,
+            model=postprocessor.model,
             backend=postprocessor.backend_type,
         )
 
@@ -276,7 +307,13 @@ def process_recording(config: Config):
 def process_file(config: Config):
     """Transcribe an existing audio or video file."""
     import time
-    from .postprocessors import NonePostProcessor, PostMetadata, format_output, make_postprocessor, resolve_output_template
+    from .postprocessors import (
+        NonePostProcessor,
+        PostMetadata,
+        format_output,
+        make_postprocessor,
+        resolve_output_template,
+    )
     from .preprocessors import NonePreprocessor, make_preprocessor
 
     if not config.input_file or not os.path.exists(config.input_file):
@@ -292,6 +329,7 @@ def process_file(config: Config):
             info("Transcript file is empty.")
             return
         from datetime import date
+
         postprocessor = make_postprocessor(config)
         template = resolve_output_template(config)
         metadata = PostMetadata(
@@ -310,8 +348,11 @@ def process_file(config: Config):
         else:
             result = transcript
         final = format_output(
-            template, result=result, transcript=transcript,
-            metadata=metadata, model=postprocessor.model,
+            template,
+            result=result,
+            transcript=transcript,
+            metadata=metadata,
+            model=postprocessor.model,
             backend=postprocessor.backend_type,
         )
         output_transcript(final, config)
@@ -352,12 +393,14 @@ def process_file(config: Config):
 
         try:
             import wave as _wave
+
             with _wave.open(temp_path) as wf:
                 duration_s = wf.getnframes() / wf.getframerate()
         except Exception:
             duration_s = 0.0
 
         from datetime import date
+
         postprocessor = make_postprocessor(config)
         template = resolve_output_template(config)
         metadata = PostMetadata(
@@ -376,8 +419,11 @@ def process_file(config: Config):
         else:
             result = transcript
         final = format_output(
-            template, result=result, transcript=transcript,
-            metadata=metadata, model=postprocessor.model,
+            template,
+            result=result,
+            transcript=transcript,
+            metadata=metadata,
+            model=postprocessor.model,
             backend=postprocessor.backend_type,
         )
 
@@ -415,35 +461,46 @@ See https://github.com/sjjsy/kaiku for full documentation and configuration exam
         "-v", "--version", action="version", version=f"kaiku {__version__}"
     )
     parser.add_argument(
-        "-q", "--quiet", action="store_true",
+        "-q",
+        "--quiet",
+        action="store_true",
         help="Quiet mode — only output transcription and errors",
     )
 
     # Setup
     setup_group = parser.add_argument_group("Setup")
     setup_group.add_argument(
-        "-c", "--config", metavar="FILE",
+        "-c",
+        "--config",
+        metavar="FILE",
         help="Path to configuration file",
         default=None,
     )
     setup_group.add_argument(
-        "-e", "--edit", action="store_true",
+        "-e",
+        "--edit",
+        action="store_true",
         help="Open configuration file in editor (creates default config if missing)",
     )
     setup_group.add_argument(
-        "--generate-config", action="store_true",
+        "--generate-config",
+        action="store_true",
         help="Write config template to ~/.config/kaiku/config.yaml",
     )
     setup_group.add_argument(
-        "--print-config", action="store_true",
+        "--print-config",
+        action="store_true",
         help="Print config template to stdout",
     )
     setup_group.add_argument(
-        "--test", action="store_true",
+        "--test",
+        action="store_true",
         help="Test backend connectivity and configured preprocessors, then exit",
     )
     setup_group.add_argument(
-        "-x", "--preset", metavar="NAME",
+        "-x",
+        "--preset",
+        metavar="NAME",
         default=None,
         help=(
             "Pipeline preset name (key under 'presets:' in config). "
@@ -455,16 +512,21 @@ See https://github.com/sjjsy/kaiku for full documentation and configuration exam
     # Audio
     audio_group = parser.add_argument_group("Audio")
     audio_group.add_argument(
-        "--list-devices", action="store_true",
+        "--list-devices",
+        action="store_true",
         help="List available audio input devices",
     )
     audio_group.add_argument(
-        "-d", "--device", metavar="DEV",
+        "-d",
+        "--device",
+        metavar="DEV",
         help="Audio input device (name, ALSA name, or index). Overrides config.",
         default=None,
     )
     audio_group.add_argument(
-        "-i", "--input", metavar="FILE",
+        "-i",
+        "--input",
+        metavar="FILE",
         help=(
             "Transcribe an existing audio or video file instead of recording. "
             "Supported: wav, mp3, m4a, ogg, flac, aac, opus, wma, "
@@ -473,7 +535,9 @@ See https://github.com/sjjsy/kaiku for full documentation and configuration exam
         default=None,
     )
     audio_group.add_argument(
-        "-p", "--preprocessor", metavar="NAME",
+        "-p",
+        "--preprocessor",
+        metavar="NAME",
         default=None,
         help=(
             "Audio preprocessor: none, noisereduce, pyrnnoise, deepfilter. "
@@ -484,7 +548,9 @@ See https://github.com/sjjsy/kaiku for full documentation and configuration exam
     # Transcription
     trans_group = parser.add_argument_group("Transcription")
     trans_group.add_argument(
-        "-b", "--backend", metavar="NAME",
+        "-b",
+        "--backend",
+        metavar="NAME",
         default=None,
         help=(
             "ASR backend to use (key under 'asr_backends:' in config). "
@@ -492,7 +558,9 @@ See https://github.com/sjjsy/kaiku for full documentation and configuration exam
         ),
     )
     trans_group.add_argument(
-        "-l", "--language", metavar="LANG",
+        "-l",
+        "--language",
+        metavar="LANG",
         default=None,
         help=(
             "Language hint for transcription (ISO-639-1, e.g. 'fi', 'en'). "
@@ -500,19 +568,26 @@ See https://github.com/sjjsy/kaiku for full documentation and configuration exam
         ),
     )
     trans_group.add_argument(
-        "-r", "--robust", action="store_true",
+        "-r",
+        "--robust",
+        action="store_true",
         help=(
             "Robust mode for -i file input: split at silence boundaries, "
             "quality-check chunks, retry failures, stream output (tail-f friendly)."
         ),
     )
     trans_group.add_argument(
-        "-C", "--chunk-duration", type=int, metavar="SEC",
+        "-C",
+        "--chunk-duration",
+        type=int,
+        metavar="SEC",
         default=None,
         help="Max chunk duration in seconds for -r/--robust mode (default: 180)",
     )
     trans_group.add_argument(
-        "-g", "--toggle", action="store_true",
+        "-g",
+        "--toggle",
+        action="store_true",
         help=(
             "Toggle recording: first call starts, second call stops and transcribes. "
             "Designed for keyboard shortcuts."
@@ -557,7 +632,8 @@ See https://github.com/sjjsy/kaiku for full documentation and configuration exam
     # VAD (continuous recording)
     vad_group = parser.add_argument_group("VAD (continuous recording)")
     vad_group.add_argument(
-        "--vad", action="store_true",
+        "--vad",
+        action="store_true",
         help=(
             "Continuous recording with voice activity detection. "
             "Transcribes automatically when silence is detected after speech. "
@@ -565,17 +641,23 @@ See https://github.com/sjjsy/kaiku for full documentation and configuration exam
         ),
     )
     vad_group.add_argument(
-        "--interval", type=float, metavar="SEC",
+        "--interval",
+        type=float,
+        metavar="SEC",
         default=None,
         help="Continuous recording with fixed interval (seconds)",
     )
     vad_group.add_argument(
-        "--silence-threshold", type=float, metavar="PROB",
+        "--silence-threshold",
+        type=float,
+        metavar="PROB",
         default=None,
         help="VAD speech probability threshold, 0.0-1.0 (default: 0.5)",
     )
     vad_group.add_argument(
-        "--silence-duration", type=float, metavar="SEC",
+        "--silence-duration",
+        type=float,
+        metavar="SEC",
         default=None,
         help="Silence duration to trigger transcription (default: 1.5 s)",
     )
@@ -583,7 +665,10 @@ See https://github.com/sjjsy/kaiku for full documentation and configuration exam
     # Diarization
     diarize_group = parser.add_argument_group("Diarization")
     diarize_group.add_argument(
-        "-s", "--speakers", type=int, metavar="N",
+        "-s",
+        "--speakers",
+        type=int,
+        metavar="N",
         default=None,
         help=(
             "Speaker count hint for diarization backends (type: whisperx, type: mock-diarize). "
@@ -597,7 +682,9 @@ See https://github.com/sjjsy/kaiku for full documentation and configuration exam
     # Post-processing
     post_group = parser.add_argument_group("Post-processing")
     post_group.add_argument(
-        "-P", "--post", metavar="NAME",
+        "-P",
+        "--post",
+        metavar="NAME",
         default=None,
         help=(
             "AI post-processor name (key in 'postprocessors:' config) "
@@ -607,7 +694,9 @@ See https://github.com/sjjsy/kaiku for full documentation and configuration exam
         ),
     )
     post_group.add_argument(
-        "-M", "--post-model", metavar="MODEL",
+        "-M",
+        "--post-model",
+        metavar="MODEL",
         default=None,
         help=(
             "AI model used for the post-processing (f. ex. claude-sonnet-4-6). "
@@ -618,12 +707,16 @@ See https://github.com/sjjsy/kaiku for full documentation and configuration exam
     # Output
     output_group = parser.add_argument_group("Output")
     output_group.add_argument(
-        "-o", "--output", metavar="FILE",
+        "-o",
+        "--output",
+        metavar="FILE",
         help="Append transcripts to file",
         default=None,
     )
     output_group.add_argument(
-        "-T", "--template", metavar="NAME",
+        "-T",
+        "--template",
+        metavar="NAME",
         default=None,
         help=(
             "Output template name from 'output_templates:' in config. "
@@ -632,7 +725,9 @@ See https://github.com/sjjsy/kaiku for full documentation and configuration exam
         ),
     )
     output_group.add_argument(
-        "-z", "--no-clipboard", action="store_true",
+        "-z",
+        "--no-clipboard",
+        action="store_true",
         help=(
             "Do not copy the transcript (or a file path) to the system clipboard. "
             "Stdout and -o output behave as usual."
@@ -679,17 +774,22 @@ def main():
 
     if args.serve:
         from .local_asr import check_deps
+
         check_deps()
         from .local_asr.app import run_server
+
         run_server(config)
         return
 
     if args.download_model:
         from .local_asr import check_deps
+
         check_deps()
         from .local_asr.model_registry import create_registry
+
         registry = create_registry(
-            config_path=config.local_asr.models_config_path, model_dir=config.local_asr.model_dir
+            config_path=config.local_asr.models_config_path,
+            model_dir=config.local_asr.model_dir,
         )
         registry.download_model(registry.get_default_model())
         return
@@ -701,17 +801,23 @@ def main():
         _test_diarization(config)
         print_separator()
         checks_ok = ok_asr and ok_post and ok_clip
-        info("All checks passed." if checks_ok else "Some checks failed — see details above.")
+        info(
+            "All checks passed."
+            if checks_ok
+            else "Some checks failed — see details above."
+        )
         sys.exit(0 if checks_ok else 1)
 
     if args.toggle:
         from .toggle import toggle_recording
+
         toggle_recording(config)
         return
 
     if args.input:
         if args.robust:
             from .robust import process_file_robust
+
             process_file_robust(config)
         else:
             process_file(config)

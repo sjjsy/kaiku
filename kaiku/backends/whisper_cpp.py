@@ -32,7 +32,7 @@ class WhisperCppConfig:
     extra_args: list[str] = field(default_factory=list)
 
     @classmethod
-    def from_config(cls, config: dict) -> "WhisperCppConfig":
+    def from_config(cls, config: dict) -> WhisperCppConfig:
         wc = config.get("whisper_cpp", {})
         vad = wc.get("vad_model")
         return cls(
@@ -98,6 +98,7 @@ def transcribe(
         # Rough estimate: audio duration × multiplier, minimum 30 s
         try:
             import wave
+
             with wave.open(audio_path) as wf:
                 dur = wf.getnframes() / wf.getframerate()
             timeout = max(30.0, dur * cfg.timeout_multiplier)
@@ -108,9 +109,7 @@ def transcribe(
     try:
         result = run_subprocess(cmd, capture_output=True, text=True, timeout=timeout)
     except subprocess.TimeoutExpired:
-        raise TranscriptionError(
-            f"whisper-cli timed out after {timeout:.0f}s"
-        )
+        raise TranscriptionError(f"whisper-cli timed out after {timeout:.0f}s")
     elapsed = time.time() - t0
     info(f"whisper-cli completed in {elapsed:.1f}s")
 

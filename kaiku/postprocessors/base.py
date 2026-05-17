@@ -8,13 +8,13 @@ from dataclasses import dataclass, field
 
 @dataclass
 class PostMetadata:
-    date: str           # YYYY-MM-DD
-    duration_s: float   # recording duration in seconds
-    language: str       # ISO-639-1 or "auto"
-    prompt_name: str    # which post-processor was used
+    date: str  # YYYY-MM-DD
+    duration_s: float  # recording duration in seconds
+    language: str  # ISO-639-1 or "auto"
+    prompt_name: str  # which post-processor was used
     speakers: list[str] = field(default_factory=list)  # known speaker names
-    diarized: bool = False   # whether transcript has speaker labels
-    source: str = "file"     # "toggle", "file", "vad", "interval"
+    diarized: bool = False  # whether transcript has speaker labels
+    source: str = "file"  # "toggle", "file", "vad", "interval"
 
 
 class PostProcessor(ABC):

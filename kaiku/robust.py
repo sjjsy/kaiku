@@ -67,7 +67,7 @@ def _estimate_timeout(chunk_duration_s: float) -> float:
     return max(30.0, chunk_duration_s * 4.0)
 
 
-def process_file_robust(config: "Config"):
+def process_file_robust(config: Config):
     """Transcribe a long audio file in silence-bounded chunks with quality checks.
 
     Chunk ASR text is appended iteratively to ``-o`` FILE or to a temp file (when
@@ -80,7 +80,13 @@ def process_file_robust(config: "Config"):
         config: Resolved run config (``input_file``, ``output_file``, ``chunk_duration``, …).
     """
     import sys
-    from .postprocessors import NonePostProcessor, PostMetadata, format_output, make_postprocessor, resolve_output_template
+    from .postprocessors import (
+        NonePostProcessor,
+        PostMetadata,
+        format_output,
+        make_postprocessor,
+        resolve_output_template,
+    )
     from .preprocessors import NonePreprocessor, make_preprocessor
 
     if not config.input_file or not os.path.exists(config.input_file):
@@ -132,7 +138,9 @@ def process_file_robust(config: "Config"):
         timeout = _estimate_timeout(chunk_s)
 
         chunk_audio = audio[start_ms:end_ms]
-        tmp = tempfile.NamedTemporaryFile(suffix=".wav", prefix="kaiku_chunk_", delete=False)
+        tmp = tempfile.NamedTemporaryFile(
+            suffix=".wav", prefix="kaiku_chunk_", delete=False
+        )
         tmp_path = tmp.name
         tmp.close()
         chunk_audio.export(tmp_path, format="wav")
@@ -144,7 +152,9 @@ def process_file_robust(config: "Config"):
 
         for attempt in range(retries):
             try:
-                candidate = transcribe(tmp_path, config, raise_on_error=True, timeout=timeout)
+                candidate = transcribe(
+                    tmp_path, config, raise_on_error=True, timeout=timeout
+                )
                 if _check_quality(candidate):
                     text = candidate
                     quality_ok = True
@@ -157,9 +167,13 @@ def process_file_robust(config: "Config"):
                         )
             except TranscriptionError as e:
                 if attempt < retries - 1:
-                    warning(f"Chunk {idx}/{n_chunks}: error (attempt {attempt + 1}/{retries}): {e}")
+                    warning(
+                        f"Chunk {idx}/{n_chunks}: error (attempt {attempt + 1}/{retries}): {e}"
+                    )
                 else:
-                    warning(f"Chunk {idx}/{n_chunks}: failed after {retries} attempts: {e}")
+                    warning(
+                        f"Chunk {idx}/{n_chunks}: failed after {retries} attempts: {e}"
+                    )
             except Exception as e:
                 warning(f"Chunk {idx}/{n_chunks}: unexpected error: {e}")
                 break
@@ -168,7 +182,9 @@ def process_file_robust(config: "Config"):
 
         elapsed = time.time() - t_chunk
         preview = (text or "")[:60].replace("\n", " ")
-        info(f"Chunk {idx}/{n_chunks} ({chunk_s:.1f}s audio → {elapsed:.1f}s): {preview}…")
+        info(
+            f"Chunk {idx}/{n_chunks} ({chunk_s:.1f}s audio → {elapsed:.1f}s): {preview}…"
+        )
 
         if text is None:
             warning(f"Chunk {idx}/{n_chunks} could not be transcribed; skipping.")
@@ -190,7 +206,9 @@ def process_file_robust(config: "Config"):
             f.write(text)
             f.write("\n\n")
         if output_file:
-            info(f"Chunk {idx}/{n_chunks} of size {len(text)} appended to {output_file}")
+            info(
+                f"Chunk {idx}/{n_chunks} of size {len(text)} appended to {output_file}"
+            )
         else:
             print(text)
             print()
@@ -211,6 +229,7 @@ def process_file_robust(config: "Config"):
         return
 
     from datetime import date
+
     postprocessor = make_postprocessor(config)
     template = resolve_output_template(config)
     metadata = PostMetadata(
@@ -230,8 +249,11 @@ def process_file_robust(config: "Config"):
         result = transcript
 
     text_output = format_output(
-        template, result=result, transcript=transcript,
-        metadata=metadata, model=postprocessor.model,
+        template,
+        result=result,
+        transcript=transcript,
+        metadata=metadata,
+        model=postprocessor.model,
         backend=postprocessor.backend_type,
     )
 

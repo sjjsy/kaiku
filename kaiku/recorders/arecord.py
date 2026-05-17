@@ -29,6 +29,7 @@ def _friendly_to_alsa(device: str) -> str | None:
     """
     try:
         import sounddevice as sd
+
         info = sd.query_devices(device, "input")
         m = re.search(r"\(hw:(\d+),(\d+)\)", info["name"])
         if m:
@@ -56,9 +57,14 @@ class ArecordRecorder(AudioRecorder):
         if device_info:
             alsa_device = device_info.get_spec("arecord")
 
-        rate = _device_native_rate(
-            alsa_device if isinstance(alsa_device, str) and _is_alsa_device(alsa_device) else None
-        ) or 44100
+        rate = (
+            _device_native_rate(
+                alsa_device
+                if isinstance(alsa_device, str) and _is_alsa_device(alsa_device)
+                else None
+            )
+            or 44100
+        )
         cmd = ["arecord", "-f", "S16_LE", "-r", str(rate), "-c", "1"]
 
         if alsa_device is not None and _is_alsa_device(alsa_device):

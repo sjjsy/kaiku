@@ -12,8 +12,7 @@ Requires: pip install kaiku[diarize]
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Optional
+from dataclasses import dataclass
 
 from ..transcribe import TranscriptionError
 
@@ -65,9 +64,10 @@ class WhisperXConfig:
         min_speakers: Lower bound on speaker count passed to pyannote (optional).
         max_speakers: Upper bound on speaker count passed to pyannote (optional).
     """
+
     hf_token: str
-    min_speakers: Optional[int] = None
-    max_speakers: Optional[int] = None
+    min_speakers: int | None = None
+    max_speakers: int | None = None
 
 
 def transcribe(
@@ -125,7 +125,11 @@ def transcribe(
             device=device,
         )
         result = whisperx.align(
-            result["segments"], align_model, align_meta, audio, device,
+            result["segments"],
+            align_model,
+            align_meta,
+            audio,
+            device,
             return_char_alignments=False,
         )
 

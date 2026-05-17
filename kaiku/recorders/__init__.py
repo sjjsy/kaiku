@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sys
 
-from .arecord import ArecordRecorder, _ALSA_PREFIXES
+from .arecord import ArecordRecorder
 from .base import AudioRecorder, _kill_process, _pid_alive
 from .mock import MockRecorder
 from .sounddevice_recorder import SounddeviceRecorder
@@ -54,7 +54,12 @@ def make_recorder(name: str, device_info=None) -> AudioRecorder:
     """
     if name in (None, "auto"):
         order = PREFERENCE_ORDER
-        if device_info and device_info.alsa_name and device_info.alsa_name and not device_info.portaudio_name:
+        if (
+            device_info
+            and device_info.alsa_name
+            and device_info.alsa_name
+            and not device_info.portaudio_name
+        ):
             order = ["arecord", "sounddevice"]
         for candidate in order:
             recorder = _CLASS_MAP[candidate]()

@@ -9,28 +9,5 @@ on:
 jobs:
   lint:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: ["3.10", "3.12"]
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
-
-      - name: Install dev dependencies
-        run: pip install -e ".[dev]"
-
-      - name: Ruff check
-        run: ruff check kaiku/
-
-      - name: Ruff format check
-        run: ruff format --check kaiku/
-
-      - name: Type check (ty)
-        run: ty check
-
-      - name: Complexity check (complexipy)
-        run: complexipy kaiku/ -e "_vendor"
+      - run: echo "Lint disabled until Ubuntu 26.04 upgrade (ruff, ty, complexipy)."

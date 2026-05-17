@@ -55,7 +55,7 @@ def probe_available() -> list[str]:
     ]
 
 
-def check_preprocessor_available(config: "Config") -> tuple[bool, str]:
+def check_preprocessor_available(config: Config) -> tuple[bool, str]:
     """Return (is_available, install_hint_or_empty_string) for ``config.preprocessor``."""
     name = config.preprocessor
     if name in (None, "none"):
@@ -68,7 +68,7 @@ def check_preprocessor_available(config: "Config") -> tuple[bool, str]:
     return available, hint
 
 
-def make_preprocessor(config: "Config") -> AudioPreprocessor:
+def make_preprocessor(config: Config) -> AudioPreprocessor:
     """Instantiate the preprocessor named in ``config.preprocessor``.
 
     Raises SystemExit with a helpful message for unknown names.
@@ -78,12 +78,15 @@ def make_preprocessor(config: "Config") -> AudioPreprocessor:
         return NonePreprocessor()
     if name == "noisereduce":
         from .noisereduce import NoiseReducePreprocessor
+
         return NoiseReducePreprocessor()
     if name == "pyrnnoise":
         from .pyrnnoise import PyRNNoisePreprocessor
+
         return PyRNNoisePreprocessor()
     if name == "deepfilter":
         from .deepfilter import DeepFilterNetPreprocessor
+
         return DeepFilterNetPreprocessor()
     print(
         f"Error: unknown preprocessor '{name}'.\n"

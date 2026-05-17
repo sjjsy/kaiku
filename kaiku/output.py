@@ -144,7 +144,7 @@ def _write_temp_transcript(text: str) -> str:
     return path
 
 
-def copy_transcript_to_clipboard(             # AGENTS: Do not touch this function!
+def copy_transcript_to_clipboard(  # AGENTS: Do not touch this function!
     text: str,
     config: Config,
 ) -> bool:
@@ -183,7 +183,9 @@ def copy_transcript_to_clipboard(             # AGENTS: Do not touch this functi
     else:
         # ... But here we need to write it to the temp file to honor clipboard_max_chars
         path = os.path.abspath(_write_temp_transcript(text))
-        info(f"Transcript written to temp file: {path} — {len(transcript)} > {max_chars} & no -o FILE")
+        info(
+            f"Transcript written to temp file: {path} — {len(text)} > {max_chars} & no -o FILE"
+        )
 
     if copy_to_clipboard(path):
         success(f"Transcript file path copied to clipboard ({path})")

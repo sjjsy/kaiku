@@ -9,11 +9,15 @@ import tempfile
 import wave
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 import numpy as np
 import sounddevice as sd
 
 from .utils import info, is_stop_requested, run_subprocess, warning
+
+if TYPE_CHECKING:
+    from pydub import AudioSegment
 
 
 @dataclass
@@ -92,7 +96,9 @@ def query_devices() -> list[DeviceInfo]:
 
     # Also try to get ALSA devices directly (arecord -L) for hardware not visible to sounddevice
     try:
-        result = run_subprocess(["arecord", "-L"], capture_output=True, text=True, check=False)
+        result = run_subprocess(
+            ["arecord", "-L"], capture_output=True, text=True, check=False
+        )
         if result.returncode == 0:
             lines = result.stdout.split("\n")
             i = 0
@@ -106,7 +112,9 @@ def query_devices() -> list[DeviceInfo]:
                 # Look for hw: or plughw: entries (including named format like hw:CARD=Snowball,DEV=0)
                 if line.startswith("hw:") or line.startswith("plughw:"):
                     # Skip numeric hw:X,Y format (already covered by sounddevice)
-                    if re.match(r"hw:\d+,\d+$", line) or re.match(r"plughw:\d+,\d+$", line):
+                    if re.match(r"hw:\d+,\d+$", line) or re.match(
+                        r"plughw:\d+,\d+$", line
+                    ):
                         continue
 
                     alsa_name = line.replace("plughw:", "").replace("hw:", "")
@@ -175,20 +183,18 @@ def find_device(name: str) -> DeviceInfo | None:
     # Try ALSA name match (hw:X,Y or plughw:X,Y)
     available = query_devices()
     for dev in available:
-        if dev.alsa_name and dev.alsa_name == name.replace("hw:", "").replace("plughw:", ""):
+        if dev.alsa_name and dev.alsa_name == name.replace("hw:", "").replace(
+            "plughw:", ""
+        ):
             return dev
 
     # Try case-insensitive substring match (exact > partial)
     name_lower = name.lower()
-    exact_matches = [
-        dev for dev in available if dev.name.lower() == name_lower
-    ]
+    exact_matches = [dev for dev in available if dev.name.lower() == name_lower]
     if exact_matches:
         return exact_matches[0]
 
-    partial_matches = [
-        dev for dev in available if name_lower in dev.name.lower()
-    ]
+    partial_matches = [dev for dev in available if name_lower in dev.name.lower()]
     if partial_matches:
         info(f"Device '{name}' not exact; using first match: {partial_matches[0].name}")
         return partial_matches[0]
@@ -247,9 +253,7 @@ def list_audio_devices():
     print("-" * 80)
     for dev in available:
         print(f"  {dev.index}: {dev}")
-        print(
-            f"      Channels: {dev.channels}, Sample Rate: {dev.sample_rate} Hz"
-        )
+        print(f"      Channels: {dev.channels}, Sample Rate: {dev.sample_rate} Hz")
     print("-" * 80)
     print("\nUse --device to select by:")
     print("  Index:        kaiku --device 0")
@@ -458,12 +462,17 @@ def convert_audio_to_wav(input_path: str, output_path: str | None = None) -> str
 
     if shutil.which("ffmpeg"):
         cmd = [
-            "ffmpeg", "-y",
-            "-i", input_path,
-            "-vn",                              # drop video stream
-            "-ar", "16000",                     # 16 kHz
-            "-ac", "1",                         # mono
-            "-af", "highpass=f=200,lowpass=f=3000,loudnorm",
+            "ffmpeg",
+            "-y",
+            "-i",
+            input_path,
+            "-vn",  # drop video stream
+            "-ar",
+            "16000",  # 16 kHz
+            "-ac",
+            "1",  # mono
+            "-af",
+            "highpass=f=200,lowpass=f=3000,loudnorm",
             output_path,
         ]
         run_subprocess(cmd, check=True, capture_output=True)
@@ -473,6 +482,7 @@ def convert_audio_to_wav(input_path: str, output_path: str | None = None) -> str
             "no spectral cleaning). Install ffmpeg for full format support."
         )
         from pydub import AudioSegment  # noqa: PLC0415
+
         audio = AudioSegment.from_file(input_path)
         audio.export(output_path, format="wav")
 
@@ -528,14 +538,19 @@ def calculate_rms(audio_data: np.ndarray) -> float:
     return float(np.sqrt(np.mean(audio_data**2)))
 
 
-def audiosegment_to_float32(audio: "AudioSegment") -> np.ndarray:  # type: ignore[name-defined]
+def audiosegment_to_float32(audio: AudioSegment) -> np.ndarray:  # type: ignore[name-defined]
     """Convert a mono AudioSegment to a float32 numpy array in [-1, 1]."""
     samples = np.array(audio.get_array_of_samples(), dtype=np.int16)
     return samples.astype(np.float32) / 32768.0
 
 
-def float32_to_audiosegment(audio: np.ndarray, sample_rate: int = 16000) -> "AudioSegment":  # type: ignore[name-defined]
+def float32_to_audiosegment(
+    audio: np.ndarray, sample_rate: int = 16000
+) -> AudioSegment:  # type: ignore[name-defined]
     """Convert a float32 numpy array in [-1, 1] to a mono AudioSegment."""
     from pydub import AudioSegment
+
     samples_int16 = (np.clip(audio, -1.0, 1.0) * 32767.0).astype(np.int16)
-    return AudioSegment(samples_int16.tobytes(), sample_width=2, frame_rate=sample_rate, channels=1)
+    return AudioSegment(
+        samples_int16.tobytes(), sample_width=2, frame_rate=sample_rate, channels=1
+    )

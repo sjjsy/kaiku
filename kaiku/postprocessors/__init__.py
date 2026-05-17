@@ -36,7 +36,8 @@ _FALLBACK_TEMPLATE = "{result}"
 # Config resolution helpers
 # ---------------------------------------------------------------------------
 
-def resolve_output_template(config: "Config") -> str:
+
+def resolve_output_template(config: Config) -> str:
     """Return the output template string to use for this run.
 
     Lookup order:
@@ -104,6 +105,7 @@ def format_output(
 # Prompt resolution (extends + extra, context_path)
 # ---------------------------------------------------------------------------
 
+
 def _load_context(paths: list) -> str | None:
     """Expand glob patterns, read matching files, return organized context block.
 
@@ -126,7 +128,10 @@ def _load_context(paths: list) -> str | None:
                     content = fh.read()
                 files.append((path, content))
             except OSError as e:
-                print(f"Warning: context_path could not read '{path}': {e}", file=sys.stderr)
+                print(
+                    f"Warning: context_path could not read '{path}': {e}",
+                    file=sys.stderr,
+                )
 
     if not files:
         return None
@@ -244,6 +249,7 @@ def _resolve_prompt(name: str, config: dict, _seen: set | None = None) -> dict:
 # Backend config resolution
 # ---------------------------------------------------------------------------
 
+
 def _resolve_backend(
     config: dict,
     backend_name: str | None,
@@ -308,7 +314,8 @@ def _resolve_backend(
 # Public factory
 # ---------------------------------------------------------------------------
 
-def make_postprocessor(config: "Config") -> PostProcessor:
+
+def make_postprocessor(config: Config) -> PostProcessor:
     """Instantiate a post-processor from the resolved config.
 
     Args:
@@ -341,13 +348,16 @@ def make_postprocessor(config: "Config") -> PostProcessor:
         if model_override:
             resolved["model"] = model_override
 
-    backend_cfg = _resolve_backend(config_dict, resolved["backend_name"], resolved["model"])
+    backend_cfg = _resolve_backend(
+        config_dict, resolved["backend_name"], resolved["model"]
+    )
     context_text = _load_context(resolved["context_paths"])
 
     btype = backend_cfg["type"]
 
     if btype == "openai_compat":
         from .openai_compat import OpenAICompatPostProcessor
+
         return OpenAICompatPostProcessor(
             prompt_name=name if " " not in name else "custom",
             api_base_url=backend_cfg["api_base_url"],
@@ -359,6 +369,7 @@ def make_postprocessor(config: "Config") -> PostProcessor:
         )
     elif btype == "claude_code":
         from .claude_code import ClaudeCodePostProcessor
+
         return ClaudeCodePostProcessor(
             prompt_name=name if " " not in name else "custom",
             system_prompt=resolved["system_prompt"],

@@ -114,7 +114,7 @@ def _make_audio_callback(state: RecorderState):
 
 def _process_transcription(
     task: TranscriptionTask,
-    config: "Config",
+    config: Config,
 ) -> tuple[int, str | None, str | None]:
     """Process a transcription task using ``config`` for API ASR."""
     try:
@@ -129,7 +129,7 @@ def _process_transcription(
             pass
 
 
-def _run_output_worker(state: RecorderState, config: "Config"):
+def _run_output_worker(state: RecorderState, config: Config):
     """Output transcription results in order."""
     while not is_stop_requested():
         try:
@@ -151,7 +151,7 @@ def _run_output_worker(state: RecorderState, config: "Config"):
 def _output_single_result(
     text: str | None,
     error: str | None,
-    config: "Config",
+    config: Config,
 ):
     """Output a single transcription result."""
     if error:
@@ -167,7 +167,7 @@ def _transcribe_chunks(
     cfg: RecorderConfig,
     state: RecorderState,
     executor: ThreadPoolExecutor,
-    config: "Config",
+    config: Config,
     skip_silence_check: bool = False,
 ):
     """Transcribe accumulated audio chunks asynchronously.
@@ -236,7 +236,9 @@ def _transcribe_chunks(
     state.last_transcribe_time = time.time()
 
 
-def _run_recording_loop(cfg: RecorderConfig, state: RecorderState, executor, config: "Config"):
+def _run_recording_loop(
+    cfg: RecorderConfig, state: RecorderState, executor, config: Config
+):
     """Run the main recording loop."""
     import sounddevice as sd
 
@@ -256,13 +258,18 @@ def _run_recording_loop(cfg: RecorderConfig, state: RecorderState, executor, con
                 else:
                     sd.sleep(100)
                     if time.time() - state.last_transcribe_time >= cfg.interval:
-                        _transcribe_chunks(cfg, state, executor, config, skip_silence_check=False)
+                        _transcribe_chunks(
+                            cfg, state, executor, config, skip_silence_check=False
+                        )
     except KeyboardInterrupt:
         pass
 
 
 def _handle_vad_iteration(
-    cfg: RecorderConfig, state: RecorderState, executor: ThreadPoolExecutor, config: "Config"
+    cfg: RecorderConfig,
+    state: RecorderState,
+    executor: ThreadPoolExecutor,
+    config: Config,
 ):
     """Handle a single VAD-mode iteration."""
     triggered = state.should_transcribe.wait(timeout=0.1)
@@ -274,7 +281,7 @@ def _handle_vad_iteration(
 
 
 def continuous_recording(
-    config: "Config",
+    config: Config,
     sample_rate: int = 16000,
     min_transcribe_interval: float = 0.5,
     max_concurrent_transcriptions: int = 3,

@@ -17,7 +17,9 @@ import sys
 from ..utils import run_subprocess
 from .base import PostMetadata, PostProcessor
 
-_DEFAULT_USER_TEMPLATE = "Transcript (recorded {date}, {duration_s:.0f}s):\n\n{transcript}"
+_DEFAULT_USER_TEMPLATE = (
+    "Transcript (recorded {date}, {duration_s:.0f}s):\n\n{transcript}"
+)
 
 
 class ClaudeCodePostProcessor(PostProcessor):

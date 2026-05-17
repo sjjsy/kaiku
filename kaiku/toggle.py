@@ -15,7 +15,12 @@ from typing import TYPE_CHECKING
 
 from .audio import load_wav, save_audio
 from .output import output_transcript
-from .postprocessors import NonePostProcessor, PostMetadata, format_output, make_postprocessor
+from .postprocessors import (
+    NonePostProcessor,
+    PostMetadata,
+    format_output,
+    make_postprocessor,
+)
 from .preprocessors import NonePreprocessor, make_preprocessor
 from .recorders import _kill_process, _pid_alive, make_recorder
 from .transcribe import transcribe
@@ -35,13 +40,14 @@ def _notify(title: str, body: str):
         try:
             run_subprocess(
                 ["notify-send", "-t", "8000", title, body],
-                check=False, capture_output=True,
+                check=False,
+                capture_output=True,
             )
         except Exception:
             pass
 
 
-def toggle_recording(config: "Config"):
+def toggle_recording(config: Config):
     """Start or stop toggle-mode recording."""
     lock_path = _lock_path()
 
@@ -51,7 +57,7 @@ def toggle_recording(config: "Config"):
         _start_recording(lock_path, config)
 
 
-def _start_recording(lock_path: str, config: "Config"):
+def _start_recording(lock_path: str, config: Config):
     audio_path = tempfile.NamedTemporaryFile(
         suffix=".wav", prefix="kaiku_", delete=False
     ).name
@@ -68,12 +74,16 @@ def _start_recording(lock_path: str, config: "Config"):
     with open(lock_path, "w") as f:
         json.dump(lock_data, f)
 
-    device_desc = f" with {config.recorder.device.name}" if config.recorder.device else " (default device)"
+    device_desc = (
+        f" with {config.recorder.device.name}"
+        if config.recorder.device
+        else " (default device)"
+    )
     info(f"Recording started ({recorder.name}, pid {pid}){device_desc}")
     _notify("kaiku", f"Recording{device_desc}… (run kaiku --toggle to stop)")
 
 
-def _stop_and_transcribe(lock_path: str, config: "Config"):
+def _stop_and_transcribe(lock_path: str, config: Config):
     with open(lock_path) as f:
         lock_data = json.load(f)
 
@@ -96,7 +106,7 @@ def _stop_and_transcribe(lock_path: str, config: "Config"):
     _transcribe_and_output(audio_path, config)
 
 
-def _transcribe_and_output(audio_path: str, config: "Config"):
+def _transcribe_and_output(audio_path: str, config: Config):
     if not os.path.exists(audio_path) or os.path.getsize(audio_path) < 100:
         info("Audio file is empty or missing — nothing to transcribe.")
         return
@@ -104,6 +114,7 @@ def _transcribe_and_output(audio_path: str, config: "Config"):
     duration = 0.0
     try:
         import wave as _wave
+
         with _wave.open(audio_path) as wf:
             duration = wf.getnframes() / wf.getframerate()
         info(f"Recorded {duration:.1f}s of audio, transcribing…")
@@ -148,6 +159,7 @@ def _transcribe_and_output(audio_path: str, config: "Config"):
 
     from datetime import date
     from .postprocessors import resolve_output_template
+
     postprocessor = make_postprocessor(config)
     template = resolve_output_template(config)
     metadata = PostMetadata(
@@ -166,8 +178,11 @@ def _transcribe_and_output(audio_path: str, config: "Config"):
     else:
         result = transcript
     final = format_output(
-        template, result=result, transcript=transcript,
-        metadata=metadata, model=postprocessor.model,
+        template,
+        result=result,
+        transcript=transcript,
+        metadata=metadata,
+        model=postprocessor.model,
         backend=postprocessor.backend_type,
     )
 

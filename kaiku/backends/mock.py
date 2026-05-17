@@ -13,8 +13,7 @@ All types accept an optional latency_ms for realistic latency simulation.
 from __future__ import annotations
 
 import wave
-from dataclasses import dataclass, field
-from typing import Optional
+from dataclasses import dataclass
 
 from ..transcribe import TranscriptionError
 from ..utils import info
@@ -34,6 +33,7 @@ class MockConfig:
         response: Text to return as the transcription. If not provided, uses default.
         latency_ms: Simulated processing latency in milliseconds (optional, for realism).
     """
+
     response: str = _DEFAULT_RESPONSE
     latency_ms: int = 0
 
@@ -63,6 +63,7 @@ def transcribe(
     """
     if cfg.latency_ms > 0:
         import time
+
         latency_s = cfg.latency_ms / 1000.0
         info(f"Mock backend: simulating {cfg.latency_ms}ms latency...")
         time.sleep(latency_s)
@@ -84,6 +85,7 @@ def _wav_duration(audio_path: str) -> float:
 # Transcript-based mock (mock-fwd / mock-bwd)
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class MockTranscriptConfig:
     """Configuration for transcript-based mock backends.
@@ -93,12 +95,13 @@ class MockTranscriptConfig:
         direction: 'forward' (natural order) or 'backward' (words reversed).
         latency_ms: Optional simulated latency in milliseconds.
     """
+
     transcript_path: str
     direction: str = "forward"
     latency_ms: int = 0
 
     @classmethod
-    def from_config(cls, config: dict, direction: str) -> "MockTranscriptConfig":
+    def from_config(cls, config: dict, direction: str) -> MockTranscriptConfig:
         return cls(
             transcript_path=config.get("transcript_path", ""),
             direction=direction,
@@ -128,6 +131,7 @@ def transcribe_from_transcript(
 
     if cfg.latency_ms > 0:
         import time
+
         time.sleep(cfg.latency_ms / 1000.0)
         info(f"Mock-{cfg.direction} backend: simulated {cfg.latency_ms}ms latency")
 
@@ -137,9 +141,7 @@ def transcribe_from_transcript(
 
     transcript_path = os.path.expanduser(cfg.transcript_path)
     if not os.path.exists(transcript_path):
-        raise TranscriptionError(
-            f"Mock transcript file not found: {transcript_path}"
-        )
+        raise TranscriptionError(f"Mock transcript file not found: {transcript_path}")
 
     with open(transcript_path, encoding="utf-8") as fh:
         text = fh.read()
@@ -163,6 +165,7 @@ def transcribe_from_transcript(
 # Mock diarization backend (mock-diarize)
 # ---------------------------------------------------------------------------
 
+
 def _fmt_ts(seconds: float) -> str:
     h = int(seconds // 3600)
     m = int((seconds % 3600) // 60)
@@ -181,6 +184,7 @@ class MockDiarizeConfig:
         transcript_path: Path to the source transcript text file.
         speaker_count: Number of speakers to cycle through.
     """
+
     transcript_path: str
     speaker_count: int = 2
 

@@ -12,10 +12,10 @@ import functools
 import os
 import sys
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 
 from .audio import DeviceInfo
-from .utils import info, warning
+from .utils import info
 
 if TYPE_CHECKING:
     pass
@@ -25,6 +25,7 @@ if TYPE_CHECKING:
 # Preset (plain data container — not a resolver)
 # ---------------------------------------------------------------------------
 
+
 @dataclass(frozen=True)
 class Preset:
     """Pipeline preset: an atomic combination of all processing stages.
@@ -32,23 +33,26 @@ class Preset:
     Format in config: [preprocessor, asr_backend, postprocessor, description]
     This order matches the pipeline flow: audio → preprocess → ASR → postprocess → output.
     """
+
     name: str
     preprocessor: str
     asr_backend: str
     postprocessor: str
-    postprocessor_backend: Optional[str] = None
-    description: Optional[str] = None
+    postprocessor_backend: str | None = None
+    description: str | None = None
 
     def validate(self) -> None:
         if not self.preprocessor:
             raise ValueError(f"Preset '{self.name}': preprocessor is required")
         if not self.asr_backend or self.asr_backend == "none":
-            raise ValueError(f"Preset '{self.name}': asr_backend is required (cannot be 'none')")
+            raise ValueError(
+                f"Preset '{self.name}': asr_backend is required (cannot be 'none')"
+            )
         if not self.postprocessor:
             raise ValueError(f"Preset '{self.name}': postprocessor is required")
 
     @classmethod
-    def from_dict(cls, name: str, defn) -> "Preset":
+    def from_dict(cls, name: str, defn) -> Preset:
         if not isinstance(defn, list) or len(defn) != 4:
             raise ValueError(
                 f"Preset '{name}' must be a 4-element list: "
@@ -71,6 +75,7 @@ class Preset:
 # ASRBackendConfig
 # ---------------------------------------------------------------------------
 
+
 class ASRBackendConfig:
     """Lazy-resolved ASR backend configuration.
 
@@ -87,7 +92,11 @@ class ASRBackendConfig:
     @functools.cached_property
     def name(self) -> str:
         n = getattr(self._args, "backend", None) or self._preset.asr_backend
-        source = "CLI -b" if getattr(self._args, "backend", None) else f"preset '{self._preset.name}'"
+        source = (
+            "CLI -b"
+            if getattr(self._args, "backend", None)
+            else f"preset '{self._preset.name}'"
+        )
         info(f"Using backend: {n} ({source})")
         return n
 
@@ -105,7 +114,7 @@ class ASRBackendConfig:
         return self._defn.get("type", "api")
 
     @functools.cached_property
-    def api_key(self) -> Optional[str]:
+    def api_key(self) -> str | None:
         if self.type not in ("api",):
             return None
         key = self._defn.get("api_key") or os.environ.get("OPENAI_API_KEY")
@@ -119,7 +128,7 @@ class ASRBackendConfig:
         return key
 
     @functools.cached_property
-    def api_base_url(self) -> Optional[str]:
+    def api_base_url(self) -> str | None:
         url = self._defn.get("api_base_url")
         if self.type == "api" and not url:
             raise ValueError(f"Backend '{self.name}' requires api_base_url in config.")
@@ -128,18 +137,18 @@ class ASRBackendConfig:
         return url
 
     @functools.cached_property
-    def model_name(self) -> Optional[str]:
+    def model_name(self) -> str | None:
         m = self._defn.get("model_name")
         if self.type == "api" and not m:
             raise ValueError(f"Backend '{self.name}' requires model_name in config.")
         return m
 
     @functools.cached_property
-    def org_id(self) -> Optional[str]:
+    def org_id(self) -> str | None:
         return self._defn.get("org_id") or os.environ.get("OPENAI_ORG_ID")
 
     @functools.cached_property
-    def binary(self) -> Optional[str]:
+    def binary(self) -> str | None:
         b = os.path.expanduser(self._defn.get("binary") or "")
         if self.type == "whisper_cpp" and not b:
             raise ValueError(f"Backend '{self.name}' requires binary path in config.")
@@ -148,7 +157,7 @@ class ASRBackendConfig:
         return b or None
 
     @functools.cached_property
-    def model(self) -> Optional[str]:
+    def model(self) -> str | None:
         m = os.path.expanduser(self._defn.get("model") or "")
         if self.type == "whisper_cpp" and not m:
             raise ValueError(f"Backend '{self.name}' requires model path in config.")
@@ -164,7 +173,7 @@ class ASRBackendConfig:
         return t
 
     @functools.cached_property
-    def vad_model(self) -> Optional[str]:
+    def vad_model(self) -> str | None:
         v = self._defn.get("vad_model")
         if not v:
             return None
@@ -174,7 +183,7 @@ class ASRBackendConfig:
         return path
 
     @functools.cached_property
-    def response(self) -> Optional[str]:
+    def response(self) -> str | None:
         r = self._defn.get("response")
         if r:
             info(f"  Response: {len(r)} characters")
@@ -188,32 +197,36 @@ class ASRBackendConfig:
         return ms
 
     @functools.cached_property
-    def transcript_path(self) -> Optional[str]:
+    def transcript_path(self) -> str | None:
         p = self._defn.get("transcript_path")
         if p:
             info(f"  Transcript: {p}")
         return os.path.expanduser(p) if p else None
 
     @functools.cached_property
-    def speaker_count(self) -> Optional[int]:
+    def speaker_count(self) -> int | None:
         v = self._defn.get("speaker_count")
         return int(v) if v is not None else None
 
     @functools.cached_property
-    def hf_token(self) -> Optional[str]:
+    def hf_token(self) -> str | None:
         token = self._defn.get("hf_token") or os.environ.get("HF_TOKEN")
         if token:
-            src = "asr_backends entry" if self._defn.get("hf_token") else "env var HF_TOKEN"
+            src = (
+                "asr_backends entry"
+                if self._defn.get("hf_token")
+                else "env var HF_TOKEN"
+            )
             info(f"  HF token: from {src}")
         return token
 
     @functools.cached_property
-    def min_speakers(self) -> Optional[int]:
+    def min_speakers(self) -> int | None:
         v = self._defn.get("speakers_min")
         return int(v) if v is not None else None
 
     @functools.cached_property
-    def max_speakers(self) -> Optional[int]:
+    def max_speakers(self) -> int | None:
         v = self._defn.get("speakers_max")
         return int(v) if v is not None else None
 
@@ -221,6 +234,7 @@ class ASRBackendConfig:
 # ---------------------------------------------------------------------------
 # PostprocessorConfig (merges old PostprocessorConfig + PostprocessorBackendConfig)
 # ---------------------------------------------------------------------------
+
 
 class PostprocessorConfig:
     """Lazy-resolved post-processor configuration.
@@ -237,7 +251,11 @@ class PostprocessorConfig:
     @functools.cached_property
     def name(self) -> str:
         n = getattr(self._args, "post", None) or self._preset.postprocessor
-        source = "CLI -P" if getattr(self._args, "post", None) else f"preset '{self._preset.name}'"
+        source = (
+            "CLI -P"
+            if getattr(self._args, "post", None)
+            else f"preset '{self._preset.name}'"
+        )
         info(f"Using post-processor: {n} ({source})")
         return n
 
@@ -267,13 +285,15 @@ class PostprocessorConfig:
             bn = next(iter(backends.keys()), "none") if backends else "none"
         if bn:
             info(f"  Post-processor backend: {bn}")
-        model_override = getattr(self._args, "post_model", None) or self._defn.get("model")
+        model_override = getattr(self._args, "post_model", None) or self._defn.get(
+            "model"
+        )
         if model_override:
             info(f"  Post-processor model override: {model_override}")
         return bn
 
     @functools.cached_property
-    def model_override(self) -> Optional[str]:
+    def model_override(self) -> str | None:
         return getattr(self._args, "post_model", None) or self._defn.get("model")
 
     @functools.cached_property
@@ -290,10 +310,14 @@ class PostprocessorConfig:
 
     @functools.cached_property
     def backend_type(self) -> str:
-        return self._backend_defn.get("type", "openai_compat") if self._backend_defn else "none"
+        return (
+            self._backend_defn.get("type", "openai_compat")
+            if self._backend_defn
+            else "none"
+        )
 
     @functools.cached_property
-    def backend_api_key(self) -> Optional[str]:
+    def backend_api_key(self) -> str | None:
         defn = self._backend_defn
         if not defn:
             return None
@@ -306,17 +330,20 @@ class PostprocessorConfig:
         return key
 
     @functools.cached_property
-    def backend_api_base_url(self) -> Optional[str]:
+    def backend_api_base_url(self) -> str | None:
         return self._backend_defn.get("api_base_url") if self._backend_defn else None
 
     @functools.cached_property
-    def model(self) -> Optional[str]:
-        return self.model_override or (self._backend_defn.get("model") if self._backend_defn else None)
+    def model(self) -> str | None:
+        return self.model_override or (
+            self._backend_defn.get("model") if self._backend_defn else None
+        )
 
 
 # ---------------------------------------------------------------------------
 # RecorderConfig
 # ---------------------------------------------------------------------------
+
 
 class RecorderConfig:
     """Lazy-resolved audio input recorder and device configuration."""
@@ -333,13 +360,25 @@ class RecorderConfig:
 
         cli_device = getattr(self._args, "device", None)
         device_spec = cli_device or self._config_dict.get("audio_device") or "auto"
-        device_source = "CLI --device" if cli_device else ("config audio_device" if self._config_dict.get("audio_device") else "auto")
+        device_source = (
+            "CLI --device"
+            if cli_device
+            else (
+                "config audio_device"
+                if self._config_dict.get("audio_device")
+                else "auto"
+            )
+        )
 
         # Check mock_devices before querying real hardware.
         # A mock device spec is any comma-separated token that appears as a key
         # in the config's mock_devices: section.
         mock_devices = self._config_dict.get("mock_devices", {})
-        specs = [s.strip() for s in device_spec.split(",")] if isinstance(device_spec, str) else [str(s) for s in device_spec]
+        specs = (
+            [s.strip() for s in device_spec.split(",")]
+            if isinstance(device_spec, str)
+            else [str(s) for s in device_spec]
+        )
         for spec in specs:
             if spec in mock_devices:
                 mock_cfg = mock_devices[spec]
@@ -351,10 +390,17 @@ class RecorderConfig:
                     )
                     sys.exit(1)
                 device_info = DeviceInfo(
-                    index=-1, name=spec, portaudio_name=None, alsa_name=None,
-                    channels=1, sample_rate=16000, mock_source=source_file,
+                    index=-1,
+                    name=spec,
+                    portaudio_name=None,
+                    alsa_name=None,
+                    channels=1,
+                    sample_rate=16000,
+                    mock_source=source_file,
                 )
-                info(f"Using mock device: {spec} (source: {source_file}) (from mock_devices config)")
+                info(
+                    f"Using mock device: {spec} (source: {source_file}) (from mock_devices config)"
+                )
                 return "mock", device_info
 
         devices = resolve_device_preference_order(device_spec)
@@ -405,10 +451,10 @@ class RecorderConfig:
 # ---------------------------------------------------------------------------
 
 
-
 # ---------------------------------------------------------------------------
 # LocalAsrConfig
 # ---------------------------------------------------------------------------
+
 
 class LocalAsrConfig:
     """Lazy-resolved settings for the bundled sherpa-onnx HTTP server."""
@@ -432,7 +478,7 @@ class LocalAsrConfig:
         return int(v) if v is not None else int(self._raw.get("port", 8000))
 
     @functools.cached_property
-    def model_dir(self) -> Optional[str]:
+    def model_dir(self) -> str | None:
         v = getattr(self._args, "model_dir", None) or self._raw.get("model_dir")
         return os.path.expanduser(str(v)) if v else None
 
@@ -442,7 +488,7 @@ class LocalAsrConfig:
         return int(v) if v is not None else int(self._raw.get("num_threads", 4))
 
     @functools.cached_property
-    def models_config_path(self) -> Optional[str]:
+    def models_config_path(self) -> str | None:
         v = (
             getattr(self._args, "local_asr_models_config", None)
             or self._raw.get("models_config")
@@ -454,6 +500,7 @@ class LocalAsrConfig:
 # ---------------------------------------------------------------------------
 # Config — master coordinator
 # ---------------------------------------------------------------------------
+
 
 class Config:
     """Master config coordinator. Lazy-loads and caches all configuration.
@@ -475,7 +522,7 @@ class Config:
         self._args = args
 
     @classmethod
-    def from_file(cls, config_file: str | None, args: Any) -> "Config":
+    def from_file(cls, config_file: str | None, args: Any) -> Config:
         """Primary entry point. Reads YAML, resolves preset, stores args."""
         from .config import read_config
         from .utils import error, info
@@ -490,9 +537,13 @@ class Config:
         n_params = len(config_dict)
 
         if config_file:
-            info(f"Using configuration file: {resolved_path} (-c/--config) — Provides {n_params} definitions")
+            info(
+                f"Using configuration file: {resolved_path} (-c/--config) — Provides {n_params} definitions"
+            )
         else:
-            info(f"Using configuration file: {resolved_path} (default discovery) — Provides {n_params} definitions")
+            info(
+                f"Using configuration file: {resolved_path} (default discovery) — Provides {n_params} definitions"
+            )
 
         if not config_dict:
             error("Config file is empty or contains only comments.")
@@ -554,7 +605,7 @@ class Config:
     def preprocessor(self) -> str:
         """Preprocessor name: CLI ``-p`` overrides the preset's first field."""
         cli = getattr(self._args, "preprocessor", None)
-        n = (cli if cli else self._preset.preprocessor)
+        n = cli if cli else self._preset.preprocessor
         source = "CLI -p" if cli else f"preset '{self._preset.name}'"
         info(f"Using preprocessor: {n} ({source})")
         return n
@@ -562,7 +613,10 @@ class Config:
     @property
     def clipboard_max_chars(self) -> int:
         from .output import _DEFAULT_CLIPBOARD_MAX_CHARS
-        return int(self._config_dict.get("clipboard_max_chars", _DEFAULT_CLIPBOARD_MAX_CHARS))
+
+        return int(
+            self._config_dict.get("clipboard_max_chars", _DEFAULT_CLIPBOARD_MAX_CHARS)
+        )
 
     @property
     def quiet(self) -> bool:
@@ -571,11 +625,11 @@ class Config:
     # --- run-level properties (args pass-through with defaults) ---
 
     @property
-    def input_file(self) -> Optional[str]:
+    def input_file(self) -> str | None:
         return getattr(self._args, "input", None)
 
     @property
-    def output_file(self) -> Optional[str]:
+    def output_file(self) -> str | None:
         return getattr(self._args, "output", None)
 
     @property
@@ -584,16 +638,16 @@ class Config:
         return bool(getattr(self._args, "no_clipboard", False))
 
     @property
-    def language(self) -> Optional[str]:
+    def language(self) -> str | None:
         return getattr(self._args, "language", None)
 
     @property
-    def template(self) -> Optional[str]:
+    def template(self) -> str | None:
         """CLI -T output template override."""
         return getattr(self._args, "template", None)
 
     @property
-    def num_speakers(self) -> Optional[int]:
+    def num_speakers(self) -> int | None:
         return getattr(self._args, "speakers", None)
 
     @property
@@ -607,7 +661,7 @@ class Config:
         return int(v) if v is not None else 180
 
     @property
-    def interval(self) -> Optional[float]:
+    def interval(self) -> float | None:
         """Fixed-interval continuous recording in seconds. None = not enabled."""
         return getattr(self._args, "interval", None)
 

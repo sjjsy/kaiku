@@ -30,7 +30,7 @@ kaiku -b sonnx
 **Local offline path — whisper.cpp (no VAD):**
 ```bash
 pip3 install kaiku
-# build whisper.cpp and download a model, then configure it in config
+# build whisper.cpp and download the models you want, then configure it in config
 kaiku --generate-config   # shows a wcpp backend example
 kaiku --test -b wcpp
 kaiku -b wcpp

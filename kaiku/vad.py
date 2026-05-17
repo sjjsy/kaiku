@@ -102,8 +102,7 @@ class VoiceActivityDetector:
             import sherpa_onnx
         except ImportError as e:
             raise ImportError(
-                "sherpa-onnx is required for VAD. "
-                "Install with: pip install kaiku[vad]"
+                "sherpa-onnx is required for VAD. Install with: pip install kaiku[vad]"
             ) from e
 
         model_path = _resolve_vad_model()

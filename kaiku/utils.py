@@ -7,6 +7,7 @@ import shlex
 import signal
 import subprocess
 import sys
+from typing import Literal, overload
 
 from .logging import (
     debug,
@@ -111,9 +112,19 @@ def safe_unlink(path: str) -> None:
         pass
 
 
+@overload
+def run_subprocess(
+    cmd: list[str], *, text: Literal[True], **kwargs
+) -> subprocess.CompletedProcess[str]: ...
+
+
+@overload
+def run_subprocess(cmd: list[str], **kwargs) -> subprocess.CompletedProcess[bytes]: ...
+
+
 def run_subprocess(
     cmd: list[str], **kwargs
-) -> "subprocess.CompletedProcess[bytes] | subprocess.CompletedProcess[str]":
+) -> subprocess.CompletedProcess[bytes] | subprocess.CompletedProcess[str]:
     """Run a subprocess, logging the full command first (unless quiet mode).
 
     All keyword arguments are forwarded to subprocess.run().
@@ -122,7 +133,7 @@ def run_subprocess(
     return subprocess.run(cmd, **kwargs)
 
 
-def popen_subprocess(cmd: list[str], **kwargs) -> "subprocess.Popen":
+def popen_subprocess(cmd: list[str], **kwargs) -> subprocess.Popen:
     """Spawn a background subprocess, logging the full command first.
 
     All keyword arguments are forwarded to subprocess.Popen().

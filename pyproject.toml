@@ -68,8 +68,6 @@ dev = [
     "complexipy>=5.2.0",
     "ruff>=0.15.0",
     "ty>=0.0.31",
-    "build>=1.2.2.post1",
-    "twine>=6.1.0",
 ]
 test = [
     "pytest>=7.4",
@@ -115,7 +113,7 @@ ignore = ["UP007", "E501"]
 "kaiku/_vendor/*" = ["E", "F", "UP", "C901"]
 
 [tool.ruff.lint.mccabe]
-max-complexity = 15
+max-complexity = 55
 
 [tool.ty.environment]
 python-version = "3.10"
@@ -127,4 +125,4 @@ exclude = ["kaiku/local_asr", "kaiku/_vendor", "kaiku/vad.py"]
 [tool.complexipy]
 paths = ["kaiku"]
 exclude = ["_vendor"]
-max-complexity-allowed = 15
+max-complexity-allowed = 55

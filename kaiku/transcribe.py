@@ -72,7 +72,7 @@ def _attempt_transcription(
 
 def transcribe_audio(
     audio_file_path: str,
-    config: "Config",
+    config: Config,
     *,
     raise_on_error: bool = False,
     max_retries: int = DEFAULT_MAX_RETRIES,
@@ -94,7 +94,12 @@ def transcribe_audio(
     for attempt in range(max_retries + 1):
         try:
             return _attempt_transcription(
-                audio_file_path, url, headers, asr.model_name or "", timeout, language=language
+                audio_file_path,
+                url,
+                headers,
+                asr.model_name or "",
+                timeout,
+                language=language,
             )
         except (httpclient.HttpTimeoutError, httpclient.HttpClientError) as e:
             last_error = e
@@ -121,13 +126,14 @@ def transcribe_audio(
 
 def transcribe(
     audio_file_path: str,
-    config: "Config",
+    config: Config,
     raise_on_error: bool = False,
     timeout: float | None = None,
 ) -> str:
     """Transcribe audio using the backend resolved in ``config.asr_backend``."""
     if config.asr_backend.type == "mock":
         from .backends.mock import MockConfig, transcribe as mock_transcribe
+
         cfg = MockConfig(
             response=config.asr_backend.response,
             latency_ms=config.asr_backend.latency_ms or 0,
@@ -136,6 +142,7 @@ def transcribe(
 
     if config.asr_backend.type in ("mock-fwd", "mock-bwd"):
         from .backends.mock import MockTranscriptConfig, transcribe_from_transcript
+
         direction = "forward" if config.asr_backend.type == "mock-fwd" else "backward"
         cfg = MockTranscriptConfig(
             transcript_path=config.asr_backend.transcript_path or "",
@@ -146,14 +153,18 @@ def transcribe(
 
     if config.asr_backend.type == "mock-diarize":
         from .backends.mock import MockDiarizeConfig, transcribe_mock_diarize
+
         cfg = MockDiarizeConfig(
             transcript_path=config.asr_backend.transcript_path or "",
             speaker_count=config.asr_backend.speaker_count or 2,
         )
-        return transcribe_mock_diarize(audio_file_path, cfg, num_speakers=config.num_speakers)
+        return transcribe_mock_diarize(
+            audio_file_path, cfg, num_speakers=config.num_speakers
+        )
 
     if config.asr_backend.type == "whisperx":
         from .backends.whisperx import WhisperXConfig, transcribe as wx_transcribe
+
         hf_token = config.asr_backend.hf_token
         if not hf_token:
             error(
@@ -169,7 +180,9 @@ def transcribe(
             max_speakers=ns or config.asr_backend.max_speakers,
         )
         try:
-            return wx_transcribe(audio_file_path, cfg, language=config.language, timeout=timeout)
+            return wx_transcribe(
+                audio_file_path, cfg, language=config.language, timeout=timeout
+            )
         except TranscriptionError as e:
             if raise_on_error:
                 raise
@@ -178,6 +191,7 @@ def transcribe(
 
     if config.asr_backend.type == "whisper_cpp":
         from .backends.whisper_cpp import WhisperCppConfig, transcribe as wc_transcribe
+
         cfg = WhisperCppConfig(
             binary=config.asr_backend.binary,
             model=config.asr_backend.model,
@@ -238,7 +252,7 @@ def test_openai_compat_connection(
         return False
 
 
-def test_transcription(config: "Config") -> bool:
+def test_transcription(config: Config) -> bool:
     """Test ASR OpenAI-compatible API connectivity using ``config.asr_backend``."""
     asr = config.asr_backend
     return test_openai_compat_connection(

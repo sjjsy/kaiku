@@ -31,7 +31,7 @@ def loudnorm(
     Returns:
         Level-normalised float32 array.
     """
-    rms = float(np.sqrt(np.mean(audio ** 2)))
+    rms = float(np.sqrt(np.mean(audio**2)))
     if rms > 1e-8:
         target_rms = 10 ** (target_rms_db / 20.0)
         audio = audio * (target_rms / rms)

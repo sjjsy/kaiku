@@ -126,6 +126,13 @@ asr_backends:
   #   vad_model: ~/path/to/whisper.cpp/models/ggml-silero-v6.2.0.bin
   #   # language: auto                        # 'auto' or ISO-639-1 (e.g. fi, en)
   #   # threads: 4
+  # wcpp-en:                                  # whisper.cpp — build from source, fully offline
+  #   type: whisper_cpp
+  #   binary: ~/path/to/whisper.cpp/build/bin/whisper-cli
+  #   model:  ~/path/to/whisper.cpp/models/ggml-medium.en.bin
+  #   vad_model: ~/path/to/whisper.cpp/models/ggml-silero-v6.2.0.bin
+  #   language: en                            # 'auto' or ISO-639-1 (e.g. fi, en)
+  #   # threads: 4
   # ── ASR backends for diarization ──
   # Presets that reference one of these as their asr_backend automatically trigger
   # Requires: pip install kaiku[diarize] for whisperx
@@ -202,6 +209,7 @@ postprocessors:                               # FIXME: Update this section based
       Attached is a transcript from a recording that should only contain your client's (= author/user) voice.
       Both the recording and the transcribing may have produced sub-standard quality which may make your work more demanding.
       Overcome any possible mistakes in the transcript and attempt to understand the true intent of the speaker.
+      Write in the main language that was used in the transcript.
 
   solo-enhance:
     extends: solo-base
@@ -218,7 +226,6 @@ postprocessors:                               # FIXME: Update this section based
     extra: |
       The content may be from a long unstructured dictation or thinking-aloud session for some purpose (which may be deducible from the transcript itself).
       Produce a concise, structured memo that maximizes legibility and usefulness.
-#      Write in the main language that was used in the transcript.
       The following provides a template. Omit sections that would have no clear content.
 
       # YYYY-MM-DD HH:SS Solo Notes on <Topic in Title Case>
@@ -258,6 +265,7 @@ postprocessors:                               # FIXME: Update this section based
       Attached is a transcript from a recorded group discussion that contains multiple separate and individual speakers.
       Both the recording and the transcribing may have produced sub-standard quality which may make your work more demanding.
       Overcome any possible mistakes in the transcript and attempt to understand the true intent of each speaker.
+      Write in the main language that was used in the transcript.
 
   group-enhance:
     extends: group-base

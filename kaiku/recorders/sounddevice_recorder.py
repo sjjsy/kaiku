@@ -17,7 +17,6 @@ import time
 
 from ..audio import _device_native_rate
 from ..utils import popen_subprocess, warning
-from .arecord import _ALSA_PREFIXES
 from .base import AudioRecorder
 
 
@@ -39,7 +38,8 @@ class SounddeviceRecorder(AudioRecorder):
         device_arg = "" if device is None else str(device)
         cmd = [
             sys.executable,
-            "-m", "kaiku.recorders.sounddevice_recorder",
+            "-m",
+            "kaiku.recorders.sounddevice_recorder",
             audio_path,
             str(rate),
             device_arg,
@@ -61,6 +61,7 @@ class SounddeviceRecorder(AudioRecorder):
 # ---------------------------------------------------------------------------
 # Subprocess entry point
 # ---------------------------------------------------------------------------
+
 
 def _run_subprocess(audio_path: str, rate: int, device: str | int | None) -> None:
     """Record until SIGTERM, then write audio to audio_path as WAV."""

@@ -20,7 +20,9 @@ import urllib.request
 
 from .base import PostMetadata, PostProcessor
 
-_DEFAULT_USER_TEMPLATE = "Transcript (recorded {date}, {duration_s:.0f}s):\n\n{transcript}"
+_DEFAULT_USER_TEMPLATE = (
+    "Transcript (recorded {date}, {duration_s:.0f}s):\n\n{transcript}"
+)
 
 
 class OpenAICompatPostProcessor(PostProcessor):
@@ -65,15 +67,19 @@ class OpenAICompatPostProcessor(PostProcessor):
             speakers=", ".join(metadata.speakers) if metadata.speakers else "",
         )
         if self._context_text:
-            user_content = f"## Context\n\n{self._context_text}\n\n---\n\n{user_content}"
+            user_content = (
+                f"## Context\n\n{self._context_text}\n\n---\n\n{user_content}"
+            )
 
-        payload = json.dumps({
-            "model": self._model,
-            "messages": [
-                {"role": "system", "content": self._system_prompt},
-                {"role": "user", "content": user_content},
-            ],
-        }).encode()
+        payload = json.dumps(
+            {
+                "model": self._model,
+                "messages": [
+                    {"role": "system", "content": self._system_prompt},
+                    {"role": "user", "content": user_content},
+                ],
+            }
+        ).encode()
 
         url = f"{self._api_base_url}/chat/completions"
         req = urllib.request.Request(
