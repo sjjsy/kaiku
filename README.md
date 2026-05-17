@@ -10,7 +10,7 @@ Jump to the [Related projects](#related-projects) section at the end to understa
 
 **Cloud (API) path:**
 ```bash
-pip install kaiku
+pip3 install kaiku
 kaiku --generate-config   # create config with all backend examples
 kaiku --edit              # fill in your API key
 kaiku --test              # verify
@@ -19,7 +19,7 @@ kaiku                     # record and transcribe
 
 **Local offline path — sherpa-onnx with VAD support (model auto-downloads):**
 ```bash
-pip install kaiku[vad]
+pip3 install kaiku[vad]
 kaiku --download-model    # download SenseVoice model on first use
 kaiku --serve &           # start local ASR API server
 # configure a backend pointing to http://127.0.0.1:8000/v1/ — see Local ASR server below
@@ -29,7 +29,7 @@ kaiku -b sonnx
 
 **Local offline path — whisper.cpp (no VAD):**
 ```bash
-pip install kaiku
+pip3 install kaiku
 # build whisper.cpp and download a model, then configure it in config
 kaiku --generate-config   # shows a wcpp backend example
 kaiku --test -b wcpp
@@ -115,7 +115,7 @@ Local ASR server:
 VAD (continuous recording):
   --vad                 Continuous recording with voice activity detection.
                         Transcribes automatically when silence is detected
-                        after speech. Requires sherpa-onnx: pip install
+                        after speech. Requires sherpa-onnx: pip3 install
                         kaiku[vad].
   --interval SEC        Continuous recording with fixed interval (seconds)
   --silence-threshold PROB
@@ -175,7 +175,7 @@ See https://github.com/sjjsy/kaiku for full documentation and configuration exam
 
 **Python 3.8+** and one of:
 - Cloud API key ([OpenAI Whisper](https://platform.openai.com/docs/guides/speech-to-text), [Groq](https://console.groq.com/), [SiliconFlow](https://siliconflow.cn/), [xinference](https://inference.readthedocs.io/en/latest/), or any OpenAI-compatible endpoint)
-- Local [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) server (`pip install kaiku[vad]`, model auto-downloads)
+- Local [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) server (`pip3 install kaiku[vad]`, model auto-downloads)
 - Local [whisper.cpp](https://github.com/ggerganov/whisper.cpp) binary + model file (fully offline, no key needed)
 
 ### System packages
@@ -189,28 +189,28 @@ See https://github.com/sjjsy/kaiku for full documentation and configuration exam
 
 | Extra | Install | Purpose |
 |-------|---------|---------|
-| `vad` | `pip install kaiku[vad]` | VAD continuous recording + local sherpa-onnx ASR server |
-| `deepfilter` | `pip install kaiku[deepfilter]` | DeepFilterNet3 best-quality noise reduction |
-| `noisereduce` | `pip install kaiku[noisereduce]` | Spectral noise reduction (scipy) |
-| `pyrnnoise` | `pip install kaiku[pyrnnoise]` | RNNoise GRU noise reduction (scipy) |
-| `enhance` | `pip install kaiku[enhance]` | All three noise reduction options |
-| `diarize` | `pip install kaiku[diarize]` | Speaker diarization via WhisperX |
+| `vad` | `pip3 install kaiku[vad]` | VAD continuous recording + local sherpa-onnx ASR server |
+| `deepfilter` | `pip3 install kaiku[deepfilter]` | DeepFilterNet3 best-quality noise reduction |
+| `noisereduce` | `pip3 install kaiku[noisereduce]` | Spectral noise reduction (scipy) |
+| `pyrnnoise` | `pip3 install kaiku[pyrnnoise]` | RNNoise GRU noise reduction (scipy) |
+| `enhance` | `pip3 install kaiku[enhance]` | All three noise reduction options |
+| `diarize` | `pip3 install kaiku[diarize]` | Speaker diarization via WhisperX |
 
 ## Installation
 
 ```bash
-pip install kaiku
+pip3 install kaiku
 
 # or in an isolated environment
 pipx install kaiku
 
 # upgrade
-pip install --upgrade kaiku
+pip3 install --upgrade kaiku
 ```
 
 All extras: Noise reduction options + VAD and the local sherpa-onnx ASR server:
 ```bash
-pip install kaiku[enhance,vad]
+pip3 install kaiku[enhance,vad]
 ```
 
 Note: Audio preprocessing (`-p`) is not (yet) applied in VAD/interval continuous mode.
@@ -220,7 +220,7 @@ Note: Audio preprocessing (`-p`) is not (yet) applied in VAD/interval continuous
 ```bash
 git clone https://github.com/Oaklight/kaiku.git
 cd kaiku
-pip install -e .
+pip3 install -e .
 ```
 
 ## Setup
@@ -342,10 +342,10 @@ To complete the audio enhancement after noise reduction with any of the three pr
 ### Installing preprocessors
 
 ```bash
-pip install kaiku[noisereduce]   # spectral subtraction
-pip install kaiku[pyrnnoise]     # RNNoise GRU
-pip install kaiku[deepfilter]    # DeepFilterNet3
-pip install kaiku[enhance]       # all three
+pip3 install kaiku[noisereduce]   # spectral subtraction
+pip3 install kaiku[pyrnnoise]     # RNNoise GRU
+pip3 install kaiku[deepfilter]    # DeepFilterNet3
+pip3 install kaiku[enhance]       # all three
 ```
 
 ### Preprocessor configuration
@@ -444,7 +444,7 @@ kaiku --test -b openai              # test a specific backend
 |--------|-------------|---------|
 | `api` | Any OpenAI-compatible HTTP endpoint ([OpenAI](https://platform.openai.com/docs/guides/speech-to-text), [Groq](https://console.groq.com/), [SiliconFlow](https://siliconflow.cn/), [xinference](https://inference.readthedocs.io/en/latest/), etc.) | API key or local server |
 | `whisper_cpp` | whisper.cpp binary via subprocess | whisper.cpp build + `.bin` model file |
-| `whisperx` | WhisperX speaker diarization — ASR + word alignment + speaker attribution in one pass; output: `[HH:MM:SS] SPEAKER_NN: text` | `pip install kaiku[diarize]`, HF token |
+| `whisperx` | WhisperX speaker diarization — ASR + word alignment + speaker attribution in one pass; output: `[HH:MM:SS] SPEAKER_NN: text` | `pip3 install kaiku[diarize]`, HF token |
 | `mock` | Fixed-response mock for testing and demos | None — no credentials needed |
 | `mock-fwd` | Duration-proportional transcript mock (forward word order) | None |
 | `mock-bwd` | Duration-proportional transcript mock (reverse word order) | None |
@@ -488,7 +488,7 @@ Both provide fully offline, no-API-key ASR. Here is how to choose:
 | **Multilingual quality** | Best local option for European and other non-English languages; `large-v3-turbo` recommended | SenseVoice leads for Chinese, Japanese, Korean and handles emotion/event detection; weaker for many European languages |
 | **Python ML deps** | None — single binary + model file | Yes — ONNX runtime and sherpa-onnx Python packages |
 | **Integration** | Subprocess call to external C++ binary | Python-native; exposes a local HTTP API |
-| **Setup** | Build C++ from source; download `.bin` model manually | `pip install kaiku[vad]` + `kaiku --download-model` |
+| **Setup** | Build C++ from source; download `.bin` model manually | `pip3 install kaiku[vad]` + `kaiku --download-model` |
 | **Model auto-download** | No | Yes |
 | **VAD support** | No | Yes (built-in via sherpa-onnx) |
 | **Dev activity** | Mature, stable | Very active (k2-fsa / Next-gen Kaldi team) |
@@ -560,7 +560,7 @@ If you want direct ALSA access, set `recorder: arecord` in config.
 | `--num-threads N` | Inference threads (default: 4) |
 
 ```bash
-pip install kaiku[vad]
+pip3 install kaiku[vad]
 kaiku --download-model                     # download SenseVoice model (~1 GB, once)
 kaiku --serve                              # start server at 127.0.0.1:8000
 ```
@@ -580,7 +580,7 @@ VAD (Voice Activity Detection) classifies audio frames as speech or silence, ena
 
 | Flag | Description |
 |------|-------------|
-| `--vad` | Continuous recording with voice activity detection. Transcribes when silence is detected after speech. Requires `pip install kaiku[vad]`. |
+| `--vad` | Continuous recording with voice activity detection. Transcribes when silence is detected after speech. Requires `pip3 install kaiku[vad]`. |
 | `--interval SEC` | Continuous recording with fixed interval (seconds). |
 | `--silence-threshold PROB` | Speech probability threshold, 0.0–1.0 (default: 0.5); lower = more sensitive. |
 | `--silence-duration SEC` | How long silence must last to trigger transcription (default: 1.5 s). |
@@ -600,7 +600,7 @@ kaiku --interval 60 -o ~/meeting.txt  # transcribe every 60 seconds
 VAD requires [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx):
 
 ```bash
-pip install kaiku[vad]
+pip3 install kaiku[vad]
 ```
 
 VAD uses the [Silero VAD](https://github.com/snakers4/silero-vad) model (~629 KB, downloads automatically on first use). No internet connection required after the first run.
@@ -621,7 +621,7 @@ Speaker name substitution (SPEAKER_00 → real names) is intentionally left to t
 ### Diarization setup
 
 ```bash
-pip install kaiku[diarize]
+pip3 install kaiku[diarize]
 # Accept the pyannote licence at https://huggingface.co/pyannote/speaker-diarization-3.1
 # then set your HuggingFace token:
 export HF_TOKEN=hf_...
@@ -894,7 +894,7 @@ default_preset: speed
 | Preprocessing too slow | Switch `preprocessor_urgent` to `noisereduce` or `none` in config |
 | Post-processor not found | Check `postprocessors:` in config; name must match exactly |
 | Post-processor backend error | Check `postprocessor_backends:` in config; verify API key and URL |
-| Diarization fails | Ensure `pip install kaiku[diarize]`, `HF_TOKEN` is set, pyannote licence accepted, and backend `type: whisperx` is in `asr_backends:` |
+| Diarization fails | Ensure `pip3 install kaiku[diarize]`, `HF_TOKEN` is set, pyannote licence accepted, and backend `type: whisperx` is in `asr_backends:` |
 
 Run `kaiku --test` (or `kaiku --test -b <name>`) to diagnose issues.
 
@@ -908,8 +908,11 @@ Any improvements or new features are welcome! :)
 Development relies on a small but powerful **black-box E2E** suite: the real CLI runs as a subprocess and assertions cover exit codes, stdout, stderr, and files — see [`tests/README.md`](tests/README.md) for the full strategy, log-shape notes, and scenario index.
 
 ```bash
-pytest tests/
+pytest tests/ -v
 ```
+
+**Disclaimer**: Not all features have been properly tested and only on a legacy Ubuntu 20.04 environment. More testing and hardening will be done by June 2026.
+
 ## License
 
 GNU Affero General Public License v3.0. See the [LICENSE](LICENSE) file for details.
@@ -927,13 +930,13 @@ The tables below cover the ecosystem at each pipeline stage and compare competin
 
 ### Audio preprocessing (noise reduction)
 
-Audio preprocessing cleans the signal before transcription. kaiku integrates all three libraries below as optional extras (`pip install kaiku[enhance]`); they run in a pipeline with loudness normalisation applied after cleaning.
+Audio preprocessing cleans the signal before transcription. kaiku integrates all three libraries below as optional extras (`g install kaiku[enhance]`); they run in a pipeline with loudness normalisation applied after cleaning.
 
 | Project | Technology | License | Best for | In kaiku |
 |---------|-----------|---------|----------|-------------|
-| [noisereduce](https://github.com/timsainb/noisereduce) | Spectral subtraction | MIT | Stationary noise: fans, AC, electrical hum | **Yes** — `pip install kaiku[noisereduce]` |
-| [pyrnnoise](https://github.com/g-node/pyrnnoise) | Mozilla RNNoise GRU | GPL-3 | Non-stationary noise: crowd, babble, footsteps | **Yes** — `pip install kaiku[pyrnnoise]` |
-| [DeepFilterNet](https://github.com/Rikorose/DeepFilterNet) | DeepFilterNet3 neural net | MIT | Best quality overall; speech naturalness; medium CPU | **Yes** — `pip install kaiku[deepfilter]` |
+| [noisereduce](https://github.com/timsainb/noisereduce) | Spectral subtraction | MIT | Stationary noise: fans, AC, electrical hum | **Yes** — `pip3 install kaiku[noisereduce]` |
+| [pyrnnoise](https://github.com/g-node/pyrnnoise) | Mozilla RNNoise GRU | GPL-3 | Non-stationary noise: crowd, babble, footsteps | **Yes** — `pip3 install kaiku[pyrnnoise]` |
+| [DeepFilterNet](https://github.com/Rikorose/DeepFilterNet) | DeepFilterNet3 neural net | MIT | Best quality overall; speech naturalness; medium CPU | **Yes** — `pip3 install kaiku[deepfilter]` |
 | [RNNoise](https://github.com/xiph/rnnoise) | Xiph GRU | BSD | Original Mozilla RNNoise (C library) | No — pyrnnoise wraps this at the Python layer |
 | [SpeechBrain enhance](https://github.com/speechbrain/speechbrain) | Encoder-decoder neural | Apache-2 | Research-grade speech separation and denoising | No — heavy ML framework dependency; not practical as a live preprocessor |
 
@@ -957,7 +960,7 @@ ASR engines convert audio to text. kaiku is a frontend: it delegates transcripti
 | [whisper.cpp](https://github.com/ggerganov/whisper.cpp) | MIT | 80k+ | Fully offline; best CPU performance; GGML-quantised models | **Yes** — `type: whisper_cpp` backend; subprocess call |
 | [faster-whisper](https://github.com/SYSTRAN/faster-whisper) | MIT | 15k+ | 4× faster than Whisper; identical accuracy; INT8/FP16 via CTranslate2 | Not directly; used internally by WhisperX and Meetily |
 | [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) | Apache-2 | 4k+ | ONNX inference; multi-model-family; model auto-download; Python-native | **Yes** — `--serve` local server; `type: api` backend |
-| [WhisperX](https://github.com/m-bain/whisperX) | BSD | 13k+ | Whisper + word-level timestamps + speaker diarization in one pipeline | **Yes** — `type: whisperx` backend (`pip install kaiku[diarize]`) |
+| [WhisperX](https://github.com/m-bain/whisperX) | BSD | 13k+ | Whisper + word-level timestamps + speaker diarization in one pipeline | **Yes** — `type: whisperx` backend (`pip3 install kaiku[diarize]`) |
 | [SenseVoice](https://github.com/FunAudioLLM/SenseVoice) | Apache-2 | 6k+ | Emotion + language event detection; excellent CJK | Via sherpa-onnx default model; also SiliconFlow API |
 | [Vosk](https://github.com/alphacep/vosk-api) | Apache-2 | 8k+ | Lightweight; 20+ languages; embedded and low-RAM devices | No — lower accuracy than Whisper family |
 | [NVIDIA Parakeet TDT](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2) | Apache-2 | (NeMo) | 3 380× faster than real-time; English only; GPU | No — English-only; GPU-dependent; no multilingual support |
@@ -972,7 +975,7 @@ Speaker diarization labels each segment with a speaker identity ("who said what"
 | Project | License | Stars | Notes | In kaiku |
 |---------|---------|-------|-------|-------------|
 | [pyannote.audio](https://github.com/pyannote/pyannote-audio) | MIT | 6k+ | De-facto OSS standard; speaker embedding + clustering; requires HF token for model download | Via WhisperX (`type: whisperx`) |
-| [WhisperX](https://github.com/m-bain/whisperX) | BSD | 13k+ | faster-whisper + word alignment + pyannote; all-in-one | **Yes** — `type: whisperx` backend (`pip install kaiku[diarize]`) |
+| [WhisperX](https://github.com/m-bain/whisperX) | BSD | 13k+ | faster-whisper + word alignment + pyannote; all-in-one | **Yes** — `type: whisperx` backend (`pip3 install kaiku[diarize]`) |
 | [whisper-diarization](https://github.com/MahmoudAshraf97/whisper-diarization) | MIT | 2k+ | faster-whisper + pyannote script pipeline | No — WhisperX provides equivalent functionality with an active upstream |
 | [NVIDIA NeMo](https://github.com/NVIDIA/NeMo) | Apache-2 | 13k+ | Fastest GPU diarization; English and enterprise focus | No — GPU-heavy; no practical CLI integration path |
 
