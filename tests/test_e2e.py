@@ -122,7 +122,7 @@ class TestPresetAndFilePipeline:
             "-i", str(silent_wav),
             "-p", "none",
             "-b", "mock",
-            "-T", "raw",
+            "-T", "bare",
             "-P", "mock-pp",
             "-l", "fi",
             "-o", str(out),

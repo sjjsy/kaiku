@@ -12,6 +12,7 @@ All types accept an optional latency_ms for realistic latency simulation.
 
 from __future__ import annotations
 
+import re
 import wave
 from dataclasses import dataclass
 
@@ -70,6 +71,40 @@ def transcribe(
 
     info("Mock backend: returning canned transcript")
     return cfg.response
+
+
+_SPEAKER_TURN_RE = re.compile(r"^(SPEAKER_\d+):\s*(.*)$", re.IGNORECASE)
+
+
+def _read_transcript_words(transcript_path: str) -> list[str]:
+    """Words from a transcript file; strips optional SPEAKER_NN: line prefixes."""
+    with open(transcript_path, encoding="utf-8") as fh:
+        words: list[str] = []
+        for line in fh:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            m = _SPEAKER_TURN_RE.match(line)
+            if m:
+                line = m.group(2)
+            words.extend(line.split())
+        return words
+
+
+def _read_diarize_turns(transcript_path: str) -> list[tuple[str, str]]:
+    """(speaker_id, text) turns; speaker_id empty if line has no SPEAKER_NN: prefix."""
+    with open(transcript_path, encoding="utf-8") as fh:
+        turns: list[tuple[str, str]] = []
+        for line in fh:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            m = _SPEAKER_TURN_RE.match(line)
+            if m:
+                turns.append((m.group(1).upper(), m.group(2)))
+            else:
+                turns.append(("", line))
+        return turns
 
 
 def _wav_duration(audio_path: str) -> float:
@@ -143,10 +178,7 @@ def transcribe_from_transcript(
     if not os.path.exists(transcript_path):
         raise TranscriptionError(f"Mock transcript file not found: {transcript_path}")
 
-    with open(transcript_path, encoding="utf-8") as fh:
-        text = fh.read()
-
-    words = text.split()
+    words = _read_transcript_words(transcript_path)
     if not words:
         return ""
 
@@ -196,7 +228,8 @@ def transcribe_mock_diarize(
 ) -> str:
     """Return a mock speaker-attributed transcript from a text file.
 
-    Output format: "[HH:MM:SS] SPEAKER_NN: line text"
+    Source lines: ``SPEAKER_NN: text`` (WhisperX-style labels, no timestamps).
+    Output format: ``[HH:MM:SS] SPEAKER_NN: text`` (timestamps added from audio duration).
 
     Args:
         audio_path: WAV file whose duration determines timestamp spacing.
@@ -220,18 +253,21 @@ def transcribe_mock_diarize(
     except Exception:
         duration_s = 10.0
 
-    with open(transcript_path, encoding="utf-8") as fh:
-        lines = [ln.strip() for ln in fh if ln.strip()]
-
-    if not lines:
+    turns = _read_diarize_turns(transcript_path)
+    if not turns:
         return ""
 
-    time_per_line = duration_s / len(lines)
+    time_per_line = duration_s / len(turns)
     output: list[str] = []
-    for i, line in enumerate(lines):
-        speaker = f"SPEAKER_{i % n_speakers:02d}"
+    for i, (speaker_id, text) in enumerate(turns):
+        if num_speakers == 1:
+            speaker = "SPEAKER_00"
+        elif speaker_id:
+            speaker = speaker_id
+        else:
+            speaker = f"SPEAKER_{i % n_speakers:02d}"
         ts = _fmt_ts(i * time_per_line)
-        output.append(f"[{ts}] {speaker}: {line}")
+        output.append(f"[{ts}] {speaker}: {text}")
 
     return "\n".join(output)
 

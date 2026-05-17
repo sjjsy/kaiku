@@ -20,7 +20,6 @@ presets:
   # ── Mock presets (no credentials needed; useful for demos and tests) ──────
   mock-fwd:     [         none,     mock-fwd,           none,  "Mock: duration-scaled forward transcript"]
   mock-bwd-pp:  [         none,     mock-bwd,        mock-pp,  "Mock: duration-scaled backward transcript with postprocessing"]
-  mock-dia:     [         none,   mock-dia-2,           none,  "Mock: 2-speaker diarized transcript"]
   # ── Real presets (require credentials / external tools) ───────────────────
   # speed:      [         none,         groq,           none,  "Fast transcription with minimal processing"]
   # quality:    [   deepfilter,         groq,           none,  "High-accuracy with neural denoising"]
@@ -88,7 +87,7 @@ asr_backends:
     type: mock-fwd
     transcript_path: "test_data/group-2p-2.txt"   # use path from `kaiku --download-fixtures`
     latency_ms: 50
-  mock-bwd:                               # Same as mock-fwd, words in reverse
+  mock-bwd:                                   # Same as mock-fwd, words in reverse
     type: mock-bwd
     transcript_path: "test_data/group-2p-2.txt"
     latency_ms: 50
@@ -132,23 +131,14 @@ asr_backends:
   #   vad_model: ~/path/to/whisper.cpp/models/ggml-silero-v6.2.0.bin
   #   language: en                            # 'auto' or ISO-639-1 (e.g. fi, en)
   #   # threads: 4
-  # ── ASR backends for diarization ──
-  # Presets that reference one of these as their asr_backend automatically trigger
-  # Requires: pip install kaiku[diarize] for whisperx
-  # whisperx:                               # Real WhisperX + pyannote diarization
+  # ── Diarization (replaces plain transcription for that run) ──
+  # Use one backend per run — same slot as groq/wcpp, not an add-on to them.
+  # Requires: pip install kaiku[diarize]
+  # whisperx:
   #   type: whisperx
   #   hf_token: "hf_..."                    # or set HF_TOKEN env var
   #   speakers_min: 2                       # optional speaker count hints
   #   speakers_max: 6
-  # ── Mock ASR backends for diarization ──
-  mock-dia-2:                               # Mock: 2-speaker round-robin from transcript
-    type: mock-diarize
-    speaker_count: 2
-    transcript_path: "test_data/group-2p-2.txt"
-  mock-dia-3:                               # Mock: 3-speaker round-robin from transcript
-    type: mock-diarize
-    speaker_count: 3
-    transcript_path: "test_data/group-2p-2.txt"
 
 ## ── Post-processing (with AI models) ──────────────────────────────────────────
 # Post-processors send the transcript to an AI model and return structured output.

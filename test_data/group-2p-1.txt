@@ -1,5 +1,5 @@
-I’m telling you, Sam, the 'Who’s Speaking' feature is the real game-changer for our deaf students.
-I thought the captions were enough?
-Captions tell you *what* is being said. But in a seminar with four people, a deaf student is constantly looking around trying to figure out who is talking.
-So the diarization adds that layer of 'who.'
-Precisely. When the screen says '[Professor Miller]:' followed by '[Student A]:', it restores the social flow. It turns a wall of text into a real conversation. It’s not just utility; it’s dignity.
+SPEAKER_00: I'm telling you, Sam, the 'Who's Speaking' feature is the real game-changer for our deaf students.
+SPEAKER_01: I thought the captions were enough?
+SPEAKER_00: Captions tell you what is being said. But in a seminar with four people, a deaf student is constantly looking around trying to figure out who is talking.
+SPEAKER_01: So the diarization adds that layer of who.
+SPEAKER_00: Precisely. When the screen says SPEAKER_00 followed by SPEAKER_01, it restores the social flow. It turns a wall of text into a real conversation. It's not just utility; it's dignity.

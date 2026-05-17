@@ -137,7 +137,7 @@ VAD (continuous recording):
 
 Diarization:
   -s N, --speakers N    Speaker count hint for diarization backends (type:
-                        whisperx, type: mock-diarize). Ignored by all other
+                        whisperx). Ignored by all other
                         backends. Selects a diarization backend in your preset
                         or with -b / --backend; see 'asr_backends:' in config.
                         If omitted, the backend uses its own default or auto-
@@ -458,7 +458,6 @@ kaiku --test -b openai              # test a specific backend
 | `mock` | Fixed-response mock for testing and demos | None — no credentials needed |
 | `mock-fwd` | Duration-proportional transcript mock (forward word order) | None |
 | `mock-bwd` | Duration-proportional transcript mock (reverse word order) | None |
-| `mock-diarize` | Mock diarization with round-robin speaker assignment | None |
 
 #### Mock backends for testing
 
@@ -473,17 +472,12 @@ asr_backends:
   mock-fwd:
     type: mock-fwd
     transcript_path: "test_data/group-2p-2.txt"   # source for word pool
-  mock-dia-2:
-    type: mock-diarize
-    speaker_count: 2
-    transcript_path: "test_data/group-2p-2.txt"
 ```
 
 ```bash
 kaiku -b demo -i dummy_audio.wav         # Returns mock transcript instantly
 kaiku --test -b demo                     # No credentials needed
 kaiku -i audio.wav -b mock-fwd           # Duration-proportional words from transcript
-kaiku -i audio.wav -b mock-dia-2         # Mock diarization, 2 speakers
 ```
 
 #### Local ASR: whisper.cpp vs. sherpa-onnx
@@ -625,8 +619,7 @@ Speaker name substitution (SPEAKER_00 → real names) is intentionally left to t
 | Flag | Description |
 |------|-------------|
 | `-b whisperx` | WhisperX diarization backend (`type: whisperx`). |
-| `-b` + `mock-diarize` | Mock diarization backend from your config (testing / CI). |
-| `-s N / --speakers N` | Speaker count hint for `whisperx` and `mock-diarize`. Ignored by other backends. |
+| `-s N / --speakers N` | Speaker count hint for `whisperx`. Ignored by other backends. |
 
 ### Diarization setup
 

@@ -69,7 +69,18 @@ def example_cfg(
     text = EXAMPLE_CONFIG.read_text()
 
     abs_test_data = str(REPO_ROOT / "test_data")
+    text = text.replace("~/path/to/kaiku/test_data/", f"{abs_test_data}/")
     text = text.replace("test_data/", f"{abs_test_data}/")
+
+    # E2E-only mock diarization backends (not in shipped kaiku.conf.example).
+    _post = "## ── Post-processing (with AI models)"
+    _dia = (
+        f"  mock-dia-2:\n    type: mock-diarize\n    speaker_count: 2\n"
+        f'    transcript_path: "{abs_test_data}/group-2p-2.txt"\n'
+        f"  mock-dia-3:\n    type: mock-diarize\n    speaker_count: 3\n"
+        f'    transcript_path: "{abs_test_data}/group-3p-1.txt"\n'
+    )
+    text = text.replace(_post, _dia + _post, 1)
 
     text = "default_preset: mock-fwd\n\n" + text
 
