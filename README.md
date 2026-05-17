@@ -2,7 +2,7 @@
 
 Record speech, transcribe it, and copy the result to clipboard or a file. Supports cloud and fully local [ASR backends](#asr-backends), [VAD](#vad-continuous-recording) (for background daemons) and [toggle](#toggle-mode) (for keyboard shortcuts), [noise reduction](#audio-preprocessing-noise-reduction), [speaker diarization](#diarization) (as an ASR backend), and [AI post-processing](#post-processing-with-ai-models).
 
-Originally forked from the elegant but minimalist speech to clipboard tool [asr2clip](https://github.com/Oaklight/asr2clip) which is also available from [![PyPI](https://img.shields.io/pypi/v/asr2clip?color=green)](https://pypi.org/project/asr2clip/).
+Originally forked from the elegant but minimalist speech to clipboard tool [asr2clip](https://github.com/Oaklight/asr2clip) which is also available from [![PyPI](https://img.shields.io/pypi/v/asr2clip?color=green)](https://pypi.org/project/asr2clip/). The word "kaiku" is Finnish for "echo".
 
 Jump to the [Related projects](#related-projects) section at the end to understand the landscape of ASR related tooling and why this project was developed for the open source community.
 
