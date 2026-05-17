@@ -256,7 +256,7 @@ Config file is created at `~/.config/kaiku/config.yaml`. Locations searched in o
 4. `~/.kaiku.conf`
 
 Note: The created config file embeds partially commented-out configuration options along with brief explanations for most features.
-See [`kaiku.conf.example`](kaiku.conf.example) in the repo for a complete, current example with all backend and feature documentation.
+See [`kaiku/kaiku.conf.example`](kaiku/kaiku.conf.example) in the repo for a complete, current example with all backend and feature documentation.
 The config file template is **not usable immediately**: You must update it based on your setup and needs.
 The following sections tackle some of these in more detail where relevant.
 

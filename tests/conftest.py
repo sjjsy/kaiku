@@ -18,7 +18,7 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).parent.parent
-EXAMPLE_CONFIG = REPO_ROOT / "kaiku.conf.example"
+EXAMPLE_CONFIG = REPO_ROOT / "kaiku" / "kaiku.conf.example"
 TEST_DATA = REPO_ROOT / "test_data"
 
 # Remote sources for test audio fixtures.

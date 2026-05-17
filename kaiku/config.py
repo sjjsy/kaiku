@@ -21,17 +21,13 @@ DEFAULT_CONFIG_PATH = os.path.expanduser("~/.config/kaiku/config.yaml")
 
 
 def _load_config_template() -> str:
-    """Load config template from kaiku.conf.example file."""
-    # Try to find the template file relative to this module
-    module_dir = os.path.dirname(__file__)
-    template_path = os.path.join(os.path.dirname(module_dir), "kaiku.conf.example")
+    """Load config template bundled with the installed package."""
+    import importlib.resources as resources
 
-    if os.path.exists(template_path):
-        with open(template_path) as f:
-            return f.read()
-
-    # Fallback: empty template if file not found
-    return "# kaiku configuration template not found\n"
+    try:
+        return resources.read_text("kaiku", "kaiku.conf.example", encoding="utf-8")
+    except (FileNotFoundError, OSError):
+        return "# kaiku configuration template not found\n"
 
 
 _CONFIG_TEMPLATE = _load_config_template()

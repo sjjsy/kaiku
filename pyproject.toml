@@ -1,9 +1,22 @@
 [build-system]
-requires = ["setuptools>=61.0"]
+requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["kaiku", "kaiku.backends", "kaiku.preprocessors", "kaiku.postprocessors", "kaiku.recorders", "kaiku.local_asr", "kaiku._vendor", "kaiku._vendor.yaml", "kaiku._vendor.httpclient"]
+packages = [
+    "kaiku",
+    "kaiku.backends",
+    "kaiku.preprocessors",
+    "kaiku.postprocessors",
+    "kaiku.recorders",
+    "kaiku.local_asr",
+    "kaiku._vendor",
+    "kaiku._vendor.yaml",
+    "kaiku._vendor.httpclient",
+]
+
+[tool.setuptools.package-data]
+kaiku = ["kaiku.conf.example"]
 
 [tool.setuptools.dynamic]
 version = { attr = "kaiku.__version__" }
@@ -11,21 +24,25 @@ version = { attr = "kaiku.__version__" }
 [project]
 name = "kaiku"
 dynamic = ["version"]
-authors = [{ name = "Oaklight", email = "oaklight@gmx.com" }]
-description = "A real-time speech-to-text clipboard tool."
+authors = [
+    { name = "Samuel Sydänlammi", email = "samuel.sydanlammi@iki.fi" },
+    { name = "Oaklight", email = "oaklight@gmx.com" },
+]
+maintainers = [{ name = "Samuel Sydänlammi", email = "samuel.sydanlammi@iki.fi" }]
+description = "Local-first speech-to-text CLI: capture, denoise, transcribe, post-process, clipboard."
 readme = "README.md"
 requires-python = ">=3.8"
-license = { text = "GNU Affero General Public License v3" }
+license = { text = "GNU Affero General Public License v3 or later" }
+keywords = ["speech", "asr", "whisper", "dictation", "clipboard", "transcription"]
 classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)",
+    "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.8",
-    "Programming Language :: Python :: 3.9",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.13",
-    "License :: OSI Approved :: GNU Affero General Public License v3",
-    "Operating System :: OS Independent",
+    "Topic :: Multimedia :: Sound/Audio :: Speech",
 ]
 dependencies = [
     "numpy>=1.24.4",
@@ -36,7 +53,11 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/Oaklight/kaiku"
+Homepage = "https://github.com/sjjsy/kaiku"
+Repository = "https://github.com/sjjsy/kaiku"
+Documentation = "https://github.com/sjjsy/kaiku#readme"
+Issues = "https://github.com/sjjsy/kaiku/issues"
+Changelog = "https://github.com/sjjsy/kaiku/releases"
 
 [project.scripts]
 kaiku = "kaiku.kaiku:main"
@@ -62,15 +83,14 @@ vad = [
 ]
 noisereduce = [
     "noisereduce>=3.0.0",
-    "scipy>=1.10.0",
+    "scipy>=1.10.1",
 ]
 pyrnnoise = [
     "pyrnnoise>=0.1.0",
-    "scipy>=1.10.0",   # used for 16 kHz ↔ 48 kHz resampling
+    "scipy>=1.10.1",
 ]
 deepfilter = [
     "deepfilternet>=0.5.6",
-    # resampling done via torchaudio (already a deepfilternet dependency)
 ]
 enhance = [
     "kaiku[noisereduce,pyrnnoise,deepfilter]",

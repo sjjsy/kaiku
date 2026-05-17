@@ -11,7 +11,7 @@ all: build
 # Build the package
 build:
 	@echo "Building $(PACKAGE_NAME)..."
-	python -m build
+	python3 -m build
 	@echo "Build complete. Distribution files are in $(DIST_DIR)/"
 
 # Push the package to PyPI
