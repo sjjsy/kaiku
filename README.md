@@ -11,11 +11,10 @@ Jump to the [Related projects](#related-projects) section at the end to understa
 **Try mock backends first (no API keys, no whisper.cpp build):**
 ```bash
 pip3 install kaiku
-kaiku --download-fixtures # ~1.3 MB: demo WAVs + transcripts; prints config paths
+kaiku --download-fixtures # demo clips → ~/.local/share/kaiku/fixtures (use as -d devices)
 kaiku --generate-config   # create config with all backend examples
-# paste fixture paths from download output into mock_devices / mock-fwd in config
 kaiku --test
-kaiku -d mock-jfk -b mock-fwd                 # both mock audio and mock transcription
+kaiku -d demo-1p-011s-en-jfk -x mock-fwd       # mock device + mock transcription
 ```
 
 **Cloud (API) path:**
@@ -225,13 +224,15 @@ pip3 install kaiku[enhance,vad]
 
 Note: Audio preprocessing (`-p`) is not (yet) applied in VAD/interval continuous mode.
 
-### From source
+### From source (recommended)
 
 ```bash
-git clone https://github.com/Oaklight/kaiku.git
+git clone https://github.com/sjjsy/kaiku.git
 cd kaiku
 pip3 install -e .
 ```
+
+This is recommended because the tool is still under semi-active development, testing and bugfixing.
 
 ## Setup
 
@@ -471,7 +472,7 @@ asr_backends:
     latency_ms: 100              # Optional: simulate network delay
   mock-fwd:
     type: mock-fwd
-    transcript_path: "test_data/group-2p-2.txt"   # source for word pool
+    transcript_path: "~/.local/share/kaiku/fixtures/demo-1p-011s-en-jfk.txt"
 ```
 
 ```bash
@@ -908,7 +909,7 @@ Any improvements or new features are welcome! :)
 
 ### Testing
 
-Development relies on a small but powerful **black-box E2E** suite: the real CLI runs as a subprocess and assertions cover exit codes, stdout, stderr, and files — see [`tests/README.md`](tests/README.md) for the full strategy, log-shape notes, and scenario index.
+Development relies on a small but powerful **black-box E2E** suite: the real CLI runs as a subprocess and assertions cover exit codes, stdout, stderr, and files — see [`tests/README.md`](tests/README.md) for the full strategy, demo clip catalog, transcript fixtures, and scenario index.
 
 ```bash
 pytest tests/ -v

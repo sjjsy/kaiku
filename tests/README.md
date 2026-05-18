@@ -8,8 +8,11 @@ pytest tests/ -q          # quiet (counts only)
 pytest tests/ -k robust   # run one class by keyword
 ```
 
-Test audio files are auto-downloaded into `test_data/` on first run and cached
-there permanently (the directory is gitignored).
+On first run, the session fixture calls the same download path as
+`kaiku --download-fixtures` into a temporary directory and sets
+`KAIKU_FIXTURE_DIR` so `-d <basename>` resolves without `mock_devices` in YAML.
+Reference transcripts live in
+[`fixtures/transcripts/`](fixtures/transcripts/) (plain text, in git).
 
 Project-wide principles (config contract, commits, **when agents may change E2E tests**): [CLAUDE.md](../CLAUDE.md).
 
@@ -137,21 +140,41 @@ alone write their own minimal YAML inline (see `TestDeviceAbortOnFailure` in
 - `mock-fwd` vs `mock-bwd` differ on the same short WAV
 - Longer WAV yields strictly more words than short WAV with `mock-fwd`
 
+### `TestDemoAudioEarly` (runs first)
+
+#### `test_mock_1p_device_records_jfk_clip` (×1 invocation)
+
+- `demo-1p-011s-en-jfk` device + `mock-fwd` preset — JFK clip
+- Stdout is a leading word-for-word prefix of [`demo-1p-011s-en-jfk.txt`](fixtures/transcripts/demo-1p-011s-en-jfk.txt)
+
+#### `test_jfk_file_input_mock_fwd_matches_transcript` (×1 invocation)
+
+- `-i` JFK WAV + `-b mock-fwd` — backend *why* line in stderr
+- Same prefix check against `demo-1p-011s-en-jfk.txt`
+
+#### `test_german_demo_device_with_language_flag` (×1 invocation)
+
+- `-d demo-3p-096s-de-eoc` + `-l de` — `Using language: de (CLI -l)` in stderr
+
 ### `TestMockRecordingDevices`
 
-#### `test_devices_transcribe_with_resolution_logs_and_duration_ordering` (×2 invocations)
+#### `test_devices_transcribe_with_resolution_logs_and_duration_ordering` (×3 invocations)
 
-- `mock-jfk` and `mock-group` both exit 0 with non-empty stdout
+- `demo-1p-011s-en-jfk`, `demo-4p-030s-en-ami`, `demo-3p-096s-de-eoc` devices all exit 0 with non-empty stdout
 - `Using mock device: …` resolution lines in stderr
-- Group clip produces more words than JFK clip
+- Word counts increase with clip length (11 s → 30 s → ~96 s)
 
-### `TestMockDiarization`
+### `TestDiarizationOptional` (uses `diarization_cfg`, not default `example_cfg`)
 
-#### `test_speaker_counts_and_cli_override` (×3 invocations)
+#### `test_mock_dia_4p_matches_fixture` / `test_mock_dia_3p_matches_fixture` (×2 invocations)
 
-- `mock-dia-2` on JFK sample — two distinct speaker labels
-- `mock-dia-3` on group sample — three distinct speaker labels
-- `-s 1` collapses diarized output to one speaker
+- `mock-dia-4` / `mock-dia-3` on matching demo WAVs
+- Speaker labels and word recall vs `demo-4p-030s-en-ami.txt` / `demo-3p-096s-de-eoc.txt`
+
+#### `test_whisperx_4p_matches_fixture` / `test_whisperx_3p_matches_fixture` (×2 invocations, skipped without addon)
+
+- Requires `pip install kaiku[diarize]` and `HF_TOKEN`
+- Compares WhisperX stdout to the diarized fixture transcripts (lower word-recall bar than mock-diarize)
 
 ### `TestDeviceAbortOnFailure`
 
@@ -191,21 +214,24 @@ alone write their own minimal YAML inline (see `TestDeviceAbortOnFailure` in
 
 ## Fixtures
 
-### `example_cfg` (session)
+### `fixture_dir` / `example_cfg` (session)
 
-- Sourced from `kaiku.conf.example` with absolute `test_data/` paths and `default_preset: mock-fwd` prepended
+- `download_fixtures()` into a temp dir (same as CLI)
+- `example_cfg` copies `kaiku.conf.example`; `KAIKU_FIXTURE_DIR` points at downloaded clips
+- E2E-only `mock-dia-4` / `mock-dia-3` backends injected in `diarization_cfg` (not in shipped example config)
 
-### `jfk_wav` (session)
+### `demo_1p_wav` / `demo_4p_wav` / `demo_3p_wav` / `long_speech` (session)
 
-- ~11 s JFK sample from whisper.cpp (auto-downloaded)
+- Paths under `fixture_dir` after download
 
-### `group_wav` (session)
+### `diarization_cfg` (session)
 
-- ~30 s multi-speaker sample from diarizen-tutorial (auto-downloaded)
+- Like `example_cfg` plus injected `mock-dia-4` / `mock-dia-3` (and `whisperx` when `HF_TOKEN` is set)
+- Used only by `TestDiarizationOptional`
 
 ### `long_speech` (session)
 
-- ~3.5 min OGA from Wikimedia Commons (auto-downloaded); used for robust chunking
+- `demo-1p-127s-en-gb0.oga` (~127 s Bush radio address); used only for robust chunking (`-r`), not one of the three tiered device demos
 
 ### `silent_wav` (session)
 
@@ -215,21 +241,65 @@ alone write their own minimal YAML inline (see `TestDeviceAbortOnFailure` in
 
 ## Mock pipeline inventory (from `kaiku.conf.example`)
 
-### Devices
+### Devices (`mock_devices` config, else fixture dir basename = `-d` name)
 
-- `**mock-jfk`** — serves `test_data/jfk-11s-1p.wav` (~11 s, one speaker)
-- `**mock-group`** — serves `test_data/group-30s-4p.wav` (~30 s, multi-speaker)
+- `demo-1p-011s-en-jfk` — ~11 s, one speaker (JFK)
+- `demo-4p-030s-en-ami` — ~30 s, AMI meeting (~4 speakers)
+- `demo-3p-096s-de-eoc` — ~96 s, German interview
+- `demo-1p-127s-en-gb0` — ~127 s, Bush radio address (OGA)
+- `demo-2p-023s-en-courtney`, `demo-4p-082s-en-agni`, `demo-3p-051s-fi-metro` — extended clips
+
+After `kaiku --download-fixtures`, try e.g. `kaiku -d demo-1p-011s-en-jfk -x mock-fwd`.
 
 ### ASR backends
 
 - `**mock**` — fixed canned fox sentence
 - `**mock-fwd` / `mock-bwd**` — duration-scaled word counts from a transcript file (forward vs reverse)
-- `**mock-dia-2` / `mock-dia-3**` — mock diarization with two or three speaker labels
+- `**mock-dia-4` / `mock-dia-3**` — mock diarization with four or three speaker labels (E2E only)
 
 ### Post-processors
 
 - `**mock-pp**` — mock backend; linguistic analysis of resolved system prompt + transcript
 - `**mock-pp2**` — `extends: mock-pp` with additional `extra` prose in config; used in E2E to assert merged prompt statistics (wider `Prompt analyzed: … words=…` than `mock-pp` alone)
+
+---
+
+## Demo clip catalog
+
+Naming: `demo-{Np}-{DDD}s-{lang}-{codename}` (duration zero-padded to three digits).
+
+Audio is **not** in git. Download with `kaiku --download-fixtures` into
+`~/.local/share/kaiku/fixtures`; each file is usable as `kaiku -d <basename>` without
+editing config. **Transcripts** (reference text for tests and optional ASR checks):
+
+| Transcript | ~Duration | Speakers | Lang |
+|------------|-----------|----------|------|
+| [demo-1p-011s-en-jfk.txt](fixtures/transcripts/demo-1p-011s-en-jfk.txt) | 11 s | 1 | en |
+| [demo-4p-030s-en-ami.txt](fixtures/transcripts/demo-4p-030s-en-ami.txt) | 30 s | ~4 | en |
+| [demo-3p-096s-de-eoc.txt](fixtures/transcripts/demo-3p-096s-de-eoc.txt) | 96 s | 3 | de |
+| [demo-1p-127s-en-gb0.txt](fixtures/transcripts/demo-1p-127s-en-gb0.txt) | 127 s | 1 | en |
+| [demo-2p-023s-en-courtney.txt](fixtures/transcripts/demo-2p-023s-en-courtney.txt) | 23 s | 2 | en |
+| [demo-4p-082s-en-agni.txt](fixtures/transcripts/demo-4p-082s-en-agni.txt) | 82 s | 3–4 | en |
+| [demo-3p-051s-fi-metro.txt](fixtures/transcripts/demo-3p-051s-fi-metro.txt) | 51 s | 3 | fi |
+
+`SPEAKER_*` lines in some transcripts are approximate fixture labels for diarization tests, not ground truth.
+
+Sources: whisper.cpp JFK sample; DiariZen AMI excerpt; Wikimedia Element of Crime / Bush address / Courtney Love BBC / Agni-III Wikinews / Finnish metro dialogue — see git history and `kaiku/fixtures.py` URLs.
+
+---
+
+## Extended E2E (optional real ASR)
+
+Not part of default `pytest tests/`. Run when you choose a backend:
+
+```bash
+KAIKU_EXTENDED_BACKEND=wcpp pytest tests/test_e2e_extended.py -v -m extended
+```
+
+- **Non-diarizing backends** (`wcpp`, API names, …): every `demo-1p-*` mock device, with `-l en` on English solos and `-l de` / `-l fi` on German/Finnish clips where applicable; stdout compared to reference transcripts (word-recall threshold).
+- **Diarizing backends** (`whisperx`, …): every multi-speaker `demo-*p-*` device; diarized stdout vs reference `.txt`.
+
+Set `KAIKU_EXTENDED_BACKEND` to a key under `asr_backends:` in your config. Requires credentials/models for that backend.
 
 ---
 
@@ -250,7 +320,7 @@ traceability.
 ### Still missing (E2E or integration)
 
 - `**--serve` / `LocalAsrConfig`** — needs optional `sherpa-onnx`; use `pytest.importorskip` and assert the server binds / responds, or keep out of default CI
-- **Real ASR backends** (Groq, OpenAI-compatible APIs, `wcpp`, WhisperX) — credential- and hardware-gated; belong in a `pytest -m integration` profile with skips
+- **Real ASR backends** — optional `tests/test_e2e_extended.py` (`-m extended`, `KAIKU_EXTENDED_BACKEND=…`); not in default CI
 - **VAD / continuous modes** (`--vad`, `--interval`) — heavy deps and long-running processes; optional suite
 - `**pyrnnoise` / `deepfilter` preprocessors** — same pattern as `noisereduce`: assert only when the extra is installed
 
