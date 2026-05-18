@@ -679,11 +679,30 @@ class Config:
     def robust(self) -> bool:
         return bool(getattr(self._args, "robust", False))
 
-    @property
+    @functools.cached_property
     def chunk_duration(self) -> int:
-        """Max chunk duration in seconds for robust mode. Default: 180."""
-        v = getattr(self._args, "chunk_duration", None)
-        return int(v) if v is not None else 180
+        """Max chunk duration in seconds for robust mode. CLI → config → default 180."""
+        source = None
+        if (v := getattr(self._args, "chunk_duration", None)) is not None:
+            source = 'CLI -C'
+        elif (v := self._config_dict.get("chunk_duration")) is not None:
+            source = 'config/chunk_duration'
+        else:
+            v = 180
+            source = 'default'
+        info(f"  Chunk duration: {v}s ({source})")
+        return int(v)
+
+    @functools.cached_property
+    def max_retry_count(self) -> int:
+        """Max retry attempts per chunk in robust mode. Default: 5."""
+        if (v := self._config_dict.get("max_retry_count")) is not None:
+            source = 'config/max_retry_count'
+        else:
+            v = 5
+            source = 'default'
+        info(f"  Max retry count: {v}s ({source})")
+        return int(v)
 
     @property
     def interval(self) -> float | None:
@@ -705,3 +724,8 @@ class Config:
         """Silence duration to trigger transcription. Default: 1.5s."""
         v = getattr(self._args, "silence_duration", None)
         return float(v) if v is not None else 1.5
+
+    @property
+    def context_paths(self) -> list[str]:
+        """Extra context files from CLI -X/--context flags."""
+        return list(getattr(self._args, "context_paths", None) or [])

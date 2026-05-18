@@ -52,13 +52,25 @@ def _find_chunk_boundaries(
     return boundaries
 
 
-def _check_quality(text: str) -> bool:
-    """Return False if text looks like a hallucination loop or is nearly empty."""
+def _check_quality(text: str, chunk_id: str = "?", prior_word_counts: list[int] | None = None) -> bool:
+    """Check if text is valid (not too short, not repetitive, not anomalously short).
+
+    Returns False with a detailed rejection log if the text fails any check.
+    Logs include: chunk_id, reason, and truncated chunk text.
+    """
     words = re.findall(r"\b\w+\b", text.lower())
-    if len(words) < 5:
+    if len(words) < 10:
+        warning(f"Chunk {chunk_id}: rejected — too short ({len(words)} words): {text.strip()}")
         return False
-    if len(set(words)) / len(words) < 0.5:
+    ratio = len(set(words)) / len(words)
+    if ratio < 0.4:
+        warning(f"Chunk {chunk_id}: rejected — repetitive (unique ratio {ratio:.2f}): {text.strip()}")
         return False
+    if prior_word_counts and len(prior_word_counts) >= 3:
+        median = sorted(prior_word_counts)[len(prior_word_counts) // 2]
+        if median > 10 and len(words) < median * 0.25:
+            warning(f"Chunk {chunk_id}: rejected — unusually short ({len(words)} vs median {median}): {text.strip()}")
+            return False
     return True
 
 
@@ -101,6 +113,9 @@ def process_file_robust(config: Config):
     total_s = len(audio) / 1000.0
     info(f"Audio loaded: {total_s:.1f}s total ({time.time() - t0:.1f}s to load)")
 
+    _ = config.chunk_duration
+    _ = config.max_retry_count
+
     preprocessor = make_preprocessor(config)
     if not isinstance(preprocessor, NonePreprocessor):
         t_pre = time.time()
@@ -113,9 +128,11 @@ def process_file_robust(config: Config):
             warning(f"Preprocessing failed ({e}), using audio as-is.")
 
     max_chunk_ms = config.chunk_duration * 1000
+    info("Detecting silence boundaries for chunking…")
+    t_split = time.time()
     boundaries = _find_chunk_boundaries(audio, max_chunk_ms)
     n_chunks = len(boundaries)
-    info(f"Splitting into {n_chunks} chunk(s)")
+    info(f"Splitting into {n_chunks} chunk(s) (silence analysis: {time.time() - t_split:.1f}s)")
 
     scratch: str | None = None
     output_file = config.output_file
@@ -132,6 +149,7 @@ def process_file_robust(config: Config):
     info(f"Target file for chunks: {chunk_target}")
 
     had_transcribed = False
+    good_word_counts = []
 
     for idx, (start_ms, end_ms) in enumerate(boundaries, 1):
         chunk_s = (end_ms - start_ms) / 1000.0
@@ -147,7 +165,7 @@ def process_file_robust(config: Config):
 
         text: str | None = None
         quality_ok = False
-        max_retry_count = 5
+        max_retry_count = config.max_retry_count
         t_chunk = time.time()
 
         for attempt in range(max_retry_count):
@@ -155,7 +173,7 @@ def process_file_robust(config: Config):
                 candidate = transcribe(
                     tmp_path, config, raise_on_error=True, timeout=timeout
                 )
-                if _check_quality(candidate):
+                if _check_quality(candidate, f"{idx}/{n_chunks}", good_word_counts):
                     text = candidate
                     quality_ok = True
                     break
@@ -192,11 +210,12 @@ def process_file_robust(config: Config):
                 f.write(f"\n# [ERROR: chunk {idx}/{n_chunks} — transcription failed]\n")
             continue
 
-        if not quality_ok:
-            # Last attempt produced text but quality is uncertain
-            warning_line = f"\n# [WARNING: chunk {idx}/{n_chunks} — quality uncertain, may contain errors]\n"
-        else:
+        if quality_ok:
             warning_line = ""
+            words_in_chunk = len(re.findall(r"\b\w+\b", text.lower()))
+            good_word_counts.append(words_in_chunk)
+        else:
+            warning_line = f"\n# [WARNING: chunk {idx}/{n_chunks} — quality uncertain, may contain errors]\n"
 
         had_transcribed = True
 

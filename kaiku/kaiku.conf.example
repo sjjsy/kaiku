@@ -330,6 +330,10 @@ output_templates:
 # quiet: false                                # true = only output transcription and errors
 # org_id:                                     # OpenAI organization ID (rarely needed)
 #
+# Robust mode (-r) parameters
+chunk_duration: 300                           # Max chunk duration in seconds for -r/--robust mode
+max_retry_count: 5                            # Retry attempts per failed/rejected chunk in -r/--robust mode
+#
 # Maximum transcript characters copied as text to clipboard. When the transcript text
 # exceeds this limit, the path to the transcript file is copied to the clipboard instead.
 # 50 000 chars ≈ 1 hour of speech at 150 wpm & 5 chars per word (English audiobook rate).
