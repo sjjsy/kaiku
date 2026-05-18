@@ -182,7 +182,6 @@ done.md
 # all audio, video and other files used in manual testing during development
 data/
 # test fixtures — downloaded on demand by conftest.py
-test_data/*.wav
 
 # Claude Code related files
 .claude/

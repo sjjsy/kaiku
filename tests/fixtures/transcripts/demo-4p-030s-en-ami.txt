@@ -1,0 +1,4 @@
+SPEAKER_00: Yeah, I don't know about you, but usually it's a right click.
+SPEAKER_01: It might be a bit weird for you to just drop them in and stuff and just have the same sort of videos about it.
+SPEAKER_02: Or just a button.
+SPEAKER_03: I guess it makes a bit more sense because otherwise you don't really know that.

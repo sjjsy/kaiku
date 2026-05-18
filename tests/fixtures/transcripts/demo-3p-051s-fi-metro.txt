@@ -1,0 +1,16 @@
+SPEAKER_00: Hei, anteeksi, mutta oletko sinä Markku?
+SPEAKER_01: Olen. Entä kuka sinä olen?
+SPEAKER_00: Minä olen Sakari, entinen luokkatoverisi.
+SPEAKER_01: Ai, Sakari, pitkästä aikaa. Mitä kuuluu?
+SPEAKER_00: Ihan hyvä. Olen nykyisin Saksan opettaja.
+SPEAKER_01: Oho, minä olen vielä opiskelija. Kuka hän on?
+SPEAKER_00: Hän on isojuskali Tiina.
+SPEAKER_02: Hei.
+SPEAKER_03: Markku ja Tiina, missä te olette? Tulkaa jo, meidän täytyy mennä.
+SPEAKER_02: Minulla nyt kiire. Isä odottaa, mutta oli hauska tutustua.
+SPEAKER_01: Samoin.
+SPEAKER_02: Hei, hei.
+SPEAKER_01: Siskosi on todella kaunis. Onko hän malli?
+SPEAKER_00: Ei, vaan hän on toimittaja. Kaunis hän kyllä on.
+SPEAKER_03: Markku!
+SPEAKER_02: Markku! Tule jo!
