@@ -99,8 +99,11 @@ diarize = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["tests"]
+pythonpath = ["."]
 addopts = "-ra -q"
+markers = [
+    "extended: optional real-ASR demo clip battery (set KAIKU_EXTENDED_BACKEND)",
+]
 
 [tool.ruff]
 target-version = "py310"
