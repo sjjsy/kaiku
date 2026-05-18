@@ -231,7 +231,7 @@ alone write their own minimal YAML inline (see `TestDeviceAbortOnFailure` in
 
 ### `long_speech` (session)
 
-- `demo-1p-127s-en-gb0.oga` (~127 s Bush radio address); used only for robust chunking (`-r`), not one of the three tiered device demos
+- `demo-1p-127s-en-gb0.wav` (~127 s Bush radio address); used only for robust chunking (`-r`), not one of the three tiered device demos
 
 ### `silent_wav` (session)
 
@@ -246,7 +246,7 @@ alone write their own minimal YAML inline (see `TestDeviceAbortOnFailure` in
 - `demo-1p-011s-en-jfk` — ~11 s, one speaker (JFK)
 - `demo-4p-030s-en-ami` — ~30 s, AMI meeting (~4 speakers)
 - `demo-3p-096s-de-eoc` — ~96 s, German interview
-- `demo-1p-127s-en-gb0` — ~127 s, Bush radio address (OGA)
+- `demo-1p-127s-en-gb0` — ~127 s, Bush radio address (WAV)
 - `demo-2p-023s-en-courtney`, `demo-4p-082s-en-agni`, `demo-3p-051s-fi-metro` — extended clips
 
 After `kaiku --download-fixtures`, try e.g. `kaiku -d demo-1p-011s-en-jfk -x mock-fwd`.

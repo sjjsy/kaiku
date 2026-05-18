@@ -27,7 +27,7 @@ _AUDIO_URLS: dict[str, str] = {
         "https://upload.wikimedia.org/wikipedia/commons/9/9f/"
         "Element_of_Crime_Interview_1987.ogg"
     ),
-    "demo-1p-127s-en-gb0.oga": (
+    "demo-1p-127s-en-gb0.wav": (
         "https://upload.wikimedia.org/wikipedia/commons/2/22/"
         "George_W._Bush%27s_weekly_radio_address_%28November_1%2C_2008%29.oga"
     ),
@@ -53,7 +53,7 @@ DEMO_MOCK_DEVICES: tuple[tuple[str, str], ...] = (
     ("demo-1p-011s-en-jfk", "demo-1p-011s-en-jfk.wav"),
     ("demo-4p-030s-en-ami", "demo-4p-030s-en-ami.wav"),
     ("demo-3p-096s-de-eoc", "demo-3p-096s-de-eoc.wav"),
-    ("demo-1p-127s-en-gb0", "demo-1p-127s-en-gb0.oga"),
+    ("demo-1p-127s-en-gb0", "demo-1p-127s-en-gb0.wav"),
     ("demo-2p-023s-en-courtney", "demo-2p-023s-en-courtney.wav"),
     ("demo-4p-082s-en-agni", "demo-4p-082s-en-agni.wav"),
     ("demo-3p-051s-fi-metro", "demo-3p-051s-fi-metro.wav"),
@@ -72,8 +72,6 @@ EXTENDED_DEMO_WAV_NAMES: tuple[str, ...] = tuple(
     fn for _, fn in DEMO_MOCK_DEVICES if fn not in DEMO_WAV_NAMES and fn.endswith(".wav")
 )
 
-LONG_DEMO_OGA_NAMES: tuple[str, ...] = ("demo-1p-127s-en-gb0.oga",)
-
 # Solo clips (extended ASR): basename without extension.
 DEMO_SOLO_DEVICE_NAMES: tuple[str, ...] = tuple(
     name for name, _ in DEMO_MOCK_DEVICES if name.startswith("demo-1p-")
@@ -88,12 +86,14 @@ _DEFAULT_DOWNLOAD = tuple(dict.fromkeys(
     [fn for _, fn in DEMO_MOCK_DEVICES] + list(DEMO_TXT_NAMES)
 ))
 
-_WAV_FROM_REMOTE_OGG = frozenset({
-    "demo-3p-096s-de-eoc.wav",
-    "demo-2p-023s-en-courtney.wav",
-    "demo-4p-082s-en-agni.wav",
-    "demo-3p-051s-fi-metro.wav",
-})
+# Local WAV name → temp download suffix (remote may be Ogg/Opus/OGA).
+_WAV_FROM_REMOTE: dict[str, str] = {
+    "demo-3p-096s-de-eoc.wav": ".src.ogg",
+    "demo-1p-127s-en-gb0.wav": ".src.oga",
+    "demo-2p-023s-en-courtney.wav": ".src.ogg",
+    "demo-4p-082s-en-agni.wav": ".src.ogg",
+    "demo-3p-051s-fi-metro.wav": ".src.ogg",
+}
 
 _FIXTURE_AUDIO_SUFFIXES = frozenset({".wav", ".oga", ".ogg", ".mp3", ".m4a", ".flac", ".webm"})
 
@@ -151,6 +151,16 @@ def ensure_fixture(name: str, dest_dir: Path) -> Path:
     """Return path to fixture, downloading into *dest_dir* if missing."""
     dest_dir.mkdir(parents=True, exist_ok=True)
     path = dest_dir / name
+    if not path.exists() and name.endswith(".wav"):
+        legacy = path.with_suffix(".oga")
+        if legacy.is_file():
+            from .audio import convert_audio_to_wav
+
+            info(f"Converting legacy fixture {legacy.name} → {name} ...")
+            convert_audio_to_wav(str(legacy), str(path))
+            legacy.unlink(missing_ok=True)
+            success(f"Converted: {path}")
+            return path
     if path.exists():
         info(f"Fixture present: {path}")
         return path
@@ -163,13 +173,13 @@ def ensure_fixture(name: str, dest_dir: Path) -> Path:
     url = fixture_url(name)
     info(f"Downloading {name} ...")
     try:
-        if name in _WAV_FROM_REMOTE_OGG:
-            ogg = dest_dir / f".{name}.src.ogg"
-            _download(url, ogg)
+        if name in _WAV_FROM_REMOTE:
+            src = dest_dir / f".{name}{_WAV_FROM_REMOTE[name]}"
+            _download(url, src)
             from .audio import convert_audio_to_wav
 
-            convert_audio_to_wav(str(ogg), str(path))
-            ogg.unlink(missing_ok=True)
+            convert_audio_to_wav(str(src), str(path))
+            src.unlink(missing_ok=True)
         else:
             _download(url, path)
     except Exception as exc:

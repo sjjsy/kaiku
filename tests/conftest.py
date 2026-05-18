@@ -85,4 +85,4 @@ def demo_3p_wav(fixture_dir: Path) -> Path:
 
 @pytest.fixture(scope="session")
 def long_speech(fixture_dir: Path) -> Path:
-    return fixture_dir / "demo-1p-127s-en-gb0.oga"
+    return fixture_dir / "demo-1p-127s-en-gb0.wav"
