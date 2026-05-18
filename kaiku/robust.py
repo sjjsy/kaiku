@@ -147,10 +147,10 @@ def process_file_robust(config: Config):
 
         text: str | None = None
         quality_ok = False
-        retries = 3
+        max_retry_count = 5
         t_chunk = time.time()
 
-        for attempt in range(retries):
+        for attempt in range(max_retry_count):
             try:
                 candidate = transcribe(
                     tmp_path, config, raise_on_error=True, timeout=timeout
@@ -160,19 +160,19 @@ def process_file_robust(config: Config):
                     quality_ok = True
                     break
                 else:
-                    if attempt < retries - 1:
+                    if attempt < max_retry_count - 1:
                         warning(
                             f"Chunk {idx}/{n_chunks}: quality check failed "
-                            f"(attempt {attempt + 1}/{retries}), retrying…"
+                            f"(attempt {attempt + 1}/{max_retry_count}), retrying…"
                         )
             except TranscriptionError as e:
-                if attempt < retries - 1:
+                if attempt < max_retry_count - 1:
                     warning(
-                        f"Chunk {idx}/{n_chunks}: error (attempt {attempt + 1}/{retries}): {e}"
+                        f"Chunk {idx}/{n_chunks}: error (attempt {attempt + 1}/{max_retry_count}): {e}"
                     )
                 else:
                     warning(
-                        f"Chunk {idx}/{n_chunks}: failed after {retries} attempts: {e}"
+                        f"Chunk {idx}/{n_chunks}: failed after {max_retry_count} attempts: {e}"
                     )
             except Exception as e:
                 warning(f"Chunk {idx}/{n_chunks}: unexpected error: {e}")
