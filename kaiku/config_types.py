@@ -370,16 +370,15 @@ class RecorderConfig:
             )
         )
 
-        # Check mock_devices before querying real hardware.
-        # A mock device spec is any comma-separated token that appears as a key
-        # in the config's mock_devices: section.
-        mock_devices = self._config_dict.get("mock_devices", {})
         specs = (
             [s.strip() for s in device_spec.split(",")]
             if isinstance(device_spec, str)
             else [str(s) for s in device_spec]
         )
+        mock_devices = self._config_dict.get("mock_devices", {})
         for spec in specs:
+            if spec == "auto":
+                continue
             if spec in mock_devices:
                 mock_cfg = mock_devices[spec]
                 source_file = os.path.expanduser(mock_cfg.get("source_file", ""))
@@ -399,7 +398,30 @@ class RecorderConfig:
                     mock_source=source_file,
                 )
                 info(
-                    f"Using mock device: {spec} (source: {source_file}) (from mock_devices config)"
+                    f"Using mock device: {spec} (source: {source_file}) "
+                    f"({device_source}; mock_devices config)"
+                )
+                return "mock", device_info
+
+        from .fixtures import resolve_fixture_audio_device
+
+        for spec in specs:
+            if spec == "auto":
+                continue
+            if fixture_path := resolve_fixture_audio_device(spec):
+                source_file = str(fixture_path)
+                device_info = DeviceInfo(
+                    index=-1,
+                    name=spec,
+                    portaudio_name=None,
+                    alsa_name=None,
+                    channels=1,
+                    sample_rate=16000,
+                    mock_source=source_file,
+                )
+                info(
+                    f"Using mock device: {spec} (fixture: {source_file}) "
+                    f"({device_source}; basename in fixture dir)"
                 )
                 return "mock", device_info
 
@@ -637,9 +659,12 @@ class Config:
         """True when ``--no-clipboard`` was passed (no wl-copy / copykitten)."""
         return bool(getattr(self._args, "no_clipboard", False))
 
-    @property
+    @functools.cached_property
     def language(self) -> str | None:
-        return getattr(self._args, "language", None)
+        lang = getattr(self._args, "language", None)
+        if lang:
+            info(f"Using language: {lang} (CLI -l)")
+        return lang
 
     @property
     def template(self) -> str | None:

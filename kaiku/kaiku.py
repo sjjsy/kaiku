@@ -441,7 +441,7 @@ def _build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  kaiku --download-fixtures                # mock demo files + config path hints
+  kaiku --download-fixtures                # demo clips → fixture dir (use as -d devices)
   kaiku --edit                             # create/open config in editor
   kaiku --test                             # verify backend and preprocessors
   kaiku                                    # record, transcribe, copy to clipboard
@@ -497,9 +497,9 @@ See https://github.com/sjjsy/kaiku for full documentation and configuration exam
         "--download-fixtures",
         action="store_true",
         help=(
-            "Download mock demo audio and transcript files to "
-            "~/.local/share/kaiku/fixtures (or $XDG_DATA_HOME/kaiku/fixtures), "
-            "then print config paths to paste into your config"
+            "Download demo audio and transcripts to ~/.local/share/kaiku/fixtures "
+            "(or $XDG_DATA_HOME/kaiku/fixtures). Each file is usable as "
+            "kaiku -d <basename> without editing config."
         ),
     )
     setup_group.add_argument(
@@ -770,9 +770,9 @@ def main():
         return
 
     if args.download_fixtures:
-        from .fixtures import download_fixtures, print_fixture_config_help
+        from .fixtures import download_fixtures, report_fixture_setup
 
-        print_fixture_config_help(download_fixtures())
+        report_fixture_setup(download_fixtures())
         return
 
     if args.list_devices:

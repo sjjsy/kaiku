@@ -242,14 +242,30 @@ def resolve_device_preference_order(spec: str | list | None) -> list[DeviceInfo]
 
 
 def list_audio_devices():
-    """List all available audio input devices with human-readable info."""
+    """List fixture dir summary and hardware audio inputs."""
+    from .fixtures import default_fixture_dir, list_fixture_audio_devices
+
+    fixture_dir = default_fixture_dir()
+    n = len(list_fixture_audio_devices(fixture_dir))
+    if n:
+        print(
+            f"Fixture mocks: {fixture_dir} ({n} audio files); "
+            f"use -d <basename> (mock_devices in config overrides)."
+        )
+    else:
+        print(
+            f"Fixture mocks: {fixture_dir} (empty); "
+            f"run kaiku --download-fixtures or add audio; use -d <basename>."
+        )
+    print()
+
     available = query_devices()
     if not available:
-        print("No audio input devices found.")
+        print("No hardware audio input devices found.")
         print("Check microphone permissions or system audio configuration.")
         return
 
-    print("Available audio input devices:")
+    print("Hardware audio input devices:")
     print("-" * 80)
     for dev in available:
         print(f"  {dev.index}: {dev}")

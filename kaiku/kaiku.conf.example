@@ -48,15 +48,14 @@ presets:
 #
 # audio_device: "auto"                        # Use system default (recommended)
 
-## ── Mock audio devices ────────────────────────────────────────────────────────
-# Mock devices simulate microphone recording by serving a pre-recorded WAV file.
-# Any name defined here can be used as audio_device or via --device on the CLI.
-# Run `kaiku --download-fixtures` and paste the printed paths below.
-mock_devices:
-  mock-jfk:                                  # 11s solo speech
-    source_file: "test_data/jfk-11s-1p.wav"   # absolute path from kaiku --download-fixtures
-  mock-group:                                # 30s group discussion
-    source_file: "test_data/group-30s-4p.wav"
+## ── Mock audio devices (optional) ─────────────────────────────────────────────
+# mock_devices entries override fixture-dir discovery for the same name.
+# After `kaiku --download-fixtures`, audio in ~/.local/share/kaiku/fixtures also works
+# as `kaiku -d <basename>` without YAML. `kaiku --list-devices` shows dir + file count.
+# Optional: map custom names to files outside the fixture dir:
+# mock_devices:
+#   my-mic:
+#     source_file: "/path/to/recording.wav"
 
 ## ── Toggle-mode recorder ──────────────────────────────────────────────────────
 # Controls which backend captures audio during --toggle mode.
@@ -85,11 +84,11 @@ asr_backends:
     latency_ms: 100
   mock-fwd:                                   # Returns N words from transcript (N = audio_s / 2, forward)
     type: mock-fwd
-    transcript_path: "test_data/group-2p-2.txt"   # use path from `kaiku --download-fixtures`
+    transcript_path: "~/.local/share/kaiku/fixtures/demo-1p-011s-en-jfk.txt"   # JFK excerpt
     latency_ms: 50
   mock-bwd:                                   # Same as mock-fwd, words in reverse
     type: mock-bwd
-    transcript_path: "test_data/group-2p-2.txt"
+    transcript_path: "~/.local/share/kaiku/fixtures/demo-1p-011s-en-jfk.txt"
     latency_ms: 50
   # ── Normal ASR backends ──
   # openai:                                   # OpenAI Whisper API
@@ -183,6 +182,8 @@ postprocessors:                               # FIXME: Update this section based
   mock-pp:                                    # Mock post-processor for testing (analyzes prompt and transcript)
     backend: mock
     prompt: "Enhance the transcript with great clarity and rigor."
+    context_path:
+      - "~/.config/kaiku.conf"                # Example config file
 
   mock-pp2:                                    # Mock post-processor for testing (analyzes prompt and transcript)
     extends: mock-pp
