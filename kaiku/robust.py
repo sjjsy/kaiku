@@ -165,6 +165,8 @@ def process_file_robust(config: Config):
 
         text: str | None = None
         quality_ok = False
+        last_candidate: str | None = None
+        last_failure_reason: str | None = None
         max_retry_count = config.max_retry_count
         t_chunk = time.time()
 
@@ -173,17 +175,20 @@ def process_file_robust(config: Config):
                 candidate = transcribe(
                     tmp_path, config, raise_on_error=True, timeout=timeout
                 )
+                last_candidate = candidate
                 if _check_quality(candidate, f"{idx}/{n_chunks}", good_word_counts):
                     text = candidate
                     quality_ok = True
                     break
                 else:
+                    last_failure_reason = "quality check failed"
                     if attempt < max_retry_count - 1:
                         warning(
                             f"Chunk {idx}/{n_chunks}: quality check failed "
                             f"(attempt {attempt + 1}/{max_retry_count}), retrying…"
                         )
             except TranscriptionError as e:
+                last_failure_reason = str(e)
                 if attempt < max_retry_count - 1:
                     warning(
                         f"Chunk {idx}/{n_chunks}: error (attempt {attempt + 1}/{max_retry_count}): {e}"
@@ -193,6 +198,7 @@ def process_file_robust(config: Config):
                         f"Chunk {idx}/{n_chunks}: failed after {max_retry_count} attempts: {e}"
                     )
             except Exception as e:
+                last_failure_reason = str(e)
                 warning(f"Chunk {idx}/{n_chunks}: unexpected error: {e}")
                 break
 
@@ -205,9 +211,15 @@ def process_file_robust(config: Config):
         )
 
         if text is None:
-            warning(f"Chunk {idx}/{n_chunks} could not be transcribed; skipping.")
+            warning(f"Chunk {idx}/{n_chunks} could not be transcribed.")
             with open(chunk_target, "a", encoding="utf-8") as f:
-                f.write(f"\n# [ERROR: chunk {idx}/{n_chunks} — transcription failed]\n")
+                f.write(f"\n[WARNING: chunk {idx}/{n_chunks} — transcription quality check failed {max_retry_count} times")
+                if last_failure_reason:
+                    f.write(f"; reason: {last_failure_reason}")
+                f.write("]\n")
+                if last_candidate:
+                    f.write(last_candidate)
+                    f.write(f"\n[END WARNING: chunk {idx}/{n_chunks}]\n")
             continue
 
         if quality_ok:
