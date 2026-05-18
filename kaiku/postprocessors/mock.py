@@ -48,6 +48,7 @@ class MockPostProcessor(PostProcessor):
         prompt_name: str = "mock",
         model: str = "mock-model",
         system_prompt: str | None = None,
+        context_text: str | None = None,
     ):
         """Initialize mock post-processor.
 
@@ -55,10 +56,12 @@ class MockPostProcessor(PostProcessor):
             prompt_name: Name of this post-processor (for output metadata).
             model: Model name (for output metadata, used in response).
             system_prompt: System prompt (will be analyzed in response).
+            context_text: Pre-formatted context text (will list files in response).
         """
         self._prompt_name = prompt_name
         self._model = model
         self._system_prompt = system_prompt
+        self._context_text = context_text
 
     @property
     def name(self) -> str:
@@ -85,15 +88,23 @@ class MockPostProcessor(PostProcessor):
             metadata: Recording metadata (ignored in mock).
 
         Returns:
-            Analysis of the system prompt and transcript with statistics.
+            Analysis of the system prompt and transcript with statistics, plus context file listing.
         """
+        import re
         prompt_text = self._system_prompt or ""
         prompt_analysis = _analyze_text(prompt_text)
         transcript_analysis = _analyze_text(transcript)
         model_title = self._model.title()
 
-        return (
+        result = ""
+        if self._context_text:
+            files = re.findall(r"^\s+•\s+(.+)$", self._context_text, re.MULTILINE)
+            if files:
+                result += f"Context files: {', '.join(files)}\n"
+
+        result += (
             f"Prompt analyzed: {prompt_analysis}\n"
             f"Transcript analyzed: {transcript_analysis}\n"
             f"*Yours truly, {model_title}*\n"
         )
+        return result

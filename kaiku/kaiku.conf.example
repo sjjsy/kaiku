@@ -178,6 +178,7 @@ postprocessor_backends:                       # FIXME: Update this section based
 #   model:         override the backend's default model for this prompt
 #   template:      output template name from output_templates below (default: "default")
 #   context_path:  list of file glob patterns; contents are injected into the LLM request
+#                  Use -X FILE on the CLI to inject extra context files at runtime
 postprocessors:                               # FIXME: Update this section based on your setup
   mock-pp:                                    # Mock post-processor for testing (analyzes prompt and transcript)
     backend: mock

@@ -54,8 +54,8 @@ usage: kaiku [-h] [-v] [-q] [-c FILE] [-e] [--generate-config]
                 [--serve] [--host HOST] [--port PORT] [--model-dir MODEL_DIR]
                 [--num-threads NUM_THREADS] [--download-model] [--vad]
                 [--interval SEC] [--silence-threshold PROB]
-                [--silence-duration SEC] [-s N] [-P NAME] [-M MODEL] [-o FILE]
-                [-T NAME] [-z]
+                [--silence-duration SEC] [-s N] [-P NAME] [-M MODEL] [-X FILE]
+                [-o FILE] [-T NAME] [-z]
 
 Record audio and transcribe to clipboard using ASR API
 
@@ -151,6 +151,10 @@ Post-processing:
                         AI model used for the post-processing (f. ex. claude-
                         sonnet-4-6). Overrides the post-processor config for
                         this run.
+  -X FILE, --context FILE
+                        Extra context file (glob pattern) injected into the
+                        post-processor. Repeatable. Appended to any
+                        context_path: defined in the postprocessor config.
 
 Output:
   -o FILE, --output FILE
@@ -664,6 +668,7 @@ The feature is especially valuable for frequent dictators (researchers, journali
 |------|-------------|
 | `-P NAME / --post NAME` | LLM post-processor name (key in `postprocessors:` config) or an inline system-prompt string. Overrides the preset's post-processor. |
 | `-M MODEL / --post-model MODEL` | LLM model used for post-processing. Overrides the post-processor config for this run. |
+| `-X FILE / --context FILE` | Extra context file (glob pattern) injected into the post-processor. Can be repeated. Appended to any `context_path:` defined in the postprocessor config. |
 | `-T NAME / --template NAME` | Output template name from `output_templates:` in config. Controls what is written to clipboard / `-o FILE`. |
 
 ### Mock post-processor for testing
@@ -742,6 +747,7 @@ kaiku --toggle -P solo-enhance          # toggle → improved personal transcrip
 kaiku --toggle -P solo-restructure      # toggle → structured personal memo
 kaiku -i meeting.m4a -b whisperx -P group-restructure  # diarize + meeting memo
 kaiku --toggle -P "List action items."   # inline system prompt
+kaiku -i audio.mp3 -P solo-enhance -X ~/.kaiku/context/personal.md  # with extra context
 ```
 
 ### Supported AI backends

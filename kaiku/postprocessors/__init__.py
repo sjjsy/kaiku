@@ -351,6 +351,7 @@ def make_postprocessor(config: Config) -> PostProcessor:
     backend_cfg = _resolve_backend(
         config_dict, resolved["backend_name"], resolved["model"]
     )
+    resolved["context_paths"] = resolved["context_paths"] + config.context_paths
     context_text = _load_context(resolved["context_paths"])
 
     btype = backend_cfg["type"]
@@ -382,6 +383,7 @@ def make_postprocessor(config: Config) -> PostProcessor:
             prompt_name=name if " " not in name else "mock",
             model=backend_cfg["model"],
             system_prompt=resolved["system_prompt"],
+            context_text=context_text,
         )
     else:
         print(

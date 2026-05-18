@@ -713,6 +713,18 @@ See https://github.com/sjjsy/kaiku for full documentation and configuration exam
             "Overrides the post-processor config for this run."
         ),
     )
+    post_group.add_argument(
+        "-X",
+        "--context",
+        metavar="FILE",
+        action="append",
+        dest="context_paths",
+        default=None,
+        help=(
+            "Extra context file (glob pattern) injected into the post-processor. "
+            "Can be repeated. Appended to any context_path: defined in the postprocessor config."
+        ),
+    )
 
     # Output
     output_group = parser.add_argument_group("Output")

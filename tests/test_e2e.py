@@ -267,6 +267,20 @@ class TestPresetAndFilePipeline:
         assert lines_when_verbose > 5
         assert lines_when_quiet == 0
 
+    def test_context_flag_loads_and_appears_in_mock_output(self, example_cfg, silent_wav):
+        """``-X FILE`` injects context into post-processor; MockPostProcessor lists files."""
+        context_file = Path("/etc/hostname")
+        if not context_file.exists():
+            pytest.skip("No /etc/hostname; skipping context flag test")
+        r = _run(
+            "-i", str(silent_wav), "-b", "mock", "-P", "mock-pp",
+            "-X", str(context_file), "-o", "/dev/null",
+            config=example_cfg,
+        )
+        assert r.returncode == 0
+        assert "Context files:" in r.stdout
+        assert "hostname" in r.stdout
+
 
 class TestPlainTextInput:
     def test_txt_input_skips_asr_and_postprocesses(self, example_cfg, tmp_path):
