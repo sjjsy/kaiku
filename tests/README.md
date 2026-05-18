@@ -239,7 +239,7 @@ alone write their own minimal YAML inline (see `TestDeviceAbortOnFailure` in
 
 ---
 
-## Mock pipeline inventory (from `kaiku.conf.example`)
+## Mock pipeline inventory
 
 ### Devices (`mock_devices` config, else fixture dir basename = `-d` name)
 
@@ -305,8 +305,8 @@ Set `KAIKU_EXTENDED_BACKEND` to a key under `asr_backends:` in your config. Requ
 
 ## Coverage gaps
 
-Remaining items suitable for future black-box tests (or a separate integration  
-tier).  Items covered by the suite since 2026-05-13 are listed under **Covered** below for  
+Remaining items suitable for future black-box tests (or a separate integration
+tier).  Items covered by the suite since 2026-05-13 are listed under **Covered** below for
 traceability.
 
 ### Covered in the current E2E suite
