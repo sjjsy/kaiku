@@ -1,89 +1,88 @@
-"""Shared pytest fixtures for kaiku E2E tests.
-
-The primary fixture `example_cfg` reads the repo's kaiku.conf.example,
-injects `default_preset: mock-fwd`, resolves test_data/ paths to absolute, and
-writes the result to a session-scoped temp file. Every change to the example
-config is therefore automatically exercised by the test suite.
-
-Audio fixtures (`jfk_wav`, `group_wav`, `long_speech`) are auto-downloaded on
-first run and cached in test_data/. They are gitignored. Tests fail with a
-clear message if the download fails (no network, broken URL).
-"""
+"""Shared pytest fixtures for kaiku E2E tests."""
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
 
-from kaiku.fixtures import FixtureDownloadError, ensure_fixture
+from kaiku.fixtures import (
+    FIXTURE_DIR_CONFIG,
+    FixtureDownloadError,
+    download_fixtures,
+)
 
 REPO_ROOT = Path(__file__).parent.parent
 EXAMPLE_CONFIG = REPO_ROOT / "kaiku" / "kaiku.conf.example"
-TEST_DATA = REPO_ROOT / "test_data"
+TRANSCRIPTS_DIR = REPO_ROOT / "tests" / "fixtures" / "transcripts"
 
 
-def _ensure_audio(filename: str) -> Path:
+@pytest.fixture(scope="session")
+def fixture_dir(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """Download demo clips once (same paths as ``kaiku --download-fixtures``)."""
+    dest = tmp_path_factory.mktemp("kaiku_fixtures")
     try:
-        return ensure_fixture(filename, TEST_DATA)
+        download_fixtures(dest_dir=dest)
     except FixtureDownloadError as exc:
         pytest.fail(str(exc))
+    os.environ["KAIKU_FIXTURE_DIR"] = str(dest)
+    return dest
 
 
-@pytest.fixture(scope="session")
-def jfk_wav() -> Path:
-    """11-second JFK speech clip (auto-downloaded from whisper.cpp samples)."""
-    return _ensure_audio("jfk-11s-1p.wav")
-
-
-@pytest.fixture(scope="session")
-def group_wav() -> Path:
-    """30-second group conversation clip (auto-downloaded from diarizen-tutorial)."""
-    return _ensure_audio("group-30s-4p.wav")
-
-
-@pytest.fixture(scope="session")
-def long_speech() -> Path:
-    """~3.5-minute George W. Bush radio address (auto-downloaded from Wikimedia Commons).
-
-    Used for robust-mode (-r) tests that require multi-chunk splitting.
-    The file is an OGG/Vorbis audio file (.oga); kaiku's process_file_robust
-    loads it via pydub which uses ffmpeg to decode it.
-    """
-    return _ensure_audio("gb0-3min.oga")
-
-
-@pytest.fixture(scope="session")
-def example_cfg(
-    jfk_wav: Path,    # noqa: ARG001 — ensures WAVs exist before config is written
-    group_wav: Path,  # noqa: ARG001
-    tmp_path_factory: pytest.TempPathFactory,
-) -> Path:
-    """Session-scoped config derived from kaiku.conf.example.
-
-    Patches applied:
-      - Prepends `default_preset: mock-fwd` so tests run without --preset
-      - Replaces relative `test_data/` references with absolute paths so the
-        config works regardless of current working directory
-    """
+def _example_config_text(*, fixture_dir: Path, with_diarization_backends: bool) -> str:
     text = EXAMPLE_CONFIG.read_text()
+    text = text.replace(f"{FIXTURE_DIR_CONFIG}/", f"{fixture_dir.resolve()}/")
+    abs_tx = str(TRANSCRIPTS_DIR)
+    if with_diarization_backends:
+        _post = "## ── Post-processing (with AI models)"
+        _dia = (
+            f"  mock-dia-4:\n    type: mock-diarize\n    speaker_count: 4\n"
+            f'    transcript_path: "{abs_tx}/demo-4p-030s-en-ami.txt"\n'
+            f"  mock-dia-3:\n    type: mock-diarize\n    speaker_count: 3\n"
+            f'    transcript_path: "{abs_tx}/demo-3p-096s-de-eoc.txt"\n'
+        )
+        token = os.environ.get("HF_TOKEN", "")
+        if token:
+            _dia += (
+                f"  whisperx:\n    type: whisperx\n    hf_token: \"{token}\"\n"
+                f"    speakers_min: 2\n    speakers_max: 6\n"
+            )
+        text = text.replace(_post, _dia + _post, 1)
+    return "default_preset: mock-fwd\n\n" + text
 
-    abs_test_data = str(REPO_ROOT / "test_data")
-    text = text.replace("~/path/to/kaiku/test_data/", f"{abs_test_data}/")
-    text = text.replace("test_data/", f"{abs_test_data}/")
 
-    # E2E-only mock diarization backends (not in shipped kaiku.conf.example).
-    _post = "## ── Post-processing (with AI models)"
-    _dia = (
-        f"  mock-dia-2:\n    type: mock-diarize\n    speaker_count: 2\n"
-        f'    transcript_path: "{abs_test_data}/group-2p-2.txt"\n'
-        f"  mock-dia-3:\n    type: mock-diarize\n    speaker_count: 3\n"
-        f'    transcript_path: "{abs_test_data}/group-3p-1.txt"\n'
-    )
-    text = text.replace(_post, _dia + _post, 1)
-
-    text = "default_preset: mock-fwd\n\n" + text
-
+@pytest.fixture(scope="session")
+def example_cfg(fixture_dir: Path, tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """Session config: example YAML + downloaded fixtures (devices via KAIKU_FIXTURE_DIR)."""
     p = tmp_path_factory.mktemp("cfg") / "config.yaml"
-    p.write_text(text)
+    p.write_text(_example_config_text(fixture_dir=fixture_dir, with_diarization_backends=False))
     return p
+
+
+@pytest.fixture(scope="session")
+def diarization_cfg(fixture_dir: Path, tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """Like example_cfg plus mock-diarize backends; whisperx block if HF_TOKEN is set."""
+    p = tmp_path_factory.mktemp("cfg-dia") / "config.yaml"
+    p.write_text(_example_config_text(fixture_dir=fixture_dir, with_diarization_backends=True))
+    return p
+
+
+@pytest.fixture(scope="session")
+def demo_1p_wav(fixture_dir: Path) -> Path:
+    return fixture_dir / "demo-1p-011s-en-jfk.wav"
+
+
+@pytest.fixture(scope="session")
+def demo_4p_wav(fixture_dir: Path) -> Path:
+    return fixture_dir / "demo-4p-030s-en-ami.wav"
+
+
+@pytest.fixture(scope="session")
+def demo_3p_wav(fixture_dir: Path) -> Path:
+    return fixture_dir / "demo-3p-096s-de-eoc.wav"
+
+
+@pytest.fixture(scope="session")
+def long_speech(fixture_dir: Path) -> Path:
+    return fixture_dir / "demo-1p-127s-en-gb0.oga"

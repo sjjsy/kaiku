@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import re
 import struct
 import subprocess
 import textwrap
@@ -36,7 +37,12 @@ from typing import Optional
 import pytest
 
 REPO_ROOT = Path(__file__).parent.parent
+TRANSCRIPTS_DIR = REPO_ROOT / "tests" / "fixtures" / "transcripts"
 MOCK_FIXED = "The quick brown fox jumps over the lazy dog"  # response from -b mock
+_SPEAKER_LINE = re.compile(r"^SPEAKER_\d+:\s*(.*)$", re.I)
+_WHISPERX_READY = (
+    importlib.util.find_spec("whisperx") is not None and bool(os.environ.get("HF_TOKEN"))
+)
 
 
 # ---------------------------------------------------------------------------
@@ -63,6 +69,59 @@ def _run(
         capture_output=True, text=True,
         env=env,
     )
+
+
+def _transcript_words(path: Path) -> list[str]:
+    words: list[str] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        m = _SPEAKER_LINE.match(line)
+        words.extend((m.group(1) if m else line).split())
+    return words
+
+
+def _word_recall(haystack: str, words: list[str]) -> float:
+    if not words:
+        return 1.0
+    low = haystack.lower()
+    return sum(1 for w in words if w.lower() in low) / len(words)
+
+
+def _assert_word_recall(fixture: Path, stdout: str, *, min_ratio: float = 0.55) -> None:
+    ratio = _word_recall(stdout, _transcript_words(fixture))
+    assert ratio >= min_ratio, f"word recall {ratio:.2f} below {min_ratio} for {fixture.name}"
+
+
+def _assert_stdout_prefix_of_transcript(fixture: Path, stdout: str) -> None:
+    """mock-fwd emits the first N words of the transcript (N ≈ duration_s / 2)."""
+    expected = _transcript_words(fixture)
+    actual = stdout.split()
+    assert len(actual) >= 3
+    assert actual == expected[: len(actual)]
+
+
+def _speaker_ids(text: str) -> set[str]:
+    return {m.group(0).upper() for m in re.finditer(r"SPEAKER_\d+", text, re.I)}
+
+
+def _fixture_speakers(path: Path) -> set[str]:
+    return {
+        line.split(":", 1)[0].strip().upper()
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip().upper().startswith("SPEAKER_")
+    }
+
+
+def _assert_diarized_matches_fixture(
+    stdout: str, fixture: Path, *, min_speakers: int, min_word_ratio: float = 0.45,
+) -> None:
+    expected_sp = _fixture_speakers(fixture)
+    out_sp = _speaker_ids(stdout)
+    assert len(out_sp) >= min_speakers
+    assert len(out_sp & expected_sp) >= min(2, len(expected_sp))
+    _assert_word_recall(fixture, stdout, min_ratio=min_word_ratio)
 
 
 def _make_wav(path: Path, duration_s: float = 1.0, sample_rate: int = 16000) -> Path:
@@ -92,9 +151,38 @@ def toggle_runtime(tmp_path: Path, example_cfg: Path):
     yield tmp_path, env
     if (tmp_path / "kaiku.lock").exists():
         _run(
-            "--toggle", "--preset", "mock-fwd", "--device", "mock-jfk",
+            "--toggle", "--preset", "mock-fwd", "--device", "demo-1p-011s-en-jfk",
             config=example_cfg, env=env,
         )
+
+
+# ---------------------------------------------------------------------------
+# Demo audio (early): mock-1p device + JFK file input vs demo-1p-011s-en-jfk.txt
+# ---------------------------------------------------------------------------
+
+class TestDemoAudioEarly:
+    def test_mock_1p_device_records_jfk_clip(self, example_cfg, demo_1p_wav):
+        """``demo-1p-011s-en-jfk`` mock device serves JFK audio; stdout from ``demo-1p-011s-en-jfk.txt``."""
+        r = _run("--preset", "mock-fwd", "--device", "demo-1p-011s-en-jfk", config=example_cfg)
+        assert r.returncode == 0
+        assert "Using mock device: demo-1p-011s-en-jfk" in r.stderr
+        assert len(r.stdout.strip()) > 0
+        _assert_stdout_prefix_of_transcript(TRANSCRIPTS_DIR / "demo-1p-011s-en-jfk.txt", r.stdout)
+
+    def test_jfk_file_input_mock_fwd_matches_transcript(self, example_cfg, demo_1p_wav):
+        r = _run("-i", str(demo_1p_wav), "-b", "mock-fwd", config=example_cfg)
+        assert r.returncode == 0
+        assert "Using backend: mock-fwd (CLI -b)" in r.stderr
+        _assert_stdout_prefix_of_transcript(TRANSCRIPTS_DIR / "demo-1p-011s-en-jfk.txt", r.stdout)
+
+    def test_german_demo_device_with_language_flag(self, example_cfg):
+        r = _run(
+            "--preset", "mock-fwd", "--device", "demo-3p-096s-de-eoc", "-l", "de",
+            config=example_cfg,
+        )
+        assert r.returncode == 0
+        assert "Using language: de (CLI -l)" in r.stderr
+        assert "Using mock device: demo-3p-096s-de-eoc" in r.stderr
 
 
 # ---------------------------------------------------------------------------
@@ -246,42 +334,50 @@ class TestMockTranscriptBackends:
 
 class TestMockRecordingDevices:
     def test_devices_transcribe_with_resolution_logs_and_duration_ordering(self, example_cfg):
-        jfk = _run("--preset", "mock-fwd", "--device", "mock-jfk", config=example_cfg)
-        grp = _run("--preset", "mock-fwd", "--device", "mock-group", config=example_cfg)
-        assert jfk.returncode == 0
-        assert grp.returncode == 0
-        assert len(jfk.stdout.strip()) > 0
-        assert len(grp.stdout.strip()) > 0
-        assert "Using mock device: mock-jfk" in jfk.stderr
-        assert "Using mock device: mock-group" in grp.stderr
-        assert len(grp.stdout.split()) > len(jfk.stdout.split())
+        p1 = _run("--preset", "mock-fwd", "--device", "demo-1p-011s-en-jfk", config=example_cfg)
+        p2 = _run("--preset", "mock-fwd", "--device", "demo-4p-030s-en-ami", config=example_cfg)
+        p3 = _run("--preset", "mock-fwd", "--device", "demo-3p-096s-de-eoc", config=example_cfg)
+        assert p1.returncode == 0 and p2.returncode == 0 and p3.returncode == 0
+        assert len(p1.stdout.strip()) > 0 and len(p2.stdout.strip()) > 0 and len(p3.stdout.strip()) > 0
+        assert "Using mock device: demo-1p-011s-en-jfk" in p1.stderr
+        assert "Using mock device: demo-4p-030s-en-ami" in p2.stderr
+        assert "Using mock device: demo-3p-096s-de-eoc" in p3.stderr
+        w1, w2, w3 = len(p1.stdout.split()), len(p2.stdout.split()), len(p3.stdout.split())
+        assert w1 < w2 < w3
 
 
 # ---------------------------------------------------------------------------
-# Mock diarization
+# Diarization (optional): mock-diarize in diarization_cfg; whisperx if installed
 # ---------------------------------------------------------------------------
 
-class TestMockDiarization:
-    def test_speaker_counts_and_cli_override(self, example_cfg, jfk_wav, group_wav):
-        r2 = _run("-i", str(jfk_wav), "-b", "mock-dia-2", config=example_cfg)
-        assert r2.returncode == 0
-        lines2 = [l for l in r2.stdout.splitlines() if "SPEAKER_" in l]
-        assert len(lines2) >= 2
-        speakers2 = {l.split("SPEAKER_")[1].split(":")[0] for l in lines2}
-        assert len(speakers2) == 2
+class TestDiarizationOptional:
+    """Not part of the default mock-only contract; uses ``diarization_cfg`` fixture."""
 
-        r3 = _run("-i", str(group_wav), "-b", "mock-dia-3", config=example_cfg)
-        assert r3.returncode == 0
-        lines3 = [l for l in r3.stdout.splitlines() if "SPEAKER_" in l]
-        assert len(lines3) >= 3
-        speakers3 = {l.split("SPEAKER_")[1].split(":")[0] for l in lines3}
-        assert len(speakers3) == 3
+    def test_mock_dia_4p_matches_fixture(self, diarization_cfg, demo_4p_wav):
+        r = _run("-i", str(demo_4p_wav), "-b", "mock-dia-4", config=diarization_cfg)
+        assert r.returncode == 0
+        _assert_diarized_matches_fixture(r.stdout, TRANSCRIPTS_DIR / "demo-4p-030s-en-ami.txt", min_speakers=4)
 
-        r1 = _run("-i", str(jfk_wav), "-b", "mock-dia-2", "-s", "1", config=example_cfg)
-        assert r1.returncode == 0
-        lines1 = [l for l in r1.stdout.splitlines() if "SPEAKER_" in l]
-        speakers1 = {l.split("SPEAKER_")[1].split(":")[0] for l in lines1}
-        assert len(speakers1) == 1
+    def test_mock_dia_3p_matches_fixture(self, diarization_cfg, demo_3p_wav):
+        r = _run("-i", str(demo_3p_wav), "-b", "mock-dia-3", config=diarization_cfg)
+        assert r.returncode == 0
+        _assert_diarized_matches_fixture(r.stdout, TRANSCRIPTS_DIR / "demo-3p-096s-de-eoc.txt", min_speakers=3)
+
+    @pytest.mark.skipif(not _WHISPERX_READY, reason="requires kaiku[diarize] and HF_TOKEN")
+    def test_whisperx_4p_matches_fixture(self, diarization_cfg, demo_4p_wav):
+        r = _run("-i", str(demo_4p_wav), "-b", "whisperx", "-s", "4", config=diarization_cfg)
+        assert r.returncode == 0
+        _assert_diarized_matches_fixture(
+            r.stdout, TRANSCRIPTS_DIR / "demo-4p-030s-en-ami.txt", min_speakers=4, min_word_ratio=0.25,
+        )
+
+    @pytest.mark.skipif(not _WHISPERX_READY, reason="requires kaiku[diarize] and HF_TOKEN")
+    def test_whisperx_3p_matches_fixture(self, diarization_cfg, demo_3p_wav):
+        r = _run("-i", str(demo_3p_wav), "-b", "whisperx", "-s", "3", config=diarization_cfg)
+        assert r.returncode == 0
+        _assert_diarized_matches_fixture(
+            r.stdout, TRANSCRIPTS_DIR / "demo-3p-096s-de-eoc.txt", min_speakers=3, min_word_ratio=0.2,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -367,7 +463,7 @@ class TestToggleMode:
         runtime_dir, env = toggle_runtime
         out = runtime_dir / "toggle_out.txt"
         args = (
-            "--toggle", "--preset", "mock-fwd", "--device", "mock-jfk",
+            "--toggle", "--preset", "mock-fwd", "--device", "demo-1p-011s-en-jfk",
             "-o", str(out),
         )
         r1 = _run(*args, config=example_cfg, env=env)
