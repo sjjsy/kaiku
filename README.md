@@ -512,12 +512,9 @@ See [whisper.cpp](https://github.com/ggerganov/whisper.cpp) for build instructio
 
 For long recordings, `-r`/`--robust` splits at silence boundaries, quality-checks each chunk, retries bad chunks, streams raw chunk text to `-o` FILE as it goes, then overwrites FILE with the post-processed, template-formatted result.
 
-Each chunk is automatically rejected and retried if it fails any of these checks:
-- **Too short**: Fewer than 10 words
-- **Repetitive**: Unique word ratio below 40% (indicates looping/hallucination)
-- **Anomalously short**: Less than 25% of the median length of prior successful chunks (detects quality degradation mid-file)
+Each chunk is automatically rejected and retried if it is too short (less than 10 words), too repetitive (unique word ratio below 40%), or anomalously short (less than 25% of the median length of prior successful chunks).
 
-Rejected chunks are logged with the full text and rejection reason for debugging. After all retries are exhausted, failed chunks are appended with a warning marker.
+Rejected chunks are logged with the full text and rejection reason for debugging when not in quiet mode. After all retries are exhausted, failed chunks are appended with a warning marker.
 
 ```bash
 kaiku -i meeting.mp3 -r                               # chunked, quality-checked
