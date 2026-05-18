@@ -52,26 +52,29 @@ def _find_chunk_boundaries(
     return boundaries
 
 
-def _check_quality(text: str, chunk_id: str = "?", prior_word_counts: list[int] | None = None) -> bool:
+def _check_quality(text: str, chunk_id: str = "?", prior_word_counts: list[int] | None = None) -> tuple[bool, str]:
     """Check if text is valid (not too short, not repetitive, not anomalously short).
 
-    Returns False with a detailed rejection log if the text fails any check.
-    Logs include: chunk_id, reason, and truncated chunk text.
+    Returns (True, "") if quality is ok, or (False, reason_string) if rejected.
+    Logs rejection details (chunk_id, reason, and full text) when quality fails.
     """
     words = re.findall(r"\b\w+\b", text.lower())
     if len(words) < 10:
-        warning(f"Chunk {chunk_id}: rejected — too short ({len(words)} words): {text.strip()}")
-        return False
+        reason = f"too short ({len(words)} words)"
+        warning(f"Chunk {chunk_id}: rejected — {reason}: {text.strip()}")
+        return False, reason
     ratio = len(set(words)) / len(words)
     if ratio < 0.4:
-        warning(f"Chunk {chunk_id}: rejected — repetitive (unique ratio {ratio:.2f}): {text.strip()}")
-        return False
+        reason = f"repetitive (unique ratio {ratio:.2f})"
+        warning(f"Chunk {chunk_id}: rejected — {reason}: {text.strip()}")
+        return False, reason
     if prior_word_counts and len(prior_word_counts) >= 3:
         median = sorted(prior_word_counts)[len(prior_word_counts) // 2]
         if median > 10 and len(words) < median * 0.25:
-            warning(f"Chunk {chunk_id}: rejected — unusually short ({len(words)} vs median {median}): {text.strip()}")
-            return False
-    return True
+            reason = f"unusually short ({len(words)} vs median {median})"
+            warning(f"Chunk {chunk_id}: rejected — {reason}: {text.strip()}")
+            return False, reason
+    return True, ""
 
 
 def _estimate_timeout(chunk_duration_s: float) -> float:
@@ -176,19 +179,19 @@ def process_file_robust(config: Config):
                     tmp_path, config, raise_on_error=True, timeout=timeout
                 )
                 last_candidate = candidate
-                if _check_quality(candidate, f"{idx}/{n_chunks}", good_word_counts):
+                quality_ok_check, quality_reason = _check_quality(candidate, f"{idx}/{n_chunks}", good_word_counts)
+                if quality_ok_check:
                     text = candidate
                     quality_ok = True
                     break
                 else:
-                    last_failure_reason = "quality check failed"
+                    last_failure_reason = quality_reason
                     if attempt < max_retry_count - 1:
                         warning(
                             f"Chunk {idx}/{n_chunks}: quality check failed "
                             f"(attempt {attempt + 1}/{max_retry_count}), retrying…"
                         )
             except TranscriptionError as e:
-                last_failure_reason = str(e)
                 if attempt < max_retry_count - 1:
                     warning(
                         f"Chunk {idx}/{n_chunks}: error (attempt {attempt + 1}/{max_retry_count}): {e}"
@@ -198,7 +201,6 @@ def process_file_robust(config: Config):
                         f"Chunk {idx}/{n_chunks}: failed after {max_retry_count} attempts: {e}"
                     )
             except Exception as e:
-                last_failure_reason = str(e)
                 warning(f"Chunk {idx}/{n_chunks}: unexpected error: {e}")
                 break
 
