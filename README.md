@@ -510,7 +510,7 @@ See [whisper.cpp](https://github.com/ggerganov/whisper.cpp) for build instructio
 
 ### Robust long-file transcription
 
-For long recordings, `-r`/`--robust` splits at silence boundaries, quality-checks each chunk, retries bad chunks, streams raw chunk text to `-o` FILE as it goes, then overwrites FILE with the post-processed, template-formatted result.
+For long recordings, `-r`/`--robust` splits at silence boundaries (silent / low-RMS chunks skipped), quality-checks each chunk, retries bad chunks, streams raw chunk text to `-o` FILE as it goes, then overwrites FILE with the post-processed, template-formatted result.
 
 Each chunk is automatically rejected and retried if it is too short (less than 10 words), too repetitive (unique word ratio below 40%), or anomalously short (less than 25% of the median length of prior successful chunks).
 

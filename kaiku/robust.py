@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 from pydub import AudioSegment
 from pydub.silence import detect_silence
 
-from .audio import audiosegment_to_float32, float32_to_audiosegment
+from .audio import audiosegment_to_float32, calculate_rms, float32_to_audiosegment
 from .output import copy_transcript_to_clipboard
 from .transcribe import TranscriptionError, transcribe
 from .utils import info, safe_unlink, warning
@@ -19,13 +19,26 @@ from .utils import info, safe_unlink, warning
 if TYPE_CHECKING:
     from .config_types import Config
 
+# Skip ASR when chunk is mostly pydub silence and/or very low energy (no speech).
+_SILENT_CHUNK_COVERAGE = 0.95
+_SILENT_CHUNK_RMS = 0.005  # same scale as interval-mode gate in daemon.py
+
+
+def _silence_coverage_ms(start_ms: int, end_ms: int, silences: list[tuple[int, int]]) -> float:
+    span = end_ms - start_ms
+    if span <= 0:
+        return 1.0
+    covered = sum(max(0, min(end_ms, s_end) - max(start_ms, s_start)) for s_start, s_end in silences)
+    return min(1.0, covered / span)
+
 
 def _find_chunk_boundaries(
     audio: AudioSegment, max_chunk_ms: int
-) -> list[tuple[int, int]]:
+) -> tuple[list[tuple[int, int]], list[tuple[int, int]]]:
     """Split audio at silence boundaries up to max_chunk_ms each.
 
     Tries to end each chunk at a silence midpoint; hard-cuts if none found.
+    Returns (chunk boundaries, pydub silence intervals in ms).
     """
     total_ms = len(audio)
     silence_thresh = audio.dBFS - 16  # adaptive threshold
@@ -49,7 +62,34 @@ def _find_chunk_boundaries(
                     break
         boundaries.append((pos, end))
         pos = end
-    return boundaries
+    return boundaries, silences
+
+
+def _active_chunk_boundaries(
+    audio: AudioSegment,
+    boundaries: list[tuple[int, int]],
+    silences: list[tuple[int, int]],
+) -> tuple[list[tuple[int, int]], int, int]:
+    """Drop chunks with no speech: high pydub silence coverage and/or low RMS."""
+    active: list[tuple[int, int]] = []
+    omitted_n, omitted_ms = 0, 0
+    for start, end in boundaries:
+        dur_s = (end - start) / 1000.0
+        cov = _silence_coverage_ms(start, end, silences)
+        rms = calculate_rms(audiosegment_to_float32(audio[start:end]))
+        by_cov = cov >= _SILENT_CHUNK_COVERAGE
+        by_rms = rms < _SILENT_CHUNK_RMS
+        if by_cov or by_rms:
+            omitted_n += 1
+            omitted_ms += end - start
+            why = [f"coverage {cov:.0%}"] if by_cov else []
+            if by_rms:
+                why.append(f"rms {rms:.5f}")
+            info(f"Omitting chunk ({dur_s:.1f}s): {', '.join(why)}")
+        else:
+            active.append((start, end))
+            info(f"Chunk to transcribe ({dur_s:.1f}s): coverage {cov:.0%}, rms {rms:.5f}")
+    return active, omitted_n, omitted_ms
 
 
 def _check_quality(text: str, chunk_id: str = "?", prior_word_counts: list[int] | None = None) -> tuple[bool, str]:
@@ -133,9 +173,15 @@ def process_file_robust(config: Config):
     max_chunk_ms = config.chunk_duration * 1000
     info("Detecting silence boundaries for chunking…")
     t_split = time.time()
-    boundaries = _find_chunk_boundaries(audio, max_chunk_ms)
+    boundaries, silences = _find_chunk_boundaries(audio, max_chunk_ms)
+    boundaries, omitted_n, omitted_ms = _active_chunk_boundaries(audio, boundaries, silences)
     n_chunks = len(boundaries)
-    info(f"Splitting into {n_chunks} chunk(s) (silence analysis: {time.time() - t_split:.1f}s)")
+    split_msg = f"Splitting into {n_chunks} chunk(s)"
+    if omitted_n:
+        omitted_s = omitted_ms / 1000.0
+        frac = omitted_ms / len(audio) if len(audio) else 0.0
+        split_msg += f", omitted {omitted_n} segments of silence (total {omitted_s:.1f}s, {frac:.0%} of audio)"
+    info(f"{split_msg} (processing took {time.time() - t_split:.1f}s)")
 
     scratch: str | None = None
     output_file = config.output_file
