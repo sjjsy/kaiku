@@ -472,11 +472,11 @@ The mock backends return transcripts without making API calls or running externa
 asr_backends:
   demo:
     type: mock
-    response: "The quick brown fox jumps over the lazy dog"
+    response: "The quick brown fox jumps over the lazy dog under sunshine and birds singing"
     latency_ms: 100              # Optional: simulate network delay
   mock-fwd:
     type: mock-fwd
-    transcript_path: "~/.local/share/kaiku/fixtures/demo-1p-011s-en-jfk.txt"
+    transcript_path: "~/.local/share/kaiku/fixtures/demo-1p-127s-en-gb0.txt"
 ```
 
 ```bash

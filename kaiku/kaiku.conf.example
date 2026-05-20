@@ -80,15 +80,15 @@ asr_backends:
   # ── Mock ASR backends ──
   mock:                                       # Returns a fixed response string (no credentials needed)
     type: mock
-    response: "The quick brown fox jumps over the lazy dog"
+    response: "The quick brown fox jumps over the lazy dog under sunshine and birds singing"
     latency_ms: 100
   mock-fwd:                                   # Returns N words from transcript (N = audio_s / 2, forward)
     type: mock-fwd
-    transcript_path: "~/.local/share/kaiku/fixtures/demo-1p-011s-en-jfk.txt"   # JFK excerpt
+    transcript_path: "~/.local/share/kaiku/fixtures/demo-1p-127s-en-gb0.txt"
     latency_ms: 50
   mock-bwd:                                   # Same as mock-fwd, words in reverse
     type: mock-bwd
-    transcript_path: "~/.local/share/kaiku/fixtures/demo-1p-011s-en-jfk.txt"
+    transcript_path: "~/.local/share/kaiku/fixtures/demo-1p-127s-en-gb0.txt"
     latency_ms: 50
   # ── Normal ASR backends ──
   # openai:                                   # OpenAI Whisper API

@@ -38,7 +38,10 @@ import pytest
 
 REPO_ROOT = Path(__file__).parent.parent
 TRANSCRIPTS_DIR = REPO_ROOT / "tests" / "fixtures" / "transcripts"
-MOCK_FIXED = "The quick brown fox jumps over the lazy dog"  # response from -b mock
+MOCK_FIXED = (
+    "The quick brown fox jumps over the lazy dog under sunshine and birds singing"
+)  # response from -b mock
+GB0_TXT = TRANSCRIPTS_DIR / "demo-1p-127s-en-gb0.txt"  # mock-fwd / mock-bwd transcript
 _SPEAKER_LINE = re.compile(r"^SPEAKER_\d+:\s*(.*)$", re.I)
 _WHISPERX_READY = (
     importlib.util.find_spec("whisperx") is not None and bool(os.environ.get("HF_TOKEN"))
@@ -134,6 +137,51 @@ def _make_wav(path: Path, duration_s: float = 1.0, sample_rate: int = 16000) -> 
     return path
 
 
+def _read_wav(path: Path) -> tuple[int, int, int, bytes]:
+    with wave.open(str(path), "rb") as wf:
+        return wf.getnchannels(), wf.getsampwidth(), wf.getframerate(), wf.readframes(wf.getnframes())
+
+
+def _silence_pcm(duration_s: float, channels: int, sampwidth: int, rate: int) -> bytes:
+    n_samples = int(rate * duration_s) * channels
+    if sampwidth != 2:
+        raise ValueError(f"unsupported sample width {sampwidth}")
+    return struct.pack(f"<{n_samples}h", *([0] * n_samples))
+
+
+def _write_wav(path: Path, channels: int, sampwidth: int, rate: int, *parts: bytes) -> Path:
+    with wave.open(str(path), "wb") as wf:
+        wf.setnchannels(channels)
+        wf.setsampwidth(sampwidth)
+        wf.setframerate(rate)
+        for part in parts:
+            wf.writeframes(part)
+    return path
+
+
+def _wav_with_silence_padding(
+    speech: Path,
+    out: Path,
+    *,
+    lead_s: float = 0,
+    trail_s: float = 0,
+    mid_s: float = 0,
+) -> Path:
+    """Concatenate digital silence around (and optionally inside) a speech WAV."""
+    ch, sw, rate, pcm = _read_wav(speech)
+    parts: list[bytes] = []
+    if lead_s:
+        parts.append(_silence_pcm(lead_s, ch, sw, rate))
+    if mid_s:
+        mid = len(pcm) // 2
+        parts.extend([pcm[:mid], _silence_pcm(mid_s, ch, sw, rate), pcm[mid:]])
+    else:
+        parts.append(pcm)
+    if trail_s:
+        parts.append(_silence_pcm(trail_s, ch, sw, rate))
+    return _write_wav(out, ch, sw, rate, *parts)
+
+
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -157,23 +205,23 @@ def toggle_runtime(tmp_path: Path, example_cfg: Path):
 
 
 # ---------------------------------------------------------------------------
-# Demo audio (early): mock-1p device + JFK file input vs demo-1p-011s-en-jfk.txt
+# Demo audio (early): mock device + file input vs mock-fwd transcript (gb0.txt)
 # ---------------------------------------------------------------------------
 
 class TestDemoAudioEarly:
     def test_mock_1p_device_records_jfk_clip(self, example_cfg, demo_1p_wav):
-        """``demo-1p-011s-en-jfk`` mock device serves JFK audio; stdout from ``demo-1p-011s-en-jfk.txt``."""
+        """``demo-1p-011s-en-jfk`` device audio; ``mock-fwd`` scales words from ``demo-1p-127s-en-gb0.txt``."""
         r = _run("--preset", "mock-fwd", "--device", "demo-1p-011s-en-jfk", config=example_cfg)
         assert r.returncode == 0
         assert "Using mock device: demo-1p-011s-en-jfk" in r.stderr
         assert len(r.stdout.strip()) > 0
-        _assert_stdout_prefix_of_transcript(TRANSCRIPTS_DIR / "demo-1p-011s-en-jfk.txt", r.stdout)
+        _assert_stdout_prefix_of_transcript(GB0_TXT, r.stdout)
 
     def test_jfk_file_input_mock_fwd_matches_transcript(self, example_cfg, demo_1p_wav):
         r = _run("-i", str(demo_1p_wav), "-b", "mock-fwd", config=example_cfg)
         assert r.returncode == 0
         assert "Using backend: mock-fwd (CLI -b)" in r.stderr
-        _assert_stdout_prefix_of_transcript(TRANSCRIPTS_DIR / "demo-1p-011s-en-jfk.txt", r.stdout)
+        _assert_stdout_prefix_of_transcript(GB0_TXT, r.stdout)
 
     def test_german_demo_device_with_language_flag(self, example_cfg):
         r = _run(
@@ -225,11 +273,11 @@ class TestPresetAndFilePipeline:
         assert "preprocessing audio with" not in err.lower()
         assert "clipboard: skipped (--no-clipboard)" in err.lower()
         assert "Transcript analyzed:" in r.stdout
-        assert "words=9" in r.stdout
+        assert "words=14" in r.stdout
         assert MOCK_FIXED not in r.stdout
         assert out.exists()
         assert "Transcript analyzed:" in out.read_text()
-        assert "words=9" in out.read_text()
+        assert "words=14" in out.read_text()
         assert "Prompt analyzed:" in r.stdout
         assert ", lines=1, words=8" in r.stdout
 
@@ -466,6 +514,32 @@ class TestRobustMode:
         )
         assert r10.returncode == 0
         assert r10.stderr.count("Chunk ") > r20.stderr.count("Chunk ")
+
+    def test_robust_omits_synthetic_silence(
+        self, example_cfg, medium_speech, tmp_path,
+    ):
+        """Padded silence at start/end/middle is omitted; speech still chunks with modest ``-C``."""
+        padded = _wav_with_silence_padding(
+            medium_speech,
+            tmp_path / "padded.wav",
+            lead_s=10.0,
+            trail_s=15.0,
+            mid_s=12.0,
+        )
+        out = tmp_path / "robust_silence.txt"
+        r = _run(
+            "-i", str(padded), "-r", "-C", "12", "-b", "mock",
+            "-o", str(out),
+            config=example_cfg,
+        )
+        assert r.returncode == 0
+        assert out.exists() and MOCK_FIXED in out.read_text()
+        assert r.stderr.count("Omitting chunk") >= 2
+        omitted = re.search(r"omitted (\d+) segments of silence", r.stderr)
+        assert omitted is not None and int(omitted.group(1)) >= 2
+        split = re.search(r"Splitting into (\d+) chunk\(s\)", r.stderr)
+        assert split is not None and int(split.group(1)) >= 4
+        assert r.stderr.count("Chunk to transcribe") >= 4
 
 
 # ---------------------------------------------------------------------------

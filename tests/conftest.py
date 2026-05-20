@@ -86,3 +86,9 @@ def demo_3p_wav(fixture_dir: Path) -> Path:
 @pytest.fixture(scope="session")
 def long_speech(fixture_dir: Path) -> Path:
     return fixture_dir / "demo-1p-127s-en-gb0.wav"
+
+
+@pytest.fixture(scope="session")
+def medium_speech(fixture_dir: Path) -> Path:
+    """~51 s clip (demo-3p-051s-fi-metro); used for robust silence-omit E2E."""
+    return fixture_dir / "demo-3p-051s-fi-metro.wav"

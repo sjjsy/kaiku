@@ -96,23 +96,19 @@ def _check_quality(text: str, chunk_id: str = "?", prior_word_counts: list[int] 
     """Check if text is valid (not too short, not repetitive, not anomalously short).
 
     Returns (True, "") if quality is ok, or (False, reason_string) if rejected.
-    Logs rejection details (chunk_id, reason, and full text) when quality fails.
     """
     words = re.findall(r"\b\w+\b", text.lower())
     if len(words) < 10:
         reason = f"too short ({len(words)} words)"
-        warning(f"Chunk {chunk_id}: rejected — {reason}: {text.strip()}")
         return False, reason
     ratio = len(set(words)) / len(words)
     if ratio < 0.4:
         reason = f"repetitive (unique ratio {ratio:.2f})"
-        warning(f"Chunk {chunk_id}: rejected — {reason}: {text.strip()}")
         return False, reason
     if prior_word_counts and len(prior_word_counts) >= 3:
         median = sorted(prior_word_counts)[len(prior_word_counts) // 2]
         if median > 10 and len(words) < median * 0.25:
             reason = f"unusually short ({len(words)} vs median {median})"
-            warning(f"Chunk {chunk_id}: rejected — {reason}: {text.strip()}")
             return False, reason
     return True, ""
 
@@ -221,33 +217,26 @@ def process_file_robust(config: Config):
 
         for attempt in range(max_retry_count):
             try:
-                candidate = transcribe(
-                    tmp_path, config, raise_on_error=True, timeout=timeout
-                )
+                candidate = transcribe(tmp_path, config, raise_on_error=True, timeout=timeout)
                 last_candidate = candidate
                 quality_ok_check, quality_reason = _check_quality(candidate, f"{idx}/{n_chunks}", good_word_counts)
                 if quality_ok_check:
                     text = candidate
                     quality_ok = True
                     break
-                else:
-                    last_failure_reason = quality_reason
-                    if attempt < max_retry_count - 1:
-                        warning(
-                            f"Chunk {idx}/{n_chunks}: quality check failed "
-                            f"(attempt {attempt + 1}/{max_retry_count}), retrying…"
-                        )
+                last_failure_reason = quality_reason
+                warning(
+                    f"Chunk {idx}/{n_chunks}, Try {attempt + 1}/{max_retry_count}: "
+                    f"rejected ({quality_reason}), text: \"{candidate.strip()}\""
+                )
             except TranscriptionError as e:
-                if attempt < max_retry_count - 1:
-                    warning(
-                        f"Chunk {idx}/{n_chunks}: error (attempt {attempt + 1}/{max_retry_count}): {e}"
-                    )
-                else:
-                    warning(
-                        f"Chunk {idx}/{n_chunks}: failed after {max_retry_count} attempts: {e}"
-                    )
+                warning(
+                    f"Chunk {idx}/{n_chunks}, Try {attempt + 1}/{max_retry_count}: error: {e}"
+                )
             except Exception as e:
-                warning(f"Chunk {idx}/{n_chunks}: unexpected error: {e}")
+                warning(
+                    f"Chunk {idx}/{n_chunks}, Try {attempt + 1}/{max_retry_count}: unexpected error: {e}"
+                )
                 break
 
         safe_unlink(tmp_path)
@@ -255,7 +244,7 @@ def process_file_robust(config: Config):
         elapsed = time.time() - t_chunk
         preview = (text or "")[:60].replace("\n", " ")
         info(
-            f"Chunk {idx}/{n_chunks} ({chunk_s:.1f}s audio → {elapsed:.1f}s): {preview}…"
+            f"Chunk {idx}/{n_chunks} of {chunk_s:.1f}s processed in {elapsed:.1f}s: {preview}…"
         )
 
         if text is None:

@@ -99,7 +99,7 @@ alone write their own minimal YAML inline (see `TestDeviceAbortOnFailure` in
 
 #### `test_file_input_dense_primary_contract` (×3 invocations)
 
-- **Run 1:** `-i` WAV with `-p none`, `-b mock`, `-T raw`, `-P mock-pp`, `-l`, `-o` — backend and post *why* lines, mock ASR logs, `Using preprocessor: none (CLI -p)`, **no** `Preprocessing completed` timing line for preprocessing (none preprocessor), `Clipboard: skipped (--no-clipboard)`, post-processed stdout/file, `Prompt analyzed` word count for base `mock-pp` (`lines=1, words=8`), transcript analysis includes `words=9` for the fox sentence
+- **Run 1:** `-i` WAV with `-p none`, `-b mock`, `-T raw`, `-P mock-pp`, `-l`, `-o` — backend and post *why* lines, mock ASR logs, `Using preprocessor: none (CLI -p)`, **no** `Preprocessing completed` timing line for preprocessing (none preprocessor), `Clipboard: skipped (--no-clipboard)`, post-processed stdout/file, `Prompt analyzed` word count for base `mock-pp` (`lines=1, words=8`), transcript analysis includes `words=14` for the mock canned sentence
 - **Run 2:** unknown `-T` name with `-b mock` — fallback still returns canned fox transcript on stdout
 - **Run 3:** `-b mock` + `-P mock-pp2` — `mock-pp2` (`extends: mock-pp` + `extra` in example config) yields a **wider** resolved prompt than `mock-pp` alone (assert `lines=3, words=22` on the `Prompt analyzed:` line)
 
@@ -144,13 +144,13 @@ alone write their own minimal YAML inline (see `TestDeviceAbortOnFailure` in
 
 #### `test_mock_1p_device_records_jfk_clip` (×1 invocation)
 
-- `demo-1p-011s-en-jfk` device + `mock-fwd` preset — JFK clip
-- Stdout is a leading word-for-word prefix of [`demo-1p-011s-en-jfk.txt`](fixtures/transcripts/demo-1p-011s-en-jfk.txt)
+- `demo-1p-011s-en-jfk` device + `mock-fwd` preset — JFK clip audio
+- Stdout is a leading word-for-word prefix of [`demo-1p-127s-en-gb0.txt`](fixtures/transcripts/demo-1p-127s-en-gb0.txt) (mock-fwd transcript source)
 
 #### `test_jfk_file_input_mock_fwd_matches_transcript` (×1 invocation)
 
 - `-i` JFK WAV + `-b mock-fwd` — backend *why* line in stderr
-- Same prefix check against `demo-1p-011s-en-jfk.txt`
+- Same prefix check against `demo-1p-127s-en-gb0.txt`
 
 #### `test_german_demo_device_with_language_flag` (×1 invocation)
 
@@ -193,6 +193,12 @@ alone write their own minimal YAML inline (see `TestDeviceAbortOnFailure` in
 - First run: `-r` on `long_speech` with `-b mock`, `-C 20`, `-o` — chunk progress in stderr (≥ 5 `Chunk n/N` lines), non-empty output file overwritten with final `format_output` text only (no `append_transcript_to_file`); if `noisereduce` is importable, the same invocation adds `-p noisereduce` and stderr must contain `Using preprocessor: noisereduce`
 - Second run: same file with `-C 10` and `-o` elsewhere — strictly more `Chunk n/N` lines in stderr than the 20 s chunk run
 
+#### `test_robust_omits_synthetic_silence` (×1 invocation)
+
+- `medium_speech` (~51 s) padded in-test with 10 s lead, 12 s mid, 15 s trail silence; `-r` with `-C 12` and `-b mock`
+- stderr: ≥ 2 `Omitting chunk` lines, ≥ 2 omitted silence segments, `Splitting into` ≥ 4 chunks, ≥ 4 `Chunk to transcribe` lines
+- `-o` file contains mock transcript text
+
 ### `TestToggleMode`
 
 #### `test_lifecycle_lock_stdout_stderr_and_output_file` (×2 invocations)
@@ -229,9 +235,10 @@ alone write their own minimal YAML inline (see `TestDeviceAbortOnFailure` in
 - Like `example_cfg` plus injected `mock-dia-4` / `mock-dia-3` (and `whisperx` when `HF_TOKEN` is set)
 - Used only by `TestDiarizationOptional`
 
-### `long_speech` (session)
+### `long_speech` / `medium_speech` (session)
 
-- `demo-1p-127s-en-gb0.wav` (~127 s Bush radio address); used only for robust chunking (`-r`), not one of the three tiered device demos
+- `demo-1p-127s-en-gb0.wav` (~127 s Bush radio address); used for robust chunk-count E2E (`-r`)
+- `demo-3p-051s-fi-metro.wav` (~51 s); used for robust synthetic-silence omission E2E
 
 ### `silent_wav` (session)
 
@@ -253,8 +260,8 @@ After `kaiku --download-fixtures`, try e.g. `kaiku -d demo-1p-011s-en-jfk -x moc
 
 ### ASR backends
 
-- `**mock**` — fixed canned fox sentence
-- `**mock-fwd` / `mock-bwd**` — duration-scaled word counts from a transcript file (forward vs reverse)
+- `**mock**` — fixed canned mock sentence (14 words, includes “under sunshine and birds singing”)
+- `**mock-fwd` / `mock-bwd**` — duration-scaled word counts from `demo-1p-127s-en-gb0.txt` (forward vs reverse)
 - `**mock-dia-4` / `mock-dia-3**` — mock diarization with four or three speaker labels (E2E only)
 
 ### Post-processors
