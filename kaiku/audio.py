@@ -5,16 +5,17 @@ from __future__ import annotations
 import io
 import re
 import shutil
+import subprocess
 import tempfile
+import time
 import wave
-from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import numpy as np
 import sounddevice as sd
 
-from .utils import info, is_stop_requested, run_subprocess, warning
+from .utils import info, is_stop_requested, popen_subprocess, run_subprocess, safe_unlink, warning
 
 if TYPE_CHECKING:
     from pydub import AudioSegment
@@ -353,36 +354,17 @@ def _resample_audio(audio: np.ndarray, from_rate: int, to_rate: int) -> np.ndarr
     return resampled
 
 
-def record_audio(
-    sample_rate: int = 16000,
-    channels: int = 1,
-    device: str | int | None = None,
-    callback: Callable[[np.ndarray], None] | None = None,
-) -> np.ndarray:
-    """Record audio from the microphone until stop is requested.
-
-    If the device does not support sample_rate, falls back to the device's
-    native rate and resamples the result to sample_rate before returning.
-
-    Args:
-        sample_rate: Desired sample rate in Hz (default 16000).
-        channels: Number of audio channels.
-        device: Audio device name or index, or None for default.
-        callback: Optional callback called with each raw audio chunk.
-
-    Returns:
-        Recorded audio as numpy array at sample_rate Hz.
-    """
-    device = _sounddevice_device(device)
+def _record_audio_sounddevice(device_info: DeviceInfo | None) -> tuple[np.ndarray, int]:
+    """Record via PortAudio/sounddevice until stop is requested."""
+    sample_rate = 16000
+    device = device_info.index if device_info and device_info.index >= 0 else None
     audio_chunks: list = []
     actual_rate = sample_rate
 
-    def audio_callback(indata, frames, time, status):
+    def _cb(indata, frames, t, status):
         if status:
             warning(f"Audio status: {status}")
         audio_chunks.append(indata.copy())
-        if callback:
-            callback(indata)
 
     rates_to_try = [sample_rate]
     native = _device_native_rate(device)
@@ -393,19 +375,10 @@ def record_audio(
     for rate in rates_to_try:
         audio_chunks.clear()
         try:
-            with sd.InputStream(
-                samplerate=rate,
-                channels=channels,
-                dtype="float32",
-                device=device,
-                callback=audio_callback,
-            ):
+            with sd.InputStream(samplerate=rate, channels=1, dtype="float32", device=device, callback=_cb):
                 actual_rate = rate
                 if rate != sample_rate:
-                    warning(
-                        f"Device does not support {sample_rate} Hz; "
-                        f"recording at {rate} Hz and resampling."
-                    )
+                    warning(f"Device does not support {sample_rate} Hz; recording at {rate} Hz and resampling.")
                 while not is_stop_requested():
                     sd.sleep(100)
             last_exc = None
@@ -424,18 +397,52 @@ def record_audio(
         raise last_exc
 
     if not audio_chunks:
-        return np.array([], dtype=np.float32)
+        return np.array([], dtype=np.float32), sample_rate
 
     audio = np.concatenate(audio_chunks, axis=0)
-
     if actual_rate != sample_rate:
         audio = _resample_audio(audio, actual_rate, sample_rate)
-
-    # sounddevice gives (n_frames, channels); squeeze mono to 1D
     if audio.ndim > 1:
         audio = audio.mean(axis=1) if audio.shape[1] > 1 else audio[:, 0]
+    return audio, sample_rate
 
-    return audio
+
+def _record_audio_arecord(device_info: DeviceInfo | None) -> tuple[np.ndarray, int]:
+    """Record via arecord subprocess until stop is requested."""
+    alsa_device = device_info.get_spec("arecord") if device_info else None
+    rate = _device_native_rate(alsa_device) or 44100
+    audio_path = tempfile.NamedTemporaryFile(suffix=".wav", prefix="kaiku_rec_", delete=False).name
+    cmd = ["arecord", "-f", "S16_LE", "-r", str(rate), "-c", "1"]
+    if alsa_device:
+        cmd += ["-D", str(alsa_device)]
+    cmd.append(audio_path)
+    proc = popen_subprocess(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, start_new_session=True)
+    time.sleep(0.3)
+    if proc.poll() is not None:
+        safe_unlink(audio_path)
+        raise RuntimeError(f"arecord failed to start: {proc.stderr.read().decode(errors='replace').strip()}")
+    while not is_stop_requested():
+        time.sleep(0.1)
+    proc.terminate()
+    try:
+        proc.wait(timeout=3)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+    time.sleep(0.3)
+    audio, sr = load_wav(audio_path)
+    safe_unlink(audio_path)
+    return audio, sr
+
+
+def record_audio(device_info: DeviceInfo | None, recorder_name: str) -> tuple[np.ndarray, int]:
+    """Record audio until stop is requested, dispatching to arecord or sounddevice.
+
+    Uses arecord when explicitly requested or when the device is ALSA-only
+    (not visible to PortAudio). Returns (audio_data, sample_rate).
+    """
+    if recorder_name == "arecord" or (device_info and device_info.index < 0):
+        return _record_audio_arecord(device_info)
+    return _record_audio_sounddevice(device_info)
 
 
 def save_audio(audio_data: np.ndarray, sample_rate: int = 16000) -> str:
