@@ -328,8 +328,9 @@ def _sounddevice_device(device: str | int | None) -> str | int | None:
     """
     if not isinstance(device, str):
         return device
-    if device.startswith("hw:") or device.startswith("plughw:"):
-        return device.split(":", 1)[1].split(",")[0]
+    m = re.match(r"(?:plug)?hw:(?:CARD=)?([^,]+)", device)
+    if m:
+        return m.group(1)
     return device
 
 
