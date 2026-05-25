@@ -16,7 +16,6 @@ from .audio import (
     get_audio_duration,
     list_audio_devices,
     load_wav,
-    record_audio,
     save_audio,
 )
 from .config import (
@@ -235,19 +234,33 @@ def process_recording(config: Config):
         print_clipboard_help()
 
     if config.recorder.device.mock_source:
-        audio_data, _sr = load_wav(config.recorder.device.mock_source)
-        duration = get_audio_duration(audio_data)
+        audio_data, rec_sr = load_wav(config.recorder.device.mock_source)
+        duration = get_audio_duration(audio_data, rec_sr)
         info(
             f"Mock device: loaded {duration:.1f}s from {config.recorder.device.mock_source}"
         )
     else:
+        import tempfile
+        from .recorders import _kill_process, _pid_alive, make_recorder
+        from .utils import is_stop_requested
+
         setup_signal_handlers(daemon_mode=False)
         info("Recording... Press Ctrl+C to stop (press twice to cancel)")
         t0 = time.time()
-        audio_data = record_audio(
-            device=config.recorder.device.get_spec(config.recorder.name)
-        )
-        duration = get_audio_duration(audio_data)
+        rec_audio_path = tempfile.NamedTemporaryFile(suffix=".wav", prefix="kaiku_rec_", delete=False).name
+        recorder = make_recorder(config.recorder.name, device_info=config.recorder.device)
+        pid = recorder.start(rec_audio_path, config.recorder.device)
+        if pid is None:
+            safe_unlink(rec_audio_path)
+            error("Could not start recorder. Check device availability.")
+            sys.exit(1)
+        while not is_stop_requested() and _pid_alive(pid):
+            time.sleep(0.1)
+        _kill_process(pid)
+        time.sleep(0.3)
+        audio_data, rec_sr = load_wav(rec_audio_path)
+        safe_unlink(rec_audio_path)
+        duration = get_audio_duration(audio_data, rec_sr)
         if duration < 0.1:
             error("Recording too short or empty. Exiting.")
             sys.exit(0)
@@ -256,10 +269,10 @@ def process_recording(config: Config):
     preprocessor = make_preprocessor(config)
     if not isinstance(preprocessor, NonePreprocessor):
         t_pre = time.time()
-        audio_data = preprocessor.process(audio_data, 16000)
+        audio_data = preprocessor.process(audio_data, rec_sr)
         info(f"Preprocessing completed in {time.time() - t_pre:.2f}s")
 
-    temp_path = save_audio(audio_data)
+    temp_path = save_audio(audio_data, rec_sr)
 
     try:
         t1 = time.time()
